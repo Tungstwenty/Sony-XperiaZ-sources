@@ -1,0 +1,19 @@
+<head>
+<script src="../js/resources/js-test-pre.js"></script>
+</head>
+<body>
+<p id="description"></p>
+<div id="console"></div>
+<script>
+    // PopStateEvent
+    shouldBeTrue("document.createEvent('PopStateEvent') instanceof window.PopStateEvent");
+    shouldBeTrue("document.createEvent('PopStateEvent') instanceof window.Event");
+    shouldBeTrue("document.createEvent('PopStateEvent').constructor === window.PopStateEvent");
+
+    window.successfullyParsed = true;
+</script>
+
+
+
+<script src="../js/resources/js-test-post.js"></script>
+</body>
