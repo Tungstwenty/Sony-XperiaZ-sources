@@ -300,7 +300,7 @@ void LayerAndroid::addDirtyArea()
 void LayerAndroid::addAnimation(PassRefPtr<AndroidAnimation> prpAnim)
 {
     RefPtr<AndroidAnimation> anim = prpAnim;
-    pair<String, int> key(anim->name(), anim->type());
+    pair<String, int> key(anim->nameCopy(), anim->type());
     removeAnimationsForProperty(anim->type());
     m_animations.add(key, anim);
 }
@@ -323,7 +323,7 @@ void LayerAndroid::removeAnimationsForKeyframes(const String& name)
     KeyframesMap::const_iterator end = m_animations.end();
     WTF::Vector<pair<String, int> > toDelete;
     for (KeyframesMap::const_iterator it = m_animations.begin(); it != end; ++it) {
-        if ((it->second)->name() == name)
+        if ((it->second)->isNamed(name))
             toDelete.append(it->first);
     }
 

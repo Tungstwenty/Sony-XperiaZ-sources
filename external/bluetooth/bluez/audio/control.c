@@ -953,9 +953,6 @@ static gboolean control_cb(GIOChannel *chan, GIOCondition cond,
 					EVENT_PLAYER_APPLICATION_SETTING_CHANGED) {
 				avctp->cr = AVCTP_RESPONSE;
 				avrcp->code = CTYPE_NOT_IMPLEMENTED;
-				param_len = ntohs(params->param_len);
-				packet_size -= param_len;
-				params->param_len = htons(0x0);
 			} else {
 				avctp->cr = AVCTP_RESPONSE;
 				avrcp->code = CTYPE_REJECTED;

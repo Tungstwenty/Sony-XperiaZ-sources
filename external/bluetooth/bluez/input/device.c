@@ -3,6 +3,7 @@
  *  BlueZ - Bluetooth protocol stack for Linux
  *
  *  Copyright (C) 2004-2010  Marcel Holtmann <marcel@holtmann.org>
+ *  Copyright (C) 2013 Sony Mobile Communications AB
  *
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -847,6 +848,9 @@ failed:
 	error("%s", err_msg);
 	reply = btd_error_failed(iconn->pending_connect, err_msg);
 	g_dbus_send_message(idev->conn, reply);
+
+	dbus_message_unref(iconn->pending_connect);
+	iconn->pending_connect = NULL;
 
 	/* So we guarantee the interrupt channel is closed before the
 	 * control channel (if we only do unref GLib will close it only

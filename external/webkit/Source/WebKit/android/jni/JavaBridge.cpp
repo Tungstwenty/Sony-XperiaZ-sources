@@ -1,6 +1,6 @@
 /*
  * Copyright 2006, The Android Open Source Project
- * Copyright (C) 2011, 2012 Code Aurora Forum. All rights reserved.
+ * Copyright (C) 2011, 2012 The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions

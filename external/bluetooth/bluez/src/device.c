@@ -4,7 +4,7 @@
  *
  *  Copyright (C) 2006-2010  Nokia Corporation
  *  Copyright (C) 2004-2010  Marcel Holtmann <marcel@holtmann.org>
- *  Copyright (C) 2011-2012  Code Aurora Forum. All rights reserved.
+ *  Copyright (C) 2011-2012  The Linux Foundation. All rights reserved.
  *
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -2415,6 +2415,11 @@ int device_browse_primary(struct btd_device *device, DBusConnection *conn,
 	if (device->browse)
 		return -EBUSY;
 
+	if (device->discov_timer) {
+		DBG("Discovery timer already set. Wait for discovery");
+		return -EALREADY;
+	}
+
 	req = g_new0(struct browse_req, 1);
 	req->device = btd_device_ref(device);
 
@@ -2634,12 +2639,12 @@ static gboolean start_discovery(gpointer user_data)
 	if (!device->connected)
 		return FALSE;
 
+	device->discov_timer = 0;
+
 	if (device_get_type(device) == DEVICE_TYPE_LE)
 		device_browse_primary(device, NULL, NULL, TRUE);
 	else
 		device_browse_sdp(device, NULL, NULL, NULL, TRUE);
-
-	device->discov_timer = 0;
 
 	return FALSE;
 }

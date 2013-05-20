@@ -4,8 +4,9 @@
  *
  *  Copyright (C) 2006-2010  Nokia Corporation
  *  Copyright (C) 2004-2010  Marcel Holtmann <marcel@holtmann.org>
- *  Copyright (C) 2010-2012, Code Aurora Forum. All rights reserved.
+ *  Copyright (C) 2010-2012, The Linux Foundation. All rights reserved.
  *  Copyright (C) 2012 Sony Ericsson Mobile Communications AB
+ *  Copyright (C) 2013 Sony Mobile Communications AB
  *
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -274,7 +275,8 @@ static gboolean a2dp_local_resume(void *data)
 	if (!a2dp)
 		return TRUE;
 
-	a2dp_resume(a2dp->session, a2dp->sep,
+	if (a2dp->session)
+		a2dp_resume(a2dp->session, a2dp->sep,
 				a2dp_local_resume_complete, client);
 
 	return FALSE;

@@ -1,6 +1,6 @@
 /*
  *  Copyright (C) 2008-2011 The Android Open Source Project
- *  Copyright (C) 2012, Code Aurora Forum. All rights reserved.
+ *  Copyright (C) 2012, The Linux Foundation. All rights reserved.
  *  Copyright (C) 2012 Sony Mobile Communications AB.
  *
  *  This library is free software; you can redistribute it and/or

@@ -69,7 +69,7 @@ enum TextureUploadType {
     GpuUpload = 1
 };
 
-#define DEFAULT_UPLOAD_TYPE GpuUpload
+#define DEFAULT_UPLOAD_TYPE CpuUpload
 
 class TileTransferData {
 public:
@@ -112,6 +112,8 @@ public:
     void updateDirtyTiles();
 
     void initGLResources(int width, int height);
+
+    SkBitmap* getQueueBitmap();
 
     // insert the bitmap into the queue, mark the tile dirty if failing
     void updateQueueWithBitmap(const TileRenderInfo* renderInfo,

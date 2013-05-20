@@ -1,6 +1,7 @@
 /*
  * Copyright 2009, The Android Open Source Project
  * Copyright (C) 2006 Apple Computer, Inc.  All rights reserved.
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -22,6 +23,9 @@
  * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * NOTE: This file has been modified by Sony Mobile Communications AB.
+ * Modifications are licensed under the License.
  */
 
 #include "config.h"
@@ -575,9 +579,10 @@ TextRunWalker::TextRunWalker(const TextRun& run, int startingX, int startingY, c
     // will produce. We take a guess that script runs will not produce more
     // than twice as many glyphs as there are code points plus a bit of
     // padding and fallback if we find that we are wrong.
-    createGlyphArrays((m_run.length() + 2) * 2);
-
-    m_item.log_clusters = new unsigned short[m_run.length()];
+    int size = (m_run.length() + 2) * 2;
+    createGlyphArrays(size);
+    // log_cluster size should be same as glyph arrays
+    m_item.log_clusters = new unsigned short[size];
 
     m_item.face = 0;
     m_item.font = allocHarfbuzzFont();

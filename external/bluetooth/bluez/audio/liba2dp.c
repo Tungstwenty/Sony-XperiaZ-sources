@@ -4,7 +4,7 @@
  *
  *  Copyright (C) 2006-2007  Nokia Corporation
  *  Copyright (C) 2004-2008  Marcel Holtmann <marcel@holtmann.org>
- *  Copyright (C) 2010-2012, Code Aurora Forum. All rights reserved.
+ *  Copyright (C) 2010-2012, The Linux Foundation. All rights reserved.
  *  Copyright (C) 2012 Sony Mobile Communications AB.
  *
  *

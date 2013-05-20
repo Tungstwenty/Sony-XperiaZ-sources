@@ -3,7 +3,7 @@
  *  BlueZ - Bluetooth protocol stack for Linux
  *
  *  Copyright 2011,2012 Sony Corporation
- *  Copyright (C) 2012 Sony Mobile Communications AB.
+ *  Copyright (C) 2012-2013 Sony Mobile Communications AB.
  *
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -143,11 +143,12 @@ static DBusMessage *create_device_WirelessController(DBusConnection *conn,
 	const char* pnp;
 
 	/* get arguments */
-	dbus_message_get_args(msg, NULL,
+	if (dbus_message_get_args(msg, NULL,
 				DBUS_TYPE_STRING, &devicename,
 				DBUS_TYPE_STRING, &deviceaddress,
 				DBUS_TYPE_STRING, &pnp,
-				DBUS_TYPE_INVALID);
+				DBUS_TYPE_INVALID) == FALSE)
+		return btd_error_invalid_args(msg);
 
 	/* check address */
 	if (check_address(deviceaddress) < 0){
@@ -246,14 +247,15 @@ static DBusMessage *change_mode_WirelessController(DBusConnection *conn,
 	dbus_uint32_t role;
 
 	/* get arguments */
-	dbus_message_get_args(msg, NULL,
+	if (dbus_message_get_args(msg, NULL,
 				DBUS_TYPE_UINT32, &max_interval,
 				DBUS_TYPE_UINT32, &min_interval,
 				DBUS_TYPE_UINT32, &attempt,
 				DBUS_TYPE_UINT32, &timeout,
 				DBUS_TYPE_STRING, &deviceaddress,
 				DBUS_TYPE_UINT32, &role,
-				DBUS_TYPE_INVALID);
+				DBUS_TYPE_INVALID) == FALSE)
+		return btd_error_invalid_args(msg);
 
 	/* check address */
 	if (check_address(deviceaddress) < 0){
