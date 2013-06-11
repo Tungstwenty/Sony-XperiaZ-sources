@@ -1,4 +1,4 @@
-/* arch/arm/mach-msm/board-sony_gaga_kddi-touch.c
+/* arch/arm/mach-msm/board-sony_dogo-touch.c
  *
  * Copyright (C) 2012 Sony Mobile Communications AB.
  *
@@ -16,7 +16,7 @@
 
 struct synaptics_funcarea clearpad_funcarea_array[] = {
 	{
-		{ 0, 0, 1079, 1919 }, { 0, 0, 1079, 1919 },
+		{ 0, 0, 719, 1279 }, { 0, 0, 719, 1279 },
 		SYN_FUNCAREA_POINTER, NULL
 	},
 	{ .func = SYN_FUNCAREA_END }

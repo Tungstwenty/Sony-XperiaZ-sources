@@ -1,4 +1,4 @@
-/* arch/arm/mach-msm/board-sony_gaga_kddi-mpu.c
+/* arch/arm/mach-msm/board-sony_dogo-mpu.c
  *
  * Copyright (C) 2011 Sony Ericsson Mobile Communications AB.
  * Copyright (C) 2012 Sony Mobile Communications AB.
@@ -20,8 +20,8 @@
 
 #ifdef CONFIG_SENSORS_MPU3050
 
-#define GYRO_ORIENTATION {  0,  -1,  0, 1,  0,  0,  0,  0,  1 }
-#define ACCEL_ORIENTATION {  1,  0,  0,  0,  1,  0,  0,  0,  1 }
+#define GYRO_ORIENTATION {  0,  1,  0,  1,  0,  0,  0,  0, -1 }
+#define ACCEL_ORIENTATION { -1,  0,  0,  0,  1,  0,  0,  0, -1 }
 #define COMPASS_ORIENTATION {  0,  0,  1,  0,  1,  0, -1,  0,  0 }
 #define PRESSURE_ORIENTATION {  1,  0,  0,  0,  1,  0,  0,  0,  1 }
 
