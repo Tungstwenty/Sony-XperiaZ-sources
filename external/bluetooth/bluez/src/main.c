@@ -5,6 +5,7 @@
  *  Copyright (C) 2000-2001  Qualcomm Incorporated
  *  Copyright (C) 2002-2003  Maxim Krasnyansky <maxk@qualcomm.com>
  *  Copyright (C) 2002-2010  Marcel Holtmann <marcel@holtmann.org>
+ *  Copyright (C) 2013 The Linux Foundation. All rights reserved
  *  Copyright (C) 2012 Sony Mobile Communications AB.
  *
  *
@@ -269,6 +270,17 @@ static void parse_config(GKeyFile *config)
 		DBG("default_link_policy=%s", str);
 		main_opts.link_policy &= strtol(str, NULL, 16);
 	}
+
+	boolean = g_key_file_get_boolean(config, "General",
+					"BluetoothMapEmailEnabled", &err);
+	if (err) {
+		g_clear_error(&err);
+		DBG("BluetoothMapEmailEnabled could not be fetched sticking to value = %d", boolean);
+	}
+	else {
+		DBG("BluetoothMapEmailEnabled = %d", boolean);
+		main_opts.map_email = boolean;
+	}
 }
 
 static void init_defaults(void)
@@ -284,7 +296,7 @@ static void init_defaults(void)
 	main_opts.link_mode = HCI_LM_ACCEPT;
 	main_opts.link_policy = HCI_LP_RSWITCH | HCI_LP_SNIFF |
 						HCI_LP_HOLD | HCI_LP_PARK;
-
+	main_opts.map_email = TRUE;
 	if (gethostname(main_opts.host_name, sizeof(main_opts.host_name) - 1) < 0)
 		strcpy(main_opts.host_name, "noname");
 }

@@ -1512,6 +1512,7 @@ static DBusMessage *prim_get_properties(DBusConnection *conn, DBusMessage *msg,
 DBusMessage *le_connect_request_cancel(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
+	bdaddr_t dst;
 	struct btd_device *device = data;
 	GAttrib *attrib = device_get_attrib(device);
 
@@ -1523,6 +1524,10 @@ DBusMessage *le_connect_request_cancel(DBusConnection *conn,
 
 	if (!attrib)
 		return btd_error_not_connected(msg);
+
+	struct btd_adapter *adapter = device_get_adapter(device);
+	device_get_address(device, &dst);
+	btd_adapter_le_cancel_create_conn(adapter, &dst);
 
 	/* This closes connection if connect request was only reference */
 	g_attrib_unref(attrib);

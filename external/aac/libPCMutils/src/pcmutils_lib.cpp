@@ -100,7 +100,7 @@ Changes made in the code.
 
 /* Decoder library info */
 #define PCMDMX_LIB_VL0 2
-#define PCMDMX_LIB_VL1 2
+#define PCMDMX_LIB_VL1 3
 #define PCMDMX_LIB_VL2 1
 #define PCMDMX_LIB_TITLE "PCM Downmix Lib"
 #define PCMDMX_LIB_BUILD_DATE __DATE__
@@ -111,7 +111,7 @@ Changes made in the code.
 #define PCM_DMX_MAX_CHANNELS            ( 8 )
 #define PCM_DMX_MAX_CHANNEL_GROUPS      ( 4 )
 #define PCM_DMX_MAX_CHANNELS_PER_GROUP  ( 3 )   /* The maximum over all groups */
-#define PCMDMX_DFLT_EXPIRY_FRAME        ( 40 )  /* At least 400ms (FL 960 @ 96kHz) */
+#define PCMDMX_DFLT_EXPIRY_FRAME        ( 50 )  /* At least 500ms (FL 960 @ 96kHz) */
 
 /* Fixed and unique channel group indices.
  * The last group index has to be smaller than PCM_DMX_MAX_CHANNEL_GROUPS. */
@@ -305,7 +305,7 @@ PCM_DMX_CHANNEL_MODE getChannelMode (
 
   /* For details see ISO/IEC 13818-7:2005(E), 8.5.3 Channel configuration */
   FDKmemclear(numChInGrp, PCM_DMX_MAX_CHANNEL_GROUPS*sizeof(UCHAR));
-  FDKmemset(offsetTable, UNDEFINED_CHANNEL_OFFSET, PCM_DMX_MAX_CHANNELS*sizeof(UCHAR));
+  FDKmemset(offsetTable, 255, PCM_DMX_MAX_CHANNELS*sizeof(UCHAR));
   FDKmemset(chIdx, 255, PCM_DMX_MAX_CHANNEL_GROUPS*PCM_DMX_MAX_CHANNELS_PER_GROUP*sizeof(UCHAR));
 
   /* Categorize channels */

@@ -1,6 +1,6 @@
 /*
  * Copyright 2010, The Android Open Source Project
- * Copyright (c) 2011, 2012 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012 The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -91,6 +91,7 @@ public:
 
     const std::string& getUrl() const;
     const std::string& getUserAgent() const;
+    const std::string& getReferer() const;
 
     void setSync(bool sync) { m_isSync = sync; }
 private:
@@ -113,6 +114,7 @@ private:
     scoped_ptr<UrlInterceptResponse> m_interceptResponse;
     std::string m_url;
     std::string m_userAgent;
+    std::string m_referer;
     LoadState m_loadState;
     int m_authRequestCount;
     int m_cacheMode;

@@ -43,6 +43,7 @@
 #include "WebViewCore.h"
 #include "npruntime.h"
 
+#include <gui/ISurfaceComposer.h>
 #include <gui/SurfaceComposerClient.h>
 #include <ui/DisplayInfo.h>
 #include <ui/PixelFormat.h>
@@ -111,12 +112,6 @@ NPObject* PlatformBridge::pluginScriptableObject(Widget* widget)
     return pluginView->getNPObject();
 }
 
-bool PlatformBridge::isWebViewPaused(const WebCore::FrameView* frameView)
-{
-    android::WebViewCore* webViewCore = android::WebViewCore::getWebViewCore(frameView);
-    return webViewCore->isPaused();
-}
-
 bool PlatformBridge::popupsAllowed(NPP)
 {
     return false;
@@ -130,15 +125,21 @@ String PlatformBridge::resolveFilePathForContentUri(const String& contentUri)
 
 int PlatformBridge::PlatformBridge::screenDepth()
 {
+    android::sp<android::IBinder> display(
+            android::SurfaceComposerClient::getBuiltInDisplay(
+            android::ISurfaceComposer::eDisplayIdMain));
     android::DisplayInfo info;
-    android::SurfaceComposerClient::getDisplayInfo(android::DisplayID(0), &info);
+    android::SurfaceComposerClient::getDisplayInfo(display, &info);
     return info.pixelFormatInfo.bitsPerPixel;
 }
 
 FloatRect PlatformBridge::screenRect()
 {
+    android::sp<android::IBinder> display(
+            android::SurfaceComposerClient::getBuiltInDisplay(
+            android::ISurfaceComposer::eDisplayIdMain));
     android::DisplayInfo info;
-    android::SurfaceComposerClient::getDisplayInfo(android::DisplayID(0), &info);
+    android::SurfaceComposerClient::getDisplayInfo(display, &info);
     return FloatRect(0.0, 0.0, info.w, info.h);
 }
 
@@ -170,10 +171,10 @@ void PlatformBridge::updateViewport(FrameView* frameView)
     webViewCore->updateViewport();
 }
 
-void PlatformBridge::updateTextfield(FrameView* frameView, Node* nodePtr, bool changeToPassword, const WTF::String& text)
+void PlatformBridge::updateTextfield(FrameView* frameView, Node* nodePtr, const WTF::String& text)
 {
     android::WebViewCore* webViewCore = android::WebViewCore::getWebViewCore(frameView);
-    webViewCore->updateTextfield(nodePtr, changeToPassword, text);
+    webViewCore->updateTextfield(nodePtr, text);
 }
 
 void PlatformBridge::setScrollPosition(ScrollView* scrollView, int x, int y) {

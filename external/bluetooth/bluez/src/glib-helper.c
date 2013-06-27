@@ -3,7 +3,7 @@
  *  BlueZ - Bluetooth protocol stack for Linux
  *
  *  Copyright (C) 2004-2010  Marcel Holtmann <marcel@holtmann.org>
- *  Copyright (C) 2012 The Linux Foundation. All rights reserved
+ *  Copyright (C) 2013 The Linux Foundation. All rights reserved
  *
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -353,8 +353,13 @@ static gint find_by_bdaddr(gconstpointer data, gconstpointer user_data)
 {
 	const struct search_context *ctxt = data, *search = user_data;
 
-	return (bacmp(&ctxt->dst, &search->dst) &&
-					bacmp(&ctxt->src, &search->src));
+	int ret;
+
+	ret = bacmp(&ctxt->src, &search->src);
+	if (ret != 0)
+		return ret;
+
+	return bacmp(&ctxt->dst, &search->dst);
 }
 
 int bt_cancel_discovery(const bdaddr_t *src, const bdaddr_t *dst)

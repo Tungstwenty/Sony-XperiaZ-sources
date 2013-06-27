@@ -124,10 +124,6 @@ public:
     };
     static String* globalLocalizedName(rawResId resId);
 
-    // Whether the WebView is paused.
-    // ANDROID
-    // TODO: Upstream to webkit.org. See https://bugs.webkit.org/show_bug.cgi?id=34082
-    static bool isWebViewPaused(const FrameView*);
     static String resolveFilePathForContentUri(const String&);
 
     static int screenDepth();
@@ -136,7 +132,7 @@ public:
     // Update the viewport meta data.
     static void updateViewport(FrameView*);
 
-    static void updateTextfield(FrameView*, Node*, bool changeToPassword, const WTF::String& text);
+    static void updateTextfield(FrameView*, Node*, const WTF::String& text);
 
     static void setScrollPosition(ScrollView*, int x, int y);
 

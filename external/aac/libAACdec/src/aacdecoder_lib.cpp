@@ -4,7 +4,7 @@ Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC 
 
 © Copyright  1995 - 2012 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
-  Copyright (C) 2012 Sony Mobile Communications AB.
+  Copyright (C) 2012-2013 Sony Mobile Communications AB.
 
  1.    INTRODUCTION
 The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
@@ -80,6 +80,9 @@ Am Wolfsmantel 33
 
 www.iis.fraunhofer.de/amm
 amm-info@iis.fraunhofer.de
+
+Changes made in the code.
+2013-03-21 - Added CStreamInfo->numAuBitsRemaining to enable decoding down to last bit of the buffers.
 ----------------------------------------------------------------------------------------------------------- */
 
 /*****************************  MPEG-4 AAC Decoder  **************************
@@ -111,7 +114,7 @@ amm-info@iis.fraunhofer.de
 /* Decoder library info */
 #define AACDECODER_LIB_VL0 2
 #define AACDECODER_LIB_VL1 4
-#define AACDECODER_LIB_VL2 4
+#define AACDECODER_LIB_VL2 7
 #define AACDECODER_LIB_TITLE "AAC Decoder Lib"
 #define AACDECODER_LIB_BUILD_DATE __DATE__
 #define AACDECODER_LIB_BUILD_TIME __TIME__
@@ -532,6 +535,7 @@ aacDecoder_SetParam ( const HANDLE_AACDECODER  self,   /*!< Handle of the decode
     self->streamInfo.numLostAccessUnits = 0;
     self->streamInfo.numBadBytes = 0;
     self->streamInfo.numTotalBytes = 0;
+    self->streamInfo.numAuBitsRemaining = 0;
     /* aacDecoder_SignalInterruption(self); */
     break;
 
@@ -777,6 +781,12 @@ LINKSPEC_CPP AAC_DECODER_ERROR aacDecoder_DecodeFrame(
                                           pTimeData,
                                           timeDataSize,
                                           interleaved);
+
+
+    /* Empty bit buffer in case of flush request. */
+    if (flags & AACDEC_FLUSH) {
+        self->streamInfo.numAuBitsRemaining = 0;
+    }
 
     if (!(flags & (AACDEC_CONCEAL|AACDEC_FLUSH))) {
       TRANSPORTDEC_ERROR tpErr;

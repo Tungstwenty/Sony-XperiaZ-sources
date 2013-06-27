@@ -29,6 +29,7 @@
 #include "IntRect.h"
 #include "GraphicsContext.h"
 #include "RenderSkinAndroid.h"
+#include "RenderSkinMediaButton.h"
 #include "SkCanvas.h"
 #include "SkPicture.h"
 #include "SkTDArray.h"
@@ -40,10 +41,11 @@ namespace WebCore {
 
 class PlatformGraphicsContext {
 public:
+    class State;
+
     PlatformGraphicsContext();
     virtual ~PlatformGraphicsContext();
     virtual bool isPaintingDisabled() = 0;
-    virtual SkCanvas* getCanvas() = 0;
 
     void setGraphicsContext(GraphicsContext* gc) { m_gc = gc; }
     virtual bool deleteUs() const { return false; }
@@ -61,16 +63,16 @@ public:
     virtual void setAlpha(float alpha);
     int getNormalizedAlpha() const;
     virtual void setCompositeOperation(CompositeOperator op);
-    virtual void setFillColor(const Color& c);
-    virtual void setFillShader(SkShader* fillShader);
+    virtual bool setFillColor(const Color& c);
+    virtual bool setFillShader(SkShader* fillShader);
     virtual void setLineCap(LineCap cap);
     virtual void setLineDash(const DashArray& dashes, float dashOffset);
     virtual void setLineJoin(LineJoin join);
     virtual void setMiterLimit(float limit);
     virtual void setShadow(int radius, int dx, int dy, SkColor c);
     virtual void setShouldAntialias(bool useAA);
-    virtual void setStrokeColor(const Color& c);
-    virtual void setStrokeShader(SkShader* strokeShader);
+    virtual bool setStrokeColor(const Color& c);
+    virtual bool setStrokeShader(SkShader* strokeShader);
     virtual void setStrokeStyle(StrokeStyle style);
     virtual void setStrokeThickness(float f);
 
@@ -92,19 +94,20 @@ public:
     // Clipping
     virtual void addInnerRoundedRectClip(const IntRect& rect, int thickness) = 0;
     virtual void canvasClip(const Path& path) = 0;
-    virtual void clip(const FloatRect& rect) = 0;
-    virtual void clip(const Path& path) = 0;
-    virtual void clipConvexPolygon(size_t numPoints, const FloatPoint*, bool antialias) = 0;
-    virtual void clipOut(const IntRect& r) = 0;
-    virtual void clipOut(const Path& p) = 0;
-    virtual void clipPath(const Path& pathToClip, WindRule clipRule) = 0;
+    virtual bool clip(const FloatRect& rect) = 0;
+    virtual bool clip(const Path& path) = 0;
+    virtual bool clipConvexPolygon(size_t numPoints, const FloatPoint*, bool antialias) = 0;
+    virtual bool clipOut(const IntRect& r) = 0;
+    virtual bool clipOut(const Path& p) = 0;
+    virtual bool clipPath(const Path& pathToClip, WindRule clipRule) = 0;
+    virtual SkIRect getTotalClipBounds() = 0;
 
     // Drawing
     virtual void clearRect(const FloatRect& rect) = 0;
     virtual void drawBitmapPattern(const SkBitmap& bitmap, const SkMatrix& matrix,
                            CompositeOperator compositeOp, const FloatRect& destRect) = 0;
     virtual void drawBitmapRect(const SkBitmap& bitmap, const SkIRect* src,
-                        const SkRect& dst, CompositeOperator op) = 0;
+                        const SkRect& dst, CompositeOperator op = CompositeSourceOver) = 0;
     virtual void drawConvexPolygon(size_t numPoints, const FloatPoint* points,
                            bool shouldAntialias) = 0;
     virtual void drawEllipse(const IntRect& rect) = 0;
@@ -117,7 +120,7 @@ public:
     virtual void drawLine(const IntPoint& point1, const IntPoint& point2) = 0;
     virtual void drawLineForText(const FloatPoint& pt, float width) = 0;
     virtual void drawLineForTextChecking(const FloatPoint& pt, float width,
-                                 GraphicsContext::TextCheckingLineStyle) = 0;
+                                         GraphicsContext::TextCheckingLineStyle) = 0;
     virtual void drawRect(const IntRect& rect) = 0;
     virtual void fillPath(const Path& pathToFill, WindRule fillRule) = 0;
     virtual void fillRect(const FloatRect& rect) = 0;
@@ -138,8 +141,16 @@ public:
     virtual void strokePath(const Path& pathToStroke) = 0;
     virtual void strokeRect(const FloatRect& rect, float lineWidth) = 0;
 
+    virtual void drawPosText(const void* text, size_t byteLength,
+                             const SkPoint pos[], const SkPaint& paint) = 0;
+    virtual void drawMediaButton(const IntRect& rect, RenderSkinMediaButton::MediaButton buttonType,
+                                 bool translucent = false, bool drawBackground = true,
+                                 const IntRect& thumb = IntRect()) = 0;
+
     virtual SkCanvas* recordingCanvas() = 0;
-    virtual void endRecording(int type = 0) = 0;
+    virtual void setTextOffset(FloatSize offset) = 0;
+
+    void setRawState(State* state) { m_state = state; }
 
     virtual void convertToNonRecording() {}
     virtual void clearRecording() {}
@@ -151,8 +162,6 @@ public:
     virtual bool isDirty() const {return false; }
 
     virtual void setIsAnimating() {}
-
-protected:
 
     struct ShadowRec {
         SkScalar blur;
@@ -203,11 +212,11 @@ protected:
         friend class PlatformGraphicsContextSkia;
     };
 
+protected:
     virtual bool shadowsIgnoreTransforms() const = 0;
     void setupPaintCommon(SkPaint* paint) const;
     GraphicsContext* m_gc; // Back-ptr to our parent
 
-    struct State;
     WTF::Vector<State> m_stateStack;
     State* m_state;
 };

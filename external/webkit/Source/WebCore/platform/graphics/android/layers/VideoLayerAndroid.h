@@ -1,6 +1,6 @@
 /*
  * Copyright 2011 The Android Open Source Project
- * Copyright (c) 2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,6 +31,7 @@
 
 #include "GLUtils.h"
 #include "LayerAndroid.h"
+#include "VideoLayerManager.h"
 #include <jni.h>
 
 namespace android {
@@ -39,6 +40,15 @@ class SurfaceTexture;
 
 namespace WebCore {
 
+// This instance is shared between the WebCore and UI copies of VideoLayerAndroid
+class FrameCaptureMutex : public SkRefCnt {
+public:
+    android::Condition& condition() { return m_condition; }
+    android::Mutex& mutex() { return m_mutex; }
+private:
+    android::Condition m_condition;
+    android::Mutex m_mutex;
+};
 
 class VideoLayerObserverInterface : public SkRefCnt {
 public:
@@ -51,10 +61,10 @@ class VideoLayerAndroid : public LayerAndroid {
 public:
     VideoLayerAndroid();
     explicit VideoLayerAndroid(const VideoLayerAndroid& layer);
-
     virtual ~VideoLayerAndroid();
 
     virtual bool isVideo() const { return true; }
+
     virtual LayerAndroid* copy() const { return new VideoLayerAndroid(*this); }
 
     // The following functions are called in UI thread only.
@@ -62,10 +72,11 @@ public:
     void setSurfaceTexture(sp<SurfaceTexture> texture, int textureName);
     virtual bool needsIsolatedSurface() { return true; }
     void registerVideoLayerObserver(VideoLayerObserverInterface* observer);
+    bool copyToBitmap(SkBitmapRef*& bitmapRef);
 private:
-    void init();
     void showProgressSpinner(const SkRect& innerRect);
     SkRect calVideoRect(const SkRect& rect);
+    void serviceFrameCapture();
     // Surface texture for showing the video is actually allocated in Java side
     // and passed into this native code.
     sp<android::SurfaceTexture> m_surfaceTexture;
@@ -75,6 +86,9 @@ private:
     static const int ROTATESTEP = 12;
 
     VideoLayerObserverInterface* m_observer;
+    // Used for signalling between rendering and UI thread for
+    // video frame capture case
+    SkRefPtr<FrameCaptureMutex> m_frameCaptureMutex;
 };
 
 } // namespace WebCore

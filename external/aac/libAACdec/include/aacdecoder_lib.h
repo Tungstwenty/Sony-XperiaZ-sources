@@ -4,7 +4,7 @@ Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC 
 
 © Copyright  1995 - 2012 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
-  Copyright (C) 2012 Sony Mobile Communications AB.
+  Copyright (C) 2012-2013 Sony Mobile Communications AB.
 
  1.    INTRODUCTION
 The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
@@ -83,6 +83,7 @@ amm-info@iis.fraunhofer.de
 
 Changes made in the code.
 2012-11-22 - Clarified supported parameters to AAC_PCM_OUTPUT_CHANNELS and their result in documentation.
+2013-03-21 - Added CStreamInfo->numAuBitsRemaining to enable decoding down to last bit of the buffers.
 ----------------------------------------------------------------------------------------------------------- */
 
 /*****************************  MPEG-4 AAC Decoder  **************************
@@ -523,6 +524,8 @@ typedef struct
   UINT              flags;               /*!< Copy if internal flags. Only to be written by the decoder, and only to be read externally. */
 
   SCHAR             epConfig;            /*!< epConfig level (from ASC): only level 0 supported, -1 means no ER (e. g. AOT=2, MPEG-2 AAC, etc.)  */
+
+  INT               numAuBitsRemaining;   /*!< This is the number of access unit bits remaining after last decodeframe. The value could be negative if too many bits have been read. */
 
   /* Statistics */
   INT               numLostAccessUnits;  /*!< This integer will reflect the estimated amount of lost access units in case aacDecoder_DecodeFrame()

@@ -32,6 +32,7 @@
 #if USE(ACCELERATED_COMPOSITING)
 
 #include "AndroidLog.h"
+#include "BaseRenderer.h"
 #include "DrawQuadData.h"
 #include "GLUtils.h"
 #include "Tile.h"
@@ -44,7 +45,7 @@
 // For simple webView usage, MINIMAL_SIZE is recommended for memory saving.
 // In browser case, EFFICIENT_SIZE is preferred.
 #define MINIMAL_SIZE 1
-#define EFFICIENT_SIZE 7
+#define EFFICIENT_SIZE 6
 
 // Set this to 1 if we would like to take the new GpuUpload approach which
 // relied on the glCopyTexSubImage2D instead of a glDraw call
@@ -389,8 +390,9 @@ void TransferQueue::updateDirtyTiles()
 }
 
 void TransferQueue::updateQueueWithBitmap(const TileRenderInfo* renderInfo,
-                                          const SkBitmap& bitmap)
+                                          SkBitmap& bitmap)
 {
+    TRACE_METHOD();
     if (!tryUpdateQueueWithBitmap(renderInfo, bitmap)) {
         // failed placing bitmap in queue, discard tile's texture so it will be
         // re-enqueued (and repainted)
@@ -401,7 +403,7 @@ void TransferQueue::updateQueueWithBitmap(const TileRenderInfo* renderInfo,
 }
 
 bool TransferQueue::tryUpdateQueueWithBitmap(const TileRenderInfo* renderInfo,
-                                             const SkBitmap& bitmap)
+                                             SkBitmap& bitmap)
 {
     // This lock need to cover the full update since it is possible that queue
     // will be cleaned up in the middle of this update without the lock.
@@ -427,7 +429,7 @@ bool TransferQueue::tryUpdateQueueWithBitmap(const TileRenderInfo* renderInfo,
     }
 
     // b) After update the Surface Texture, now udpate the transfer queue info.
-    addItemInTransferQueue(renderInfo, currentUploadType, &bitmap);
+    addItemInTransferQueue(renderInfo, currentUploadType, bitmap);
 
     ALOGV("Bitmap updated x, y %d %d, baseTile %p",
           renderInfo->x, renderInfo->y, renderInfo->baseTile);
@@ -473,7 +475,7 @@ void TransferQueue::addItemCommon(const TileRenderInfo* renderInfo,
 // Currently only called by GLUtils::updateSharedSurfaceTextureWithBitmap.
 void TransferQueue::addItemInTransferQueue(const TileRenderInfo* renderInfo,
                                            TextureUploadType type,
-                                           const SkBitmap* bitmap)
+                                           SkBitmap& bitmap)
 {
     m_transferQueueIndex = (m_transferQueueIndex + 1) % m_transferQueueSize;
 
@@ -485,69 +487,32 @@ void TransferQueue::addItemInTransferQueue(const TileRenderInfo* renderInfo,
 
     TileTransferData* data = &m_transferQueue[index];
     addItemCommon(renderInfo, type, data);
-    if (type == CpuUpload && bitmap) {
+    if (type == CpuUpload) {
         // Lazily create the bitmap
         if (!m_transferQueue[index].bitmap) {
             m_transferQueue[index].bitmap = new SkBitmap();
-            int w = bitmap->width();
-            int h = bitmap->height();
-            m_transferQueue[index].bitmap->setConfig(bitmap->config(), w, h);
+            int w = bitmap.width();
+            int h = bitmap.height();
+            m_transferQueue[index].bitmap->setConfig(bitmap.config(), w, h);
+            m_transferQueue[index].bitmap->allocPixels();
         }
-        bool copy = true;
-        bitmap->lockPixels();
-        m_transferQueue[index].bitmap->lockPixels();
-        void* srcPtr = bitmap->getPixels();
-        void* desPtr = m_transferQueue[index].bitmap->getPixels();
-        if (srcPtr == desPtr)
-            copy = false;
-        bitmap->unlockPixels();
-        m_transferQueue[index].bitmap->unlockPixels();
-        if (copy)
-            bitmap->copyTo(m_transferQueue[index].bitmap, bitmap->config());
+        SkBitmap temp = (*m_transferQueue[index].bitmap);
+        (*m_transferQueue[index].bitmap) = bitmap;
+        bitmap = temp;
     }
 
     m_emptyItemCount--;
 }
 
-SkBitmap* TransferQueue::getQueueBitmap()
-{
-    android::Mutex::Autolock lock(m_transferQueueItemLocks);
-    bool ready = readyForUpdate();
-    if (!ready) {
-        return 0;
-    }
-    if (m_currentUploadType == GpuUpload) {
-        return 0;
-    }
-
-    int index = (m_transferQueueIndex + 1) % m_transferQueueSize;
-
-    if (m_transferQueue[index].savedTilePtr
-        || m_transferQueue[index].status != emptyItem) {
-        ALOGV("ERROR update a tile which is dirty already @ index %d", index);
-    }
-
-    if (!m_transferQueue[index].bitmap) {
-        m_transferQueue[index].bitmap = new SkBitmap();
-        int w = TilesManager::instance()->tileWidth();
-        int h = TilesManager::instance()->tileHeight();
-        m_transferQueue[index].bitmap->setConfig(SkBitmap::kARGB_8888_Config, w, h);
-        m_transferQueue[index].bitmap->allocPixels();
-    }
-
-    return m_transferQueue[index].bitmap;
-}
-
 void TransferQueue::setTextureUploadType(TextureUploadType type)
 {
     android::Mutex::Autolock lock(m_transferQueueItemLocks);
-    type = CpuUpload;
     if (m_currentUploadType == type)
         return;
 
     setPendingDiscard();
 
-    m_currentUploadType = type;
+    m_currentUploadType = CpuUpload; // force to cpu upload mode for now until gpu upload mode is fixed
     ALOGD("Now we set the upload to %s", m_currentUploadType == GpuUpload ? "GpuUpload" : "CpuUpload");
 }
 

@@ -64,6 +64,7 @@ int device_browse_sdp(struct btd_device *device, DBusConnection *conn,
 			DBusMessage *msg, uuid_t *search, gboolean reverse);
 void device_probe_drivers(struct btd_device *device, GSList *profiles);
 int conn_get_pending_sec_level(struct btd_device *device, uint8_t *pending_sec_level);
+int conn_set_auth_type(struct btd_device *device, uint8_t auth_type);
 
 const sdp_record_t *btd_device_get_record(struct btd_device *device,
 						const char *uuid);
@@ -140,3 +141,6 @@ void open_sdp_channel(struct btd_device *device);
 void close_sdp_channel(struct btd_device *device);
 gboolean isSdpRequired(bdaddr_t dest);
 bdaddr_t *get_bdaddr(struct btd_device *device);
+
+void temp_records_clean_up(struct btd_device *device, struct btd_adapter *adapter,
+						const gchar *address);

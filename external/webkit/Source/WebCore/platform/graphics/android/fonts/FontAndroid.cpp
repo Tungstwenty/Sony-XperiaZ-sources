@@ -30,8 +30,10 @@
 
 #include "config.h"
 
+#define LOG_TAG "FontAndroid"
+
+#include "AndroidLog.h"
 #include "EmojiFont.h"
-#include "GraphicsOperationCollection.h"
 #include "GraphicsOperation.h"
 #include "Font.h"
 #include "FontData.h"
@@ -49,6 +51,7 @@
 #include "SkTypeface.h"
 #include "SkUtils.h"
 #include "TextRun.h"
+#include "SkTypeface_android.h"
 
 #ifdef SUPPORT_COMPLEX_SCRIPTS
 #include "HarfbuzzSkia.h"
@@ -195,6 +198,12 @@ void Font::drawGlyphs(GraphicsContext* gc, const SimpleFontData* font,
     // compile-time assert
     SkASSERT(sizeof(GlyphBufferGlyph) == sizeof(uint16_t));
 
+    if (numGlyphs == 1 && glyphBuffer.glyphAt(from) == 0x3) {
+        // Webkit likes to draw end text control command for some reason
+        // Just ignore it
+        return;
+    }
+
     SkPaint paint;
     if (!setupForText(&paint, gc, font)) {
         return;
@@ -213,8 +222,11 @@ void Font::drawGlyphs(GraphicsContext* gc, const SimpleFontData* font,
         point.xy + [width, height, width, height, ...], so we have to convert
      */
 
-    if (font->platformData().orientation() == Vertical)
-        y += SkFloatToScalar(font->fontMetrics().floatAscent(IdeographicBaseline) - font->fontMetrics().floatAscent());
+    if (font->platformData().orientation() == Vertical) {
+        float yOffset = SkFloatToScalar(font->fontMetrics().floatAscent(IdeographicBaseline) - font->fontMetrics().floatAscent());
+        gc->platformContext()->setTextOffset(FloatSize(0.0f, -yOffset)); // compensate for offset in bounds calculation
+        y += yOffset;
+    }
 
     if (EmojiFont::IsAvailable()) {
         // set filtering, to make scaled images look nice(r)
@@ -235,8 +247,8 @@ void Font::drawGlyphs(GraphicsContext* gc, const SimpleFontData* font,
                 if (localCount) {
                     rotator.mapPoints(&pos[localIndex], localCount);
                     canvas->drawPosText(&glyphs[localIndex],
-                                        localCount * sizeof(uint16_t),
-                                        &pos[localIndex], paint);
+                                     localCount * sizeof(uint16_t),
+                                     &pos[localIndex], paint);
                 }
                 EmojiFont::Draw(canvas, glyphs[i], x, y, paint);
                 // reset local index/count track for "real" glyphs
@@ -276,13 +288,15 @@ void Font::drawGlyphs(GraphicsContext* gc, const SimpleFontData* font,
             rotator.setRotate(90);
             rotator.mapPoints(pos, numGlyphs);
         }
-
-        canvas->drawPosText(glyphs, numGlyphs * sizeof(uint16_t), pos, paint);
+        canvas->drawPosText(glyphs,
+            numGlyphs * sizeof(uint16_t), pos, paint);
 
         if (font->platformData().orientation() == Vertical)
             canvas->restore();
     }
-    gc->platformContext()->endRecording();
+
+    if (font->platformData().orientation() == Vertical)
+        gc->platformContext()->setTextOffset(FloatSize()); // reset to undo above
 }
 
 void Font::drawEmphasisMarksForComplexText(WebCore::GraphicsContext*, WebCore::TextRun const&, WTF::AtomicString const&, WebCore::FloatPoint const&, int, int) const
@@ -482,26 +496,8 @@ public:
     }
 
 private:
-    enum CustomScript {
-        Bengali,
-        Devanagari,
-        Hebrew,
-        HebrewBold,
-        Kannada,
-        Malayalam,
-        Naskh,
-        Tamil,
-        TamilBold,
-        Telugu,
-        Thai,
-        NUM_SCRIPTS
-    };
-
-    static const char* paths[NUM_SCRIPTS];
-
     void setupFontForScriptRun();
-    const FontPlatformData* setupComplexFont(CustomScript script,
-                const FontPlatformData& platformData);
+    const FontPlatformData* setupComplexFont(HB_Script script, const FontPlatformData& platformData);
     HB_FontRec* allocHarfbuzzFont();
     void deleteGlyphArrays();
     void createGlyphArrays(int);
@@ -541,22 +537,6 @@ private:
                       // each word break we accumulate error. This is the
                       // number of pixels that we are behind so far.
     unsigned m_letterSpacing; // pixels to be added after each glyph.
-};
-
-
-// Indexed using enum CustomScript
-const char* TextRunWalker::paths[] = {
-    "/system/fonts/Lohit-Bengali.ttf",
-    "/system/fonts/DroidSansDevanagari-Regular.ttf",
-    "/system/fonts/DroidSansHebrew-Regular.ttf",
-    "/system/fonts/DroidSansHebrew-Bold.ttf",
-    "/system/fonts/Lohit-Kannada.ttf",
-    "/system/fonts/AnjaliNewLipi-light.ttf",
-    "/system/fonts/DroidNaskh-Regular.ttf",
-    "/system/fonts/DroidSansTamil-Regular.ttf",
-    "/system/fonts/DroidSansTamil-Bold.ttf",
-    "/system/fonts/Lohit-Telugu.ttf",
-    "/system/fonts/DroidSansThai.ttf"
 };
 
 TextRunWalker::TextRunWalker(const TextRun& run, int startingX, int startingY, const Font* font)
@@ -714,8 +694,7 @@ void TextRunWalker::setWordAndLetterSpacing(int wordSpacingAdjustment,
 }
 
 const FontPlatformData* TextRunWalker::setupComplexFont(
-        CustomScript script,
-        const FontPlatformData& platformData)
+    HB_Script script, const FontPlatformData& platformData)
 {
     static FallbackHash fallbackPlatformData;
 
@@ -725,15 +704,19 @@ const FontPlatformData* TextRunWalker::setupComplexFont(
     // italic, then bold italic. additional fake style bits can be added.
     int scriptStyleIndex = script;
     if (platformData.isFakeBold())
-        scriptStyleIndex += NUM_SCRIPTS;
+        scriptStyleIndex += HB_ScriptCount;
     if (platformData.isFakeItalic())
-        scriptStyleIndex += NUM_SCRIPTS << 1;
+        scriptStyleIndex += HB_ScriptCount << 1;
 
     FallbackFontKey key(scriptStyleIndex, platformData.size());
     FontPlatformData* newPlatformData = 0;
 
     if (!fallbackPlatformData.contains(key)) {
-        SkTypeface* typeface = SkTypeface::CreateFromFile(paths[script]);
+        SkTypeface::Style currentStyle = SkTypeface::kNormal;
+        if (platformData.typeface())
+            currentStyle = platformData.typeface()->style();
+        SkTypeface* typeface = SkCreateTypefaceForScript(script, currentStyle,
+            SkPaint::kElegant_Variant);
         newPlatformData = new FontPlatformData(platformData, typeface);
         SkSafeUnref(typeface);
         fallbackPlatformData.set(key, newPlatformData);
@@ -751,61 +734,8 @@ void TextRunWalker::setupFontForScriptRun()
     const FontData* fontData = m_font->glyphDataForCharacter(m_run[0], false).fontData;
     const FontPlatformData& platformData =
         fontData->fontDataForCharacter(' ')->platformData();
-    const FontPlatformData* complexPlatformData = &platformData;
+    const FontPlatformData* complexPlatformData = setupComplexFont(m_item.item.script, platformData);
 
-    switch (m_item.item.script) {
-      case HB_Script_Bengali:
-          complexPlatformData = setupComplexFont(Bengali, platformData);
-          break;
-        case HB_Script_Devanagari:
-          complexPlatformData = setupComplexFont(Devanagari, platformData);
-            break;
-        case HB_Script_Hebrew:
-            switch (platformData.typeface()->style()) {
-                case SkTypeface::kBold:
-                case SkTypeface::kBoldItalic:
-                    complexPlatformData = setupComplexFont(HebrewBold, platformData);
-                    break;
-                case SkTypeface::kNormal:
-                case SkTypeface::kItalic:
-                default:
-                    complexPlatformData = setupComplexFont(Hebrew, platformData);
-                    break;
-            }
-            break;
-        case HB_Script_Kannada:
-            complexPlatformData = setupComplexFont(Kannada, platformData);
-            break;
-        case HB_Script_Malayalam:
-            complexPlatformData = setupComplexFont(Malayalam, platformData);
-            break;
-        case HB_Script_Arabic:
-            complexPlatformData = setupComplexFont(Naskh, platformData);
-            break;
-        case HB_Script_Tamil:
-            switch (platformData.typeface()->style()) {
-                case SkTypeface::kBold:
-                case SkTypeface::kBoldItalic:
-                    complexPlatformData = setupComplexFont(TamilBold, platformData);
-                    break;
-                case SkTypeface::kNormal:
-                case SkTypeface::kItalic:
-                default:
-                    complexPlatformData = setupComplexFont(Tamil, platformData);
-                    break;
-            }
-            break;
-        case HB_Script_Telugu:
-            complexPlatformData = setupComplexFont(Telugu, platformData);
-            break;
-        case HB_Script_Thai:
-            complexPlatformData = setupComplexFont(Thai, platformData);
-            break;
-        default:
-            // HB_Script_Common; includes Ethiopic
-            complexPlatformData = &platformData;
-            break;
-    }
     m_item.face = complexPlatformData->harfbuzzFace();
     m_item.font->userData = const_cast<FontPlatformData*>(complexPlatformData);
 
@@ -1135,18 +1065,17 @@ void Font::drawComplexText(GraphicsContext* gc, TextRun const& run,
         if (fill) {
             walker.fontPlatformDataForScriptRun()->setupPaint(&fillPaint);
             adjustTextRenderMode(&fillPaint, haveMultipleLayers);
-            canvas->drawPosText(walker.glyphs(), walker.length() << 1,
-                                walker.positions(), fillPaint);
+            canvas->drawPosText(walker.glyphs(),
+                walker.length() << 1, walker.positions(), fillPaint);
         }
         if (stroke) {
             walker.fontPlatformDataForScriptRun()->setupPaint(&strokePaint);
             adjustTextRenderMode(&strokePaint, haveMultipleLayers);
-            canvas->drawPosText(walker.glyphs(), walker.length() << 1,
-                                walker.positions(), strokePaint);
+            canvas->drawPosText(walker.glyphs(),
+                walker.length() << 1, walker.positions(), strokePaint);
         }
     }
 
-    gc->platformContext()->endRecording();
 }
 
 float Font::floatWidthForComplexText(const TextRun& run,

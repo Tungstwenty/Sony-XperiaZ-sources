@@ -639,7 +639,10 @@ MemoryCache::Statistics MemoryCache::getStatistics()
 
 void MemoryCache::setDisabled(bool disabled)
 {
-    StatHubCmd(INPUT_CMD_WK_MMC_CLEAR, NULL, 0, NULL, 0);
+    StatHubCmd* cmd = StatHubCmdCreate(SH_CMD_WK_MEMORY_CACHE, SH_ACTION_CLEAR);
+    if (NULL!=cmd) {
+        StatHubCmdCommit(cmd);
+    }
 
     m_disabled = disabled;
     if (!m_disabled)

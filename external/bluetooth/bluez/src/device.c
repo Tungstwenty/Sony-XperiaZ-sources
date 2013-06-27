@@ -64,7 +64,7 @@
 #include "../attrib/client.h"
 
 #define DISCONNECT_TIMER	2
-#define DISCOVERY_TIMER		2
+#define DISCOVERY_TIMER		4
 #define SDP_TIMEOUT		30
 
 /* When all services should trust a remote device */
@@ -1271,6 +1271,18 @@ void device_remove_connection(struct btd_device *device, DBusConnection *conn,
 		DEVICE_INTERFACE, "Connected",
 		DBUS_TYPE_BYTE, &conn_state, 2);
 
+	if (!(device->paired)) {
+		attrib_client_unregister(device);
+
+		g_slist_foreach(device->services, (GFunc) g_free, NULL);
+		g_slist_free(device->services);
+		device->services = NULL;
+
+		g_slist_foreach(device->primaries, (GFunc) g_free, NULL);
+		g_slist_free(device->primaries);
+		device->primaries = NULL;
+	}
+
 	attrib_client_disconnect(device);
 
 	g_free(conn_state);
@@ -1360,6 +1372,39 @@ int conn_get_pending_sec_level(struct btd_device *device, uint8_t *pending_sec_l
 	if (! err)
 		*pending_sec_level = cr->conn_info->pending_sec_level;
 	g_free(cr);
+
+	hci_close_dev(dd);
+	return err;
+}
+
+int conn_set_auth_type(struct btd_device *device, uint8_t auth_type)
+{
+	struct hci_auth_info_req *req;
+	int err = 0, dd;
+	uint16_t dev_id;
+	char addr[18];
+	bdaddr_t src;
+
+	adapter_get_address(device->adapter, &src);
+	ba2str(&src, addr);
+	dev_id = hci_devid(addr);
+
+	dd = hci_open_dev(dev_id);
+	if (dd < 0)
+		return dd;
+
+	req = g_malloc0(sizeof(struct hci_auth_info_req));
+
+	if (req == NULL) {
+		hci_close_dev(dd);
+		return  -ENOMEM;
+	}
+	memset(req, 0, sizeof(struct hci_auth_info_req));
+	bacpy(&req->bdaddr, &device->bdaddr);
+	req->type = auth_type;
+
+	err = ioctl(dd, HCISETAUTHINFO, req);
+	g_free(req);
 
 	hci_close_dev(dd);
 	return err;
@@ -1560,6 +1605,7 @@ static void device_remove_stored(struct btd_device *device)
 		device_remove_bonding(device);
 		device_set_paired(device, FALSE);
 	}
+	delete_entry(&src, "aliases", addr);
 	delete_entry(&src, "profiles", addr);
 	delete_entry(&src, "trusts", addr);
 	delete_entry(&src, "types", addr);
@@ -1607,6 +1653,14 @@ void device_remove(struct btd_device *device, gboolean remove_stored)
 	device->drivers = NULL;
 
 	attrib_client_unregister(device);
+
+	g_slist_foreach(device->services, (GFunc) g_free, NULL);
+	g_slist_free(device->services);
+	device->services = NULL;
+
+	g_slist_foreach(device->primaries, (GFunc) g_free, NULL);
+	g_slist_free(device->primaries);
+	device->primaries = NULL;
 
 	btd_device_unref(device);
 }
@@ -2340,15 +2394,10 @@ static void primary_cb(GSList *services, guint8 status, gpointer user_data)
 
 	device_probe_drivers(device, uuids);
 
-	attrib_client_unregister(device);
-
-	g_slist_foreach(device->services, (GFunc) g_free, NULL);
-	g_slist_free(device->services);
-	device->services = NULL;
-
-	g_slist_foreach(device->primaries, (GFunc) g_free, NULL);
-	g_slist_free(device->primaries);
-	device->primaries = NULL;
+	if (device->services) {
+		DBG(" Services exists in the device cache");
+		gatt_services_changed(device);
+	}
 
 	device_register_services(req->conn, device, g_slist_copy(services), -1);
 
@@ -2635,9 +2684,6 @@ void device_set_type(struct btd_device *device, device_type_t type)
 static gboolean start_discovery(gpointer user_data)
 {
 	struct btd_device *device = user_data;
-
-	if (!device->connected)
-		return FALSE;
 
 	device->discov_timer = 0;
 
@@ -3056,6 +3102,15 @@ static void pincode_cb(struct agent *agent, DBusError *err,
 
 	device->authr->cb = NULL;
 	device->authr->agent = NULL;
+
+	if (NULL == pincode) {
+		device_remove_stored(device);
+		if (device->tmp_records) {
+			sdp_list_free(device->tmp_records,
+				(sdp_free_func_t) sdp_record_free);
+			device->tmp_records = NULL;
+		}
+	}
 }
 
 static void confirm_cb(struct agent *agent, DBusError *err, void *data)
@@ -3487,4 +3542,17 @@ gboolean isSdpRequired(bdaddr_t dest)
 		return TRUE;
 	}
 	return FALSE;
+}
+
+void temp_records_clean_up(struct btd_device *device, struct btd_adapter *adapter,
+						const gchar *address )
+{
+	if (device_is_hid_mouse(adapter, address)) {
+		device_remove_stored(device);
+		if (device->tmp_records != NULL) {
+			sdp_list_free(device->tmp_records,
+					(sdp_free_func_t) sdp_record_free);
+			device->tmp_records = NULL;
+		}
+	}
 }

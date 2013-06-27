@@ -2521,6 +2521,30 @@ static int mgmt_unset_rssi_reporter(int index, bdaddr_t *bdaddr)
 	return 0;
 }
 
+static int mgmt_le_cancel_create_conn(int index, bdaddr_t *bdaddr)
+{
+	char buf[MGMT_HDR_SIZE + sizeof(struct mgmt_cp_le_cancel_create_conn)];
+	struct mgmt_hdr *hdr = (void *) buf;
+	struct mgmt_cp_le_cancel_create_conn *cp = (void *) &buf[sizeof(*hdr)];
+	char addr[18];
+
+	ba2str(bdaddr, addr);
+	DBG("hci%d bdaddr %s", index, addr);
+
+	memset(buf, 0, sizeof(buf));
+
+	hdr->opcode = htobs(MGMT_OP_LE_CANCEL_CREATE_CONN);
+	hdr->index = htobs(index);
+	hdr->len = htobs(sizeof(*cp));
+
+	bacpy(&cp->bdaddr, bdaddr);
+
+	if (write(mgmt_sock, &buf, sizeof(buf)) < 0)
+		return -errno;
+
+	return 0;
+}
+
 static int mgmt_le_add_dev_white_list(int index, bdaddr_t *bdaddr,
 							uint8_t addr_type)
 {
@@ -2686,6 +2710,7 @@ static struct btd_adapter_ops mgmt_ops = {
 	.le_add_dev_white_list = mgmt_le_add_dev_white_list,
 	.le_remove_dev_white_list = mgmt_le_remove_dev_white_list,
 	.le_clear_white_list = mgmt_le_clear_white_list,
+	.le_cancel_create_conn = mgmt_le_cancel_create_conn,
 };
 
 static int mgmt_init(void)

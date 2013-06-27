@@ -473,10 +473,12 @@ static void cmd_char(int argcp, char **argvp)
 			goto done;
 		}
 
+		g_attrib_ref(attrib);
 		gatt_discover_char(attrib, start, end, &uuid, char_cb, NULL);
 		return;
 	}
 
+	g_attrib_ref(attrib);
 	gatt_discover_char(attrib, start, end, NULL, char_cb, NULL);
 	return;
 

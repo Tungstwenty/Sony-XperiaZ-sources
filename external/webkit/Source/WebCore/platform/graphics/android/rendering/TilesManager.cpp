@@ -57,13 +57,17 @@
 // number to cap the layer tile texturs, it worked on both phones and tablets.
 // TODO: after merge the pool of base tiles and layer tiles, we should revisit
 // the logic of allocation management.
-#define MAX_TEXTURE_ALLOCATION ((6+TILE_PREFETCH_DISTANCE*2)*(5+TILE_PREFETCH_DISTANCE*2)*4)
+#define MAX_TEXTURE_ALLOCATION ((10+TILE_PREFETCH_DISTANCE*2)*(7+TILE_PREFETCH_DISTANCE*2)*4)
 #define TILE_WIDTH 256
 #define TILE_HEIGHT 256
 
 #define BYTES_PER_PIXEL 4 // 8888 config
 
 #define LAYER_TEXTURES_DESTROY_TIMEOUT 60 // If we do not need layers for 60 seconds, free the textures
+
+// Eventually this should be dynamically be determined, and smart scheduling
+// between the generators should be implemented
+#define NUM_TEXTURES_GENERATORS 1
 
 namespace WebCore {
 
@@ -101,13 +105,24 @@ TilesManager::TilesManager()
     , m_eglContext(EGL_NO_CONTEXT)
 {
     ALOGV("TilesManager ctor");
-    m_textures.reserveCapacity(MAX_TEXTURE_ALLOCATION);
-    m_availableTextures.reserveCapacity(MAX_TEXTURE_ALLOCATION);
-    m_tilesTextures.reserveCapacity(MAX_TEXTURE_ALLOCATION);
-    m_availableTilesTextures.reserveCapacity(MAX_TEXTURE_ALLOCATION);
-    m_pixmapsGenerationThread = new TexturesGenerator(this);
-    m_pixmapsGenerationThread->run("TexturesGenerator");
+    m_textures.reserveCapacity(MAX_TEXTURE_ALLOCATION / 2);
+    m_availableTextures.reserveCapacity(MAX_TEXTURE_ALLOCATION / 2);
+    m_tilesTextures.reserveCapacity(MAX_TEXTURE_ALLOCATION / 2);
+    m_availableTilesTextures.reserveCapacity(MAX_TEXTURE_ALLOCATION / 2);
+
+    m_textureGenerators = new sp<TexturesGenerator>[NUM_TEXTURES_GENERATORS];
+    for (int i = 0; i < NUM_TEXTURES_GENERATORS; i++) {
+        m_textureGenerators[i] = new TexturesGenerator(this);
+        ALOGD("Starting TG #%d, %p", i, m_textureGenerators[i].get());
+        m_textureGenerators[i]->run("TexturesGenerator");
+    }
 }
+
+TilesManager::~TilesManager()
+{
+    delete[] m_textureGenerators;
+}
+
 
 void TilesManager::allocateTextures()
 {
@@ -437,7 +452,7 @@ TransferQueue* TilesManager::transferQueue()
     // be accessed from the TexturesGenerator. However, that can only happen after
     // a previous transferQueue() call due to a prepare.
     if (!m_queue)
-        m_queue = new TransferQueue(m_useMinimalMemory);
+        m_queue = new TransferQueue(m_useMinimalMemory && !m_highEndGfx);
     return m_queue;
 }
 
@@ -486,6 +501,29 @@ void TilesManager::updateTilesIfContextVerified()
     }
     m_eglContext = ctx;
     return;
+}
+
+void TilesManager::removeOperationsForFilter(OperationFilter* filter)
+{
+    for (int i = 0; i < NUM_TEXTURES_GENERATORS; i++)
+        m_textureGenerators[i]->removeOperationsForFilter(filter);
+    delete filter;
+}
+
+bool TilesManager::tryUpdateOperationWithPainter(Tile* tile, TilePainter* painter)
+{
+    for (int i = 0; i < NUM_TEXTURES_GENERATORS; i++) {
+        if (m_textureGenerators[i]->tryUpdateOperationWithPainter(tile, painter))
+            return true;
+    }
+    return false;
+}
+
+void TilesManager::scheduleOperation(QueuedOperation* operation)
+{
+    // TODO: painter awareness, store prefer awareness, store preferred thread into painter
+    m_scheduleThread = (m_scheduleThread + 1) % NUM_TEXTURES_GENERATORS;
+    m_textureGenerators[m_scheduleThread]->scheduleOperation(operation);
 }
 
 int TilesManager::tileWidth()

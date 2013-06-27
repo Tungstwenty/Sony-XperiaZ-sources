@@ -52,7 +52,7 @@ namespace WebCore {
 Surface::Surface()
     : m_surfaceBacking(0)
     , m_needsTexture(false)
-    , m_hasText(false)
+    , m_maxZoomScale(1)
 {
 #ifdef DEBUG_COUNT
     ClassTracker::instance()->increment("Surface");
@@ -140,7 +140,7 @@ void Surface::addLayer(LayerAndroid* layer, const TransformationMatrix& transfor
     SkSafeRef(layer);
 
     m_needsTexture |= layer->needsTexture();
-    m_hasText |= layer->hasText();
+    m_maxZoomScale = std::max(m_maxZoomScale, layer->maxZoomScale());
 
     // add this layer's size to the surface's area
     // TODO: handle scale/3d transform mapping
@@ -211,19 +211,18 @@ void Surface::prepareGL(bool layerTilesDisabled, bool updateWithBlit)
     if (tilesDisabled) {
         m_surfaceBacking->discardTextures();
     } else {
-        bool allowZoom = hasText(); // only allow for scale > 1 if painting vectors
         IntRect prepareArea = computePrepareArea();
         IntRect fullArea = fullContentArea();
 
         ALOGV("prepareGL on Surf %p with SurfBack %p, %d layers, first layer %s (%d) "
               "prepareArea(%d, %d - %d x %d) fullArea(%d, %d - %d x %d)",
               this, m_surfaceBacking, m_layers.size(),
-              getFirstLayer()->subclassName().ascii().data(),
+              getFirstLayer()->subclassName(),
               getFirstLayer()->uniqueId(),
               prepareArea.x(), prepareArea.y(), prepareArea.width(), prepareArea.height(),
               fullArea.x(), fullArea.y(), fullArea.width(), fullArea.height());
 
-        m_surfaceBacking->prepareGL(getFirstLayer()->state(), allowZoom,
+        m_surfaceBacking->prepareGL(getFirstLayer()->state(), m_maxZoomScale,
                                     prepareArea, fullArea,
                                     this, useAggressiveRendering(), updateWithBlit);
     }
@@ -253,7 +252,7 @@ bool Surface::drawGL(bool layerTilesDisabled)
     bool askRedraw = false;
     if (m_surfaceBacking && !tilesDisabled) {
         ALOGV("drawGL on Surf %p with SurfBack %p, first layer %s (%d)", this, m_surfaceBacking,
-              getFirstLayer()->subclassName().ascii().data(), getFirstLayer()->uniqueId());
+              getFirstLayer()->subclassName(), getFirstLayer()->uniqueId());
 
         bool force3dContentVisible = true;
         IntRect drawArea = visibleContentArea(force3dContentVisible);

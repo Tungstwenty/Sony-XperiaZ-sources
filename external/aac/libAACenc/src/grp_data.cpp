@@ -95,6 +95,10 @@ amm-info@iis.fraunhofer.de
 * this routine does not work in-place
 */
 
+static inline FIXP_DBL nrgAddSaturate(const FIXP_DBL a, const FIXP_DBL b) {
+  return ( (a>=(FIXP_DBL)MAXVAL_DBL-b) ? (FIXP_DBL)MAXVAL_DBL : (a + b) );
+}
+
 void
 FDKaacEnc_groupShortData(FIXP_DBL      *mdctSpectrum,     /* in-out                           */
                SFB_THRESHOLD *sfbThreshold,     /* in-out                           */
@@ -178,7 +182,7 @@ FDKaacEnc_groupShortData(FIXP_DBL      *mdctSpectrum,     /* in-out             
       FIXP_DBL thresh = sfbThreshold->Short[wnd][sfb];
       for (j=1; j<groupLen[grp]; j++)
       {
-        thresh += sfbThreshold->Short[wnd+j][sfb];
+        thresh = nrgAddSaturate(thresh, sfbThreshold->Short[wnd+j][sfb]);
       }
       sfbThreshold->Long[i++] = thresh;
     }
@@ -196,7 +200,7 @@ FDKaacEnc_groupShortData(FIXP_DBL      *mdctSpectrum,     /* in-out             
       FIXP_DBL energy = sfbEnergy->Short[wnd][sfb];
       for (j=1; j<groupLen[grp]; j++)
       {
-        energy += sfbEnergy->Short[wnd+j][sfb];
+        energy = nrgAddSaturate(energy, sfbEnergy->Short[wnd+j][sfb]);
       }
       sfbEnergy->Long[i++] = energy;
     }
@@ -214,7 +218,7 @@ FDKaacEnc_groupShortData(FIXP_DBL      *mdctSpectrum,     /* in-out             
       FIXP_DBL energy = sfbEnergyMS->Short[wnd][sfb];
       for (j=1; j<groupLen[grp]; j++)
       {
-        energy += sfbEnergyMS->Short[wnd+j][sfb];
+        energy = nrgAddSaturate(energy, sfbEnergyMS->Short[wnd+j][sfb]);
       }
       sfbEnergyMS->Long[i++] = energy;
     }
@@ -232,7 +236,7 @@ FDKaacEnc_groupShortData(FIXP_DBL      *mdctSpectrum,     /* in-out             
       FIXP_DBL energy = sfbSpreadEnergy->Short[wnd][sfb];
       for (j=1; j<groupLen[grp]; j++)
       {
-         energy += sfbSpreadEnergy->Short[wnd+j][sfb];
+         energy = nrgAddSaturate(energy, sfbSpreadEnergy->Short[wnd+j][sfb]);
       }
       sfbSpreadEnergy->Long[i++] = energy;
     }

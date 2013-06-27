@@ -81,7 +81,6 @@
 #include "WebViewClientError.h"
 #include "WebViewCore.h"
 #include "autofill/WebAutofill.h"
-#include "android_graphics.h"
 
 #include <androidfw/AssetManager.h>
 #include <wtf/text/CString.h>
@@ -806,7 +805,6 @@ bool FrameLoaderClientAndroid::canShowMIMEType(const String& mimeType) const {
     // FIXME: This looks like it has to do with whether or not a type can be
     // shown "internally" (i.e. inside the browser) regardless of whether
     // or not the browser is doing the rendering, e.g. a full page plugin.
-
 
     //always download OMA-DL mimeTypes and not try to load them even if they end with +xml
     //this change is made because of the addition of DOMImplementation::isXMLMIMEType

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2012, The Linux Foundation. All rights reserved.
+Copyright (c) 2013, The Linux Foundation. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are
@@ -82,6 +82,7 @@ void CanvasLayerAndroid::markGLAssetsForRemoval(int id)
 
 bool CanvasLayerAndroid::isCanvasOOM(int id)
 {
+    //Following code is commented out. It is legacy implementation not used currently.
     //MutexLocker locker(s_mutex);
     //return (std::find(s_canvas_oom.begin(), s_canvas_oom.end(), id) != s_canvas_oom.end());
     //if(std::find(s_canvas_oom.begin(), s_canvas_oom.end(), id) == s_canvas_oom.end())
@@ -589,8 +590,8 @@ bool CanvasLayerAndroid::drawGL(bool layerTilesDisabled, TransformationMatrix& d
     }
 
     //Need to reset it back to the original shader
-    //CHECK: shouldn't need to set back to original shader as each draw call indexes into the array of programs
-    //glUseProgram(TilesManager::instance()->shader()->program());
+    //Reset cached states so that next draw call indexes into the array of programs
+    TilesManager::instance()->shader()->resetCachedStates();
 
     //Check generationIDs against list
     if(!generationIDs.empty())

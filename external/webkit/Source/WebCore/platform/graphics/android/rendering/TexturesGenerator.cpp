@@ -32,12 +32,26 @@
 #if USE(ACCELERATED_COMPOSITING)
 
 #include "AndroidLog.h"
+#include "BaseRenderer.h"
 #include "GLUtils.h"
 #include "PaintTileOperation.h"
 #include "TilesManager.h"
 #include "TransferQueue.h"
 
 namespace WebCore {
+
+TexturesGenerator::TexturesGenerator(TilesManager* instance)
+  : Thread(false)
+  , m_tilesManager(instance)
+  , m_deferredMode(false)
+  , m_renderer(0)
+{
+}
+
+TexturesGenerator::~TexturesGenerator()
+{
+    delete m_renderer;
+}
 
 bool TexturesGenerator::tryUpdateOperationWithPainter(Tile* tile, TilePainter* painter)
 {
@@ -83,12 +97,11 @@ void TexturesGenerator::removeOperationsForFilter(OperationFilter* filter)
             i++;
         }
     }
-    delete filter;
 }
 
 status_t TexturesGenerator::readyToRun()
 {
-    ALOGV("Thread ready to run");
+    m_renderer = BaseRenderer::createRenderer();
     return NO_ERROR;
 }
 
@@ -165,7 +178,9 @@ bool TexturesGenerator::threadLoop()
         if (currentOperation) {
             ALOGV("threadLoop, painting the request with priority %d",
                   currentOperation->priority());
-            currentOperation->run();
+            // swap out the renderer if necessary
+            BaseRenderer::swapRendererIfNeeded(m_renderer);
+            currentOperation->run(m_renderer);
         }
 
         mRequestedOperationsLock.lock();

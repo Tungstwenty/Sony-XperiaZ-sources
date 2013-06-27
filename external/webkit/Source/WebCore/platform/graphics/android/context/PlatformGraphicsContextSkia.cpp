@@ -2,6 +2,10 @@
  * Modified by The Linux Foundation
  * Copyright (c) 2012, The Linux Foundation. All rights reserved.
  * Copyright (C) 2012 Sony Mobile Communications AB.
+ *
+ * NOTE: This file has been modified by Sony Mobile Communications AB.
+ * Modifications are licensed under the License.
+ *
 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -27,9 +31,6 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * NOTE: This file has been modified by Sony Mobile Communications AB.
- * Modifications are licensed under the License.
 */
 #define LOG_TAG "PlatformGraphicsContextSkia"
 #define LOG_NDEBUG 1
@@ -251,43 +252,45 @@ void PlatformGraphicsContextSkia::canvasClip(const Path& path)
     clip(path);
 }
 
-void PlatformGraphicsContextSkia::clip(const FloatRect& rect)
+bool PlatformGraphicsContextSkia::clip(const FloatRect& rect)
 {
-    mCanvas->clipRect(rect);
+    return mCanvas->clipRect(rect);
 }
 
-void PlatformGraphicsContextSkia::clip(const Path& path)
+bool PlatformGraphicsContextSkia::clip(const Path& path)
 {
-    mCanvas->clipPath(*path.platformPath(), SkRegion::kIntersect_Op, true);
+    return mCanvas->clipPath(*path.platformPath(), SkRegion::kIntersect_Op, true);
 }
 
-void PlatformGraphicsContextSkia::clipConvexPolygon(size_t numPoints,
+bool PlatformGraphicsContextSkia::clipConvexPolygon(size_t numPoints,
                                                 const FloatPoint*, bool antialias)
 {
     if (numPoints <= 1)
-        return;
+        return true;
 
     // This is only used if HAVE_PATH_BASED_BORDER_RADIUS_DRAWING is defined
     // in RenderObject.h which it isn't for us. TODO: Support that :)
+    return true;
 }
 
-void PlatformGraphicsContextSkia::clipOut(const IntRect& r)
+bool PlatformGraphicsContextSkia::clipOut(const IntRect& r)
 {
-    mCanvas->clipRect(r, SkRegion::kDifference_Op);
+    return mCanvas->clipRect(r, SkRegion::kDifference_Op);
 }
 
-void PlatformGraphicsContextSkia::clipOut(const Path& path)
+bool PlatformGraphicsContextSkia::clipOut(const Path& path)
 {
-    mCanvas->clipPath(*path.platformPath(), SkRegion::kDifference_Op);
+    return mCanvas->clipPath(*path.platformPath(), SkRegion::kDifference_Op);
 }
 
-void PlatformGraphicsContextSkia::clipPath(const Path& pathToClip, WindRule clipRule)
+bool PlatformGraphicsContextSkia::clipPath(const Path& pathToClip, WindRule clipRule)
 {
     SkPath path = *pathToClip.platformPath();
     path.setFillType(clipRule == RULE_EVENODD
             ? SkPath::kEvenOdd_FillType : SkPath::kWinding_FillType);
-    mCanvas->clipPath(path);
+    return mCanvas->clipPath(path);
 }
+
 void PlatformGraphicsContextSkia::clearRect(const FloatRect& rect)
 {
     SkPaint paint;
@@ -680,6 +683,19 @@ void PlatformGraphicsContextSkia::strokeRect(const FloatRect& rect, float lineWi
     setupPaintStroke(&paint, 0);
     paint.setStrokeWidth(SkFloatToScalar(lineWidth));
     mCanvas->drawRect(rect, paint);
+}
+
+void PlatformGraphicsContextSkia::drawPosText(const void* text, size_t byteLength,
+                                              const SkPoint pos[], const SkPaint& paint)
+{
+    mCanvas->drawPosText(text, byteLength, pos, paint);
+}
+
+void PlatformGraphicsContextSkia::drawMediaButton(const IntRect& rect, RenderSkinMediaButton::MediaButton buttonType,
+                                                  bool translucent, bool drawBackground,
+                                                  const IntRect& thumb)
+{
+    RenderSkinMediaButton::Draw(mCanvas, rect, buttonType, translucent, drawBackground, thumb);
 }
 
 //**************************************

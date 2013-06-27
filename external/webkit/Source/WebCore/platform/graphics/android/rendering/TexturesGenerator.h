@@ -29,7 +29,7 @@
 #if USE(ACCELERATED_COMPOSITING)
 
 #include "QueuedOperation.h"
-#include "TilePainter.h"
+#include "TransferQueue.h"
 #include <wtf/HashMap.h>
 #include <wtf/Vector.h>
 
@@ -43,10 +43,9 @@ class TilesManager;
 
 class TexturesGenerator : public Thread {
 public:
-    TexturesGenerator(TilesManager* instance) : Thread(false)
-        , m_tilesManager(instance)
-        , m_deferredMode(false) { }
-    virtual ~TexturesGenerator() { }
+    TexturesGenerator(TilesManager* instance);
+    virtual ~TexturesGenerator();
+
     virtual status_t readyToRun();
 
     bool tryUpdateOperationWithPainter(Tile* tile, TilePainter* painter);
@@ -69,6 +68,7 @@ private:
     TilesManager* m_tilesManager;
 
     bool m_deferredMode;
+    BaseRenderer* m_renderer;
 
     // defer painting for one second if best in queue has priority
     // QueuedOperation::gDeferPriorityCutoff or higher

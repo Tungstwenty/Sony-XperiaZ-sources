@@ -37,16 +37,16 @@ public:
     PlatformGraphicsContextSkia(int width, int height, PlatformGraphicsContext* existing);
     virtual ~PlatformGraphicsContextSkia();
     virtual bool isPaintingDisabled();
-    virtual SkCanvas* getCanvas() { return mCanvas; }
+    SkCanvas* canvas() { return mCanvas; }
 
     virtual ContextType type() { return PaintingContext; }
     virtual SkCanvas* recordingCanvas() { return mCanvas; }
-    virtual void endRecording(int type = 0) {}
+    virtual void setTextOffset(FloatSize offset) {}
 
     // FIXME: This is used by ImageBufferAndroid, which should really be
     //        managing the canvas lifecycle itself
 
-    virtual bool deleteUs() const { return m_deleteCanvas; }
+    virtual bool deleteUs() const { return (m_deleteCanvas || (m_picture != NULL)); }
 
     // State management
     virtual void beginTransparencyLayer(float opacity);
@@ -64,19 +64,20 @@ public:
     // Clipping
     virtual void addInnerRoundedRectClip(const IntRect& rect, int thickness);
     virtual void canvasClip(const Path& path);
-    virtual void clip(const FloatRect& rect);
-    virtual void clip(const Path& path);
-    virtual void clipConvexPolygon(size_t numPoints, const FloatPoint*, bool antialias);
-    virtual void clipOut(const IntRect& r);
-    virtual void clipOut(const Path& p);
-    virtual void clipPath(const Path& pathToClip, WindRule clipRule);
+    virtual bool clip(const FloatRect& rect);
+    virtual bool clip(const Path& path);
+    virtual bool clipConvexPolygon(size_t numPoints, const FloatPoint*, bool antialias);
+    virtual bool clipOut(const IntRect& r);
+    virtual bool clipOut(const Path& p);
+    virtual bool clipPath(const Path& pathToClip, WindRule clipRule);
+    virtual SkIRect getTotalClipBounds() { return mCanvas->getTotalClip().getBounds(); }
 
     // Drawing
     virtual void clearRect(const FloatRect& rect);
     virtual void drawBitmapPattern(const SkBitmap& bitmap, const SkMatrix& matrix,
                            CompositeOperator compositeOp, const FloatRect& destRect);
     virtual void drawBitmapRect(const SkBitmap& bitmap, const SkIRect* src,
-                        const SkRect& dst, CompositeOperator op);
+                        const SkRect& dst, CompositeOperator op = CompositeSourceOver);
     virtual void drawConvexPolygon(size_t numPoints, const FloatPoint* points,
                            bool shouldAntialias);
     virtual void drawEllipse(const IntRect& rect);
@@ -89,7 +90,7 @@ public:
     virtual void drawLine(const IntPoint& point1, const IntPoint& point2);
     virtual void drawLineForText(const FloatPoint& pt, float width);
     virtual void drawLineForTextChecking(const FloatPoint& pt, float width,
-                                 GraphicsContext::TextCheckingLineStyle);
+                                         GraphicsContext::TextCheckingLineStyle);
     virtual void drawRect(const IntRect& rect);
     virtual void fillPath(const Path& pathToFill, WindRule fillRule);
     virtual void fillRect(const FloatRect& rect);
@@ -100,6 +101,11 @@ public:
     virtual void strokeArc(const IntRect& r, int startAngle, int angleSpan);
     virtual void strokePath(const Path& pathToStroke);
     virtual void strokeRect(const FloatRect& rect, float lineWidth);
+    virtual void drawPosText(const void* text, size_t byteLength,
+                             const SkPoint pos[], const SkPaint& paint);
+    virtual void drawMediaButton(const IntRect& rect, RenderSkinMediaButton::MediaButton buttonType,
+                                 bool translucent = false, bool drawBackground = true,
+                                 const IntRect& thumb = IntRect());
 
     virtual void convertToNonRecording();
     virtual void clearRecording();

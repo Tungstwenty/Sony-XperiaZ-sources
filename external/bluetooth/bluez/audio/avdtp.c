@@ -6,6 +6,7 @@
  *  Copyright (C) 2004-2010  Marcel Holtmann <marcel@holtmann.org>
  *  Copyright (C) 2010, The Linux Foundation. All rights reserved.
  *  Copyright (C) 2010-2012 Sony Ericsson Mobile Communications AB
+ *  Copyright (C) 2013 Sony Mobile Communications AB.
  *
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -793,7 +794,7 @@ static struct avdtp_remote_sep *find_remote_sep(GSList *seps, uint8_t seid)
 	for (l = seps; l != NULL; l = g_slist_next(l)) {
 		struct avdtp_remote_sep *sep = l->data;
 
-		if (sep->seid == seid)
+		if (sep && sep->seid == seid)
 			return sep;
 	}
 
@@ -2974,6 +2975,10 @@ static gboolean avdtp_get_capabilities_resp(struct avdtp *session,
 
 	sep = find_remote_sep(session->seps, seid);
 
+	if (!sep) {
+		return FALSE;
+	}
+
 	DBG("seid %d type %d media %d", sep->seid,
 					sep->type, sep->media_type);
 
@@ -3765,7 +3770,7 @@ int avdtp_start(struct avdtp *session, struct avdtp_stream *stream)
 
 	if (stream->starting == TRUE) {
 		DBG("stream already started");
-		return -EINVAL;
+		return -EAGAIN;
 	}
 
 	memset(&req, 0, sizeof(req));

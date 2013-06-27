@@ -73,6 +73,7 @@ class IFrameLayerAndroid;
 class LayerMergeState;
 class RenderLayer;
 class PaintedSurface;
+class LayerDumper;
 
 class TexturesResult {
 public:
@@ -100,7 +101,7 @@ public:
                    CanvasLayer, BaseLayer } SubclassType;
     typedef enum { InvalidateNone = 0, InvalidateLayers } InvalidateFlags;
 
-    String subclassName()
+    const char* subclassName() const
     {
         switch (subclassType()) {
             case LayerAndroid::StandardLayer:
@@ -150,6 +151,9 @@ public:
 
     float getScale() { return m_scale; }
 
+    // draw the layer tree recursively in draw order, grouping and sorting 3d rendering contexts
+    bool drawTreeSurfacesGL();
+
     virtual bool drawGL(bool layerTilesDisabled);
     virtual bool drawCanvas(SkCanvas* canvas, bool drawChildren, PaintStyle style);
     bool drawChildrenCanvas(SkCanvas* canvas, PaintStyle style);
@@ -195,9 +199,7 @@ public:
     bool hasAnimations() const;
     void addDirtyArea();
 
-    virtual void dumpLayer(FILE*, int indentLevel) const;
-    void dumpLayers(FILE*, int indentLevel) const;
-    void dumpToLog() const;
+    void dumpLayers(LayerDumper*) const;
 
     virtual IFrameLayerAndroid* updatePosition(SkRect viewport,
                                                IFrameLayerAndroid* parentIframeLayer);
@@ -262,7 +264,7 @@ public:
     LayerType type() { return m_type; }
     virtual SubclassType subclassType() const { return LayerAndroid::StandardLayer; }
 
-    bool hasText();
+    float maxZoomScale() const;
 
     void copyAnimationStartTimesRecursive(LayerAndroid* oldTree);
 
@@ -294,6 +296,7 @@ public:
     }
 
 protected:
+    virtual void dumpLayer(LayerDumper*) const;
     /** Call this with the current viewport (scrolling, zoom) to update
         the position of the fixed layers.
 
@@ -314,12 +317,13 @@ private:
         return contentIsScrollable() || isPositionFixed() || (m_animations.size() != 0);
     }
 
+    // recurse through the current 3d rendering context, adding layers in the context to the vector
+    void collect3dRenderingContext(Vector<LayerAndroid*>& layersInContext);
+    bool drawSurfaceAndChildrenGL();
+
 #if DUMP_NAV_CACHE
     friend class CachedLayer::Debug; // debugging access only
 #endif
-
-    void copyAnimationStartTimes(LayerAndroid* oldLayer);
-    bool prepareContext(bool force = false);
 
     // -------------------------------------------------------------------
     // Fields to be serialized

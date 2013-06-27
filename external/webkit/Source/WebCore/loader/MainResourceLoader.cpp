@@ -483,7 +483,11 @@ void MainResourceLoader::didFinishLoading(double finishTime)
     dl->applicationCacheHost()->finishedLoadingMainResource();
 #endif
 
-    StatHubMainUrlLoaded(url().string().latin1().data());
+    StatHubCmd* cmd = StatHubCmdCreate(SH_CMD_WK_MAIN_URL, SH_ACTION_DID_FINISH);
+    if (NULL!=cmd) {
+        StatHubCmdAddParamAsString(cmd, url().string().latin1().data());
+        StatHubCmdCommit(cmd);
+    }
 }
 
 void MainResourceLoader::didFail(const ResourceError& error)

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2011, 2012, Sony Ericsson Mobile Communications AB
- * Copyright (C) 2012 Sony Mobile Communications AB
+ * Copyright (C) 2012-2013 Sony Mobile Communications AB
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,6 +45,7 @@
 
 #include "SkBitmap.h"
 #include "SkDevice.h"
+#include <binder/IBinder.h>
 #include <hardware/hardware.h>
 #include <private/gui/ComposerService.h>
 #include <gui/IGraphicBufferAlloc.h>
@@ -192,6 +193,11 @@ GraphicsContext3DInternal::GraphicsContext3DInternal(HTMLCanvasElement* canvas,
     , m_contextId(0)
 {
     enableLogging();
+
+    //Need to initialize to a NULL state so that if you FBO creation fails later on, its in a valid state during destruction
+    for (int i = 0; i < NUM_BUFFERS; i++) {
+        m_fbo[i] = NULL;
+    }
 
     LOGWEBGL("GraphicsContext3DInternal() = %p, m_compositingLayer = %p", this, m_compositingLayer);
     m_proxy->setGraphicsContext(this);
@@ -521,15 +527,19 @@ bool FBO::init(int width, int height, GraphicsContext3D::Attributes attributes)
     // 4. Create the Framebuffer Object from the texture
     glGenFramebuffers(1, &m_fbo);
 
-    if (attributes.depth) {
+    if (attributes.depth && attributes.stencil) {
+        glGenRenderbuffers(1, &m_stencilBuffer);
+        glBindRenderbuffer(GL_RENDERBUFFER, m_stencilBuffer);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8_OES, width, height);
+        if (GraphicsContext3DInternal::checkGLError("glRenderbufferStorage") != GL_NO_ERROR)
+            return false;
+    } else if (attributes.depth) {
         glGenRenderbuffers(1, &m_depthBuffer);
         glBindRenderbuffer(GL_RENDERBUFFER, m_depthBuffer);
         glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, width, height);
         if (GraphicsContext3DInternal::checkGLError("glRenderbufferStorage") != GL_NO_ERROR)
             return false;
-    }
-
-    if (attributes.stencil) {
+    } else if (attributes.stencil) {
         glGenRenderbuffers(1, &m_stencilBuffer);
         glBindRenderbuffer(GL_RENDERBUFFER, m_stencilBuffer);
         glRenderbufferStorage(GL_RENDERBUFFER, GL_STENCIL_INDEX8, width, height);
@@ -544,13 +554,16 @@ bool FBO::init(int width, int height, GraphicsContext3D::Attributes attributes)
     if (GraphicsContext3DInternal::checkGLError("glFramebufferTexture2D") != GL_NO_ERROR)
         return false;
 
-    if (attributes.depth) {
+    if (attributes.depth && attributes.stencil) {
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_stencilBuffer);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, m_stencilBuffer);
+        if (GraphicsContext3DInternal::checkGLError("glFramebufferRenderbuffer") != GL_NO_ERROR)
+            return false;
+    } else if (attributes.depth) {
         glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_depthBuffer);
         if (GraphicsContext3DInternal::checkGLError("glFramebufferRenderbuffer") != GL_NO_ERROR)
             return false;
-    }
-
-    if (attributes.stencil) {
+    } else if (attributes.stencil) {
         glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, m_stencilBuffer);
         if (GraphicsContext3DInternal::checkGLError("glFramebufferRenderbuffer") != GL_NO_ERROR)
             return false;
@@ -637,8 +650,11 @@ void GraphicsContext3DInternal::stopSyncThread()
     MutexLocker lock(m_threadMutex);
     if (m_syncThread) {
         m_threadState = THREAD_STATE_STOP;
-        // Signal thread to wake up
-        m_threadCondition.broadcast();
+        {
+            MutexLocker lock(m_fboMutex);
+            // Signal thread to wake up
+            m_bufferCondition.broadcast();
+        }
         // Wait for thread to stop
         while (m_threadState != THREAD_STATE_STOPPED) {
             m_threadCondition.wait(m_threadMutex);
@@ -660,29 +676,43 @@ void GraphicsContext3DInternal::runSyncThread()
 {
     LOGWEBGL("SyncThread: starting");
     FBO* fbo = 0;
+    {
+        MutexLocker lock(m_threadMutex);
+        m_threadState = THREAD_STATE_RUN;
+        // Signal to creator that we are up and running
+        m_threadCondition.broadcast();
+    }
 
-    MutexLocker lock(m_threadMutex);
-    m_threadState = THREAD_STATE_RUN;
-    // Signal to creator that we are up and running
-    m_threadCondition.broadcast();
+    for(;;) {
 
-    while (m_threadState == THREAD_STATE_RUN) {
-        while (m_threadState == THREAD_STATE_RUN) {
+        {
+            MutexLocker lock(m_threadMutex);
+            if (m_threadState != THREAD_STATE_RUN)
+                break;
+        }
+        for (;;) {
+            {
+                MutexLocker lock(m_threadMutex);
+                if (m_threadState != THREAD_STATE_RUN)
+                     break;
+            }
             {
                 MutexLocker lock(m_fboMutex);
                 if (!m_queuedBuffers.isEmpty()) {
                     fbo = m_queuedBuffers.takeFirst();
                     break;
                 }
+                m_bufferCondition.wait(m_fboMutex);
             }
-            m_threadCondition.wait(m_threadMutex);
         }
         LOGWEBGL("SyncThread: woke after waiting for FBO, fbo = %p", fbo);
-        if (m_threadState != THREAD_STATE_RUN)
-            break;
-
+        {
+            MutexLocker lock(m_threadMutex);
+            if (m_threadState != THREAD_STATE_RUN)
+                break;
+        }
         if (fbo->sync() != EGL_NO_SYNC_KHR) {
-            eglClientWaitSyncKHR(m_dpy, fbo->sync(), 0, 0);
+            eglClientWaitSyncKHR(m_dpy, fbo->sync(), 0, 10000000000);
             eglDestroySyncKHR(m_dpy, fbo->sync());
             fbo->setSync(EGL_NO_SYNC_KHR);
             LOGWEBGL("SyncThread: returned after waiting for Sync");
@@ -703,8 +733,11 @@ void GraphicsContext3DInternal::runSyncThread()
     }
 
     // Signal to calling thread that we have stopped
-    m_threadState = THREAD_STATE_STOPPED;
-    m_threadCondition.broadcast();
+    {
+        MutexLocker lock(m_threadMutex);
+        m_threadState = THREAD_STATE_STOPPED;
+        m_threadCondition.broadcast();
+    }
     LOGWEBGL("SyncThread: terminating");
 }
 
@@ -797,7 +830,7 @@ FBO* GraphicsContext3DInternal::dequeueBuffer()
     FBO* fbo = m_freeBuffers.takeFirst();
 
     if (fbo->sync() != EGL_NO_SYNC_KHR) {
-        eglClientWaitSyncKHR(m_dpy, fbo->sync(), 0, 0);
+        eglClientWaitSyncKHR(m_dpy, fbo->sync(), 0, 10000000000);
         eglDestroySyncKHR(m_dpy, fbo->sync());
         fbo->setSync(EGL_NO_SYNC_KHR);
     }
@@ -828,7 +861,7 @@ void GraphicsContext3DInternal::swapBuffers()
     fbo->setSync(eglCreateSyncKHR(m_dpy, EGL_SYNC_FENCE_KHR, 0));
     glFlush();
     m_queuedBuffers.append(fbo);
-    m_threadCondition.broadcast();
+    m_bufferCondition.broadcast();
 
     // Dequeue a new buffer
     fbo = dequeueBuffer();
@@ -904,7 +937,7 @@ void GraphicsContext3DInternal::paintRenderingResultsToCanvas(CanvasRenderingCon
     LOGWEBGL("paintRenderingResultsToCanvas()");
     ImageBuffer* imageBuffer = context->canvas()->buffer();
     const SkBitmap& canvasBitmap =
-        imageBuffer->context()->platformContext()->getCanvas()->getDevice()->accessBitmap(false);
+        imageBuffer->context()->platformContext()->recordingCanvas()->getDevice()->accessBitmap(false);
     SkCanvas canvas(canvasBitmap);
 
     SkBitmap bitmap;
@@ -939,7 +972,7 @@ bool GraphicsContext3DInternal::paintCompositedResultsToCanvas(CanvasRenderingCo
     LOGWEBGL("paintCompositedResultsToCanvas()");
     ImageBuffer* imageBuffer = context->canvas()->buffer();
     const SkBitmap& canvasBitmap =
-        imageBuffer->context()->platformContext()->getCanvas()->getDevice()->accessBitmap(false);
+        imageBuffer->context()->platformContext()->recordingCanvas()->getDevice()->accessBitmap(false);
     SkCanvas canvas(canvasBitmap);
 
     MutexLocker lock(m_fboMutex);

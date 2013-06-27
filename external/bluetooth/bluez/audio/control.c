@@ -21,8 +21,6 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * NOTE: This file has been modified by Sony Mobile Communications AB.
- * Modifications are licensed under the License.
  */
 
 #ifdef HAVE_CONFIG_H
@@ -778,8 +776,13 @@ static gboolean control_cb(GIOChannel *chan, GIOCondition cond,
 		 * Neither AVRCP (section 22.1, page 117) nor AVC Digital
 		 * Interface Command Set (section 9.2.1, page 45) specs
 		 * explain this value but both use it */
-		if (operand_count >= 1 && avrcp->opcode == OP_UNITINFO)
+		if (operand_count >= 5 && avrcp->opcode == OP_UNITINFO) {
 			operands[0] = 0x07;
+			operands[2] = 0x00;
+			//Company id is 0x001D
+			operands[3] = 0x00;
+			operands[4] = 0x1D;
+		}
 		if (operand_count >= 2)
 			operands[1] = SUBUNIT_PANEL << 3;
 		DBG("reply to %s", avrcp->opcode == OP_UNITINFO ?

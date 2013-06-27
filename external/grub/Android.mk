@@ -30,7 +30,7 @@ LOCAL_CFLAGS := \
         -Wall -Wmissing-prototypes -Wunused -Wshadow \
         -Wpointer-arith -falign-jumps=1 -falign-loops=1 \
         -falign-functions=1 -Wundef
-LOCAL_CFLAGS += -m32 -O2 -fno-builtin -nostdinc
+LOCAL_CFLAGS += -m32 -O2 -fno-builtin -nostdinc -fno-reorder-functions -fno-stack-protector
 
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/stage1
 
@@ -46,7 +46,7 @@ include $(BUILD_RAW_EXECUTABLE)
 $(LOCAL_BUILT_MODULE) : PRIVATE_LINK_SCRIPT :=
 $(LOCAL_BUILT_MODULE) : PRIVATE_LIBS :=
 $(LOCAL_BUILT_MODULE) : PRIVATE_RAW_EXECUTABLE_LDFLAGS := \
-	-nostdlib -N -Ttext=7C00 -melf_i386
+	-nostdlib -N -Ttext=0x7C00 -melf_i386
 
 ###################################################################
 ###################################################################
@@ -87,7 +87,7 @@ LOCAL_CFLAGS := \
 	-Wpointer-arith -falign-jumps=1 -falign-loops=1 \
 	-falign-functions=1 -Wundef
 
-LOCAL_CFLAGS += -m32 -Os -fno-builtin -nostdinc
+LOCAL_CFLAGS += -m32 -Os -fno-builtin -nostdinc -fno-reorder-functions -fno-stack-protector
 
 LOCAL_CFLAGS += -DHAVE_CONFIG_H -DFSYS_EXT2FS=1 -DSUPPORT_SERIAL=1
 
@@ -109,7 +109,7 @@ include $(BUILD_RAW_EXECUTABLE)
 $(LOCAL_BUILT_MODULE) : PRIVATE_LINK_SCRIPT :=
 $(LOCAL_BUILT_MODULE) : PRIVATE_LIBS :=
 $(LOCAL_BUILT_MODULE) : PRIVATE_RAW_EXECUTABLE_LDFLAGS := \
-	-nostdlib -N -Ttext=8200 -melf_i386
+	-nostdlib -N -Ttext=0x8200 -melf_i386
 
 #############################################
 ## Generate the stage2 start file  (2) + (3)
@@ -124,7 +124,7 @@ LOCAL_CFLAGS := \
 	-Wpointer-arith -falign-jumps=1 -falign-loops=1 \
 	-falign-functions=1 -Wundef
 
-LOCAL_CFLAGS += -m32 -Os -fno-builtin -nostdinc
+LOCAL_CFLAGS += -m32 -Os -fno-builtin -nostdinc -fno-reorder-functions -fno-stack-protector
 
 LOCAL_CFLAGS += -DHAVE_CONFIG_H -DFSYS_EXT2FS=1 -DSUPPORT_SERIAL=1
 
@@ -159,7 +159,7 @@ $(all_objects): $(STAGE2_SIZE_OBJ)
 $(LOCAL_BUILT_MODULE) : PRIVATE_LINK_SCRIPT :=
 $(LOCAL_BUILT_MODULE) : PRIVATE_LIBS :=
 $(LOCAL_BUILT_MODULE) : PRIVATE_RAW_EXECUTABLE_LDFLAGS := \
-	-nostdlib -N -Ttext=8200 -melf_i386
+	-nostdlib -N -Ttext=0x8200 -melf_i386
 
 #############################################
 ## Generate the real deal stage2  (4)

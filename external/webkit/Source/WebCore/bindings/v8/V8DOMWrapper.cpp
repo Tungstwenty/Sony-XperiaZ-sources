@@ -186,12 +186,13 @@ v8::Local<v8::Function> V8DOMWrapper::getConstructor(WrapperTypeInfo* type, Work
 }
 #endif
 
-void V8DOMWrapper::setNamedHiddenReference(v8::Handle<v8::Object> parent, const char *name, v8::Handle<v8::Value> child)
+
+void V8DOMWrapper::setNamedHiddenReference(v8::Handle<v8::Object> parent, const char* name, v8::Handle<v8::Value> child)
 {
     parent->SetHiddenValue(V8HiddenPropertyName::hiddenReferenceName(name), child);
 }
 
-void V8DOMWrapper::setNamedHiddenWindowReference(Frame* frame, const char *name, v8::Handle<v8::Value> jsObject)
+void V8DOMWrapper::setNamedHiddenWindowReference(Frame* frame, const char* name, v8::Handle<v8::Value> jsObject)
 {
     // Get DOMWindow
     if (!frame)

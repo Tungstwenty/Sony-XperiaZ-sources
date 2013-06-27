@@ -34,6 +34,7 @@
 #include "AndroidLog.h"
 #include "GaneshRenderer.h"
 #include "GLUtils.h"
+#include "InstrumentedPlatformCanvas.h"
 #include "RasterRenderer.h"
 #include "SkBitmap.h"
 #include "SkBitmapRef.h"
@@ -94,7 +95,10 @@ void BaseRenderer::renderTiledContent(TileRenderInfo& renderInfo)
     const bool visualIndicator = TilesManager::instance()->getShowVisualIndicator();
     const SkSize& tileSize = renderInfo.tileSize;
 
-    SkCanvas canvas;
+    Color *background = renderInfo.tilePainter->background();
+    InstrumentedPlatformCanvas canvas(TilesManager::instance()->tileWidth(),
+                                      TilesManager::instance()->tileHeight(),
+                                      background ? *background : Color::transparent);
     setupCanvas(renderInfo, &canvas);
 
     if (!canvas.getDevice()) {
@@ -112,10 +116,8 @@ void BaseRenderer::renderTiledContent(TileRenderInfo& renderInfo)
     canvas.translate(-renderInfo.x * tileSize.width(), -renderInfo.y * tileSize.height());
     canvas.scale(renderInfo.scale, renderInfo.scale);
     renderInfo.tilePainter->paint(&canvas);
-    if (renderInfo.baseTile && renderInfo.baseTile->backTexture())
-        checkForPureColor(renderInfo, &canvas);
-    else
-        renderInfo.isPureColor = false;
+
+    checkForPureColor(renderInfo, canvas);
 
     if (visualIndicator) {
         double after = currentTimeMS();
@@ -142,6 +144,13 @@ void BaseRenderer::renderTiledContent(TileRenderInfo& renderInfo)
         canvas.drawLine(tileSize.width(), 0, tileSize.width(), tileSize.height(), paint);
     }
     renderingComplete(renderInfo, &canvas);
+}
+
+void BaseRenderer::checkForPureColor(TileRenderInfo& renderInfo, InstrumentedPlatformCanvas& canvas)
+{
+    renderInfo.isPureColor = canvas.isSolidColor();
+    renderInfo.pureColor = canvas.solidColor();
+    deviceCheckForPureColor(renderInfo, &canvas);
 }
 
 } // namespace WebCore

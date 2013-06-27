@@ -89,14 +89,13 @@ struct FieldIds {
         mDefaultTextEncoding = env->GetFieldID(clazz, "mDefaultTextEncoding",
                 "Ljava/lang/String;");
         mGetUserAgentString = env->GetMethodID(clazz, "getUserAgentString",
-                                               "()Ljava/lang/String;");
+                "()Ljava/lang/String;");
         mGetAcceptLanguage = env->GetMethodID(clazz, "getAcceptLanguage", "()Ljava/lang/String;");
         mMinimumFontSize = env->GetFieldID(clazz, "mMinimumFontSize", "I");
         mMinimumLogicalFontSize = env->GetFieldID(clazz, "mMinimumLogicalFontSize", "I");
         mDefaultFontSize = env->GetFieldID(clazz, "mDefaultFontSize", "I");
         mDefaultFixedFontSize = env->GetFieldID(clazz, "mDefaultFixedFontSize", "I");
         mLoadsImagesAutomatically = env->GetFieldID(clazz, "mLoadsImagesAutomatically", "Z");
-        mMediaPreloadEnabled = env->GetFieldID(clazz, "mMediaPreloadEnabled", "Z");
 #ifdef ANDROID_BLOCK_NETWORK_IMAGE
         mBlockNetworkImage = env->GetFieldID(clazz, "mBlockNetworkImage", "Z");
 #endif
@@ -165,6 +164,7 @@ struct FieldIds {
                 "Ljava/lang/String;");
         mOverrideCacheMode = env->GetFieldID(clazz, "mOverrideCacheMode", "I");
         mPasswordEchoEnabled = env->GetFieldID(clazz, "mPasswordEchoEnabled", "Z");
+        mMediaPlaybackRequiresUserGesture = env->GetFieldID(clazz, "mMediaPlaybackRequiresUserGesture", "Z");
 
         ALOG_ASSERT(mLayoutAlgorithm, "Could not find field mLayoutAlgorithm");
         ALOG_ASSERT(mTextSize, "Could not find field mTextSize");
@@ -182,7 +182,6 @@ struct FieldIds {
         ALOG_ASSERT(mDefaultFontSize, "Could not find field mDefaultFontSize");
         ALOG_ASSERT(mDefaultFixedFontSize, "Could not find field mDefaultFixedFontSize");
         ALOG_ASSERT(mLoadsImagesAutomatically, "Could not find field mLoadsImagesAutomatically");
-        ALOG_ASSERT(mMediaPreloadEnabled, "Could not find field mMediaPreloadEnabled");
 #ifdef ANDROID_BLOCK_NETWORK_IMAGE
         ALOG_ASSERT(mBlockNetworkImage, "Could not find field mBlockNetworkImage");
 #endif
@@ -210,6 +209,7 @@ struct FieldIds {
         ALOG_ASSERT(mUseDoubleTree, "Could not find field mUseDoubleTree");
         ALOG_ASSERT(mPageCacheCapacity, "Could not find field mPageCacheCapacity");
         ALOG_ASSERT(mPasswordEchoEnabled, "Could not find field mPasswordEchoEnabled");
+        ALOG_ASSERT(mMediaPlaybackRequiresUserGesture, "Could not find field mMediaPlaybackRequiresUserGesture");
 #if ENABLE(WEBGL)
         ALOG_ASSERT(mWebGLEnabled, "Could not find field mWebGLEnabled");
 #endif
@@ -238,7 +238,6 @@ struct FieldIds {
     jfieldID mDefaultFontSize;
     jfieldID mDefaultFixedFontSize;
     jfieldID mLoadsImagesAutomatically;
-    jfieldID mMediaPreloadEnabled;
 #ifdef ANDROID_BLOCK_NETWORK_IMAGE
     jfieldID mBlockNetworkImage;
 #endif
@@ -304,6 +303,7 @@ struct FieldIds {
     jfieldID mUserAgentProfile;
     jfieldID mOverrideCacheMode;
     jfieldID mPasswordEchoEnabled;
+    jfieldID mMediaPlaybackRequiresUserGesture;
 };
 
 static struct FieldIds* gFieldIds;
@@ -431,9 +431,6 @@ public:
         s->setLoadsImagesAutomatically(flag);
         if (flag)
             cachedResourceLoader->setAutoLoadImages(true);
-
-        flag = env->GetBooleanField(obj, gFieldIds->mMediaPreloadEnabled);
-        s->setMediaPreloadEnabled(flag);
 
 #ifdef ANDROID_BLOCK_NETWORK_IMAGE
         flag = env->GetBooleanField(obj, gFieldIds->mBlockNetworkImage);
@@ -651,6 +648,10 @@ public:
         bool echoPassword = env->GetBooleanField(obj,
                 gFieldIds->mPasswordEchoEnabled);
         s->setPasswordEchoEnabled(echoPassword);
+
+        flag = env->GetBooleanField(obj, gFieldIds->mMediaPlaybackRequiresUserGesture);
+        s->setMediaPlaybackRequiresUserGesture(flag);
+
 #if ENABLE(XHR_RESPONSE_BLOB)
         RuntimeEnabledFeatures::setXHRResponseBlobEnabled(true);
 #endif

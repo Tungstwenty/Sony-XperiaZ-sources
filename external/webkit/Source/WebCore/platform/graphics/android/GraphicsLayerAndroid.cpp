@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2009 The Android Open Source Project
  * Copyright (C) 2011, Sony Ericsson Mobile Communications AB
+ * Copyright (C) 2012 Sony Mobile Communications AB.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,6 +14,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * NOTE: This file has been modified by Sony Mobile Communications AB.
+ * Modifications are licensed under the License.
  */
 
 #define LOG_TAG "GraphicsLayerAndroid"
@@ -42,6 +46,7 @@
 #include "Length.h"
 #include "MediaLayer.h"
 #include "PictureLayerContent.h"
+#include "PicturePileLayerContent.h"
 #include "PlatformBridge.h"
 #include "PlatformGraphicsContextSkia.h"
 #include "RenderLayerBacking.h"
@@ -119,7 +124,6 @@ GraphicsLayerAndroid::GraphicsLayerAndroid(GraphicsLayerClient* client) :
                 static_cast<HTMLCanvasElement*>(renderLayer->renderer()->node()));
     } else
         m_contentLayer = new LayerAndroid(renderLayer);
-    m_dirtyRegion.setEmpty();
     gDebugGraphicsLayerAndroidInstances++;
 }
 
@@ -603,6 +607,8 @@ void GraphicsLayerAndroid::updateFixedBackgroundLayers() {
         return;
     if (!view->style()->hasFixedBackgroundImage())
         return;
+    if (view->isRenderIFrame()) // not supported
+        return;
 
     Image* image = FixedBackgroundImageLayerAndroid::GetCachedImage(view->style());
     if (!image)
@@ -706,7 +712,7 @@ bool GraphicsLayerAndroid::repaint()
             PaintingPhase phase(this);
             // Paint the background into a separate context.
             phase.set(GraphicsLayerPaintBackground);
-            if (!paintContext(m_contentLayer, layerBounds))
+            if (!paintContext(m_contentLayer, m_contentLayerContent))
                 return false;
 
             // Construct the foreground layer and draw.
@@ -723,11 +729,17 @@ bool GraphicsLayerAndroid::repaint()
             // Paint everything else into the main recording canvas.
             phase.clear(GraphicsLayerPaintBackground);
 
+            // Invalidate the entire layer for now, as webkit will only send the
+            // setNeedsDisplayInRect() for the visible (clipped) scrollable area,
+            // offsetting the invals by the scroll position would not be enough.
+            // TODO: have webkit send us invals even for non visible area
+            m_foregroundLayerContent.invalidate(IntRect(0, 0, contentsRect.width(), contentsRect.height()));
+
             // Paint at 0,0.
             IntSize scroll = layer->scrolledContentOffset();
             layer->scrollToOffset(0, 0);
             // At this point, it doesn't matter if painting failed.
-            (void) paintContext(m_foregroundLayer, contentsRect);
+            (void) paintContext(m_foregroundLayer, m_foregroundLayerContent);
             layer->scrollToOffset(scroll.width(), scroll.height());
 
             // Construct the clip layer for masking the contents.
@@ -752,13 +764,8 @@ bool GraphicsLayerAndroid::repaint()
             // Set the scrollable bounds of the layer.
             setScrollLimits(static_cast<ScrollableLayerAndroid*>(m_foregroundLayer), layer);
 
-            // Invalidate the entire layer for now, as webkit will only send the
-            // setNeedsDisplayInRect() for the visible (clipped) scrollable area,
-            // offsetting the invals by the scroll position would not be enough.
-            // TODO: have webkit send us invals even for non visible area
-            SkRegion region;
-            region.setRect(0, 0, contentsRect.width(), contentsRect.height());
-            m_foregroundLayer->markAsDirty(region);
+            m_foregroundLayer->markAsDirty(m_foregroundLayerContent.dirtyRegion());
+            m_foregroundLayerContent.dirtyRegion().setEmpty();
         } else if (m_contentLayer->isFixedBackground()) {
             SkPicture* picture = new SkPicture();
             SkCanvas* canvas = picture->beginRecording(layerBounds.width(),
@@ -795,13 +802,13 @@ bool GraphicsLayerAndroid::repaint()
                 GraphicsLayerAndroid* replicatedLayer = static_cast<GraphicsLayerAndroid*>(replicaLayer());
                 if (replicatedLayer->maskLayer()) {
                      GraphicsLayerAndroid* mask = static_cast<GraphicsLayerAndroid*>(replicatedLayer->maskLayer());
-                     mask->paintContext(mask->m_contentLayer, layerBounds, false);
+                     mask->paintContext(mask->m_contentLayer, mask->m_contentLayerContent);
                 }
             }
 
             // If there is no contents clip, we can draw everything into one
             // picture.
-            bool painting = paintContext(m_contentLayer, layerBounds);
+            bool painting = paintContext(m_contentLayer, m_contentLayerContent);
             if (!painting)
                 return false;
             // Check for a scrollable iframe and report the scrolling
@@ -822,8 +829,8 @@ bool GraphicsLayerAndroid::repaint()
               m_contentLayer->getSize().width(),
               m_contentLayer->getSize().height());
 
-        m_contentLayer->markAsDirty(m_dirtyRegion);
-        m_dirtyRegion.setEmpty();
+        m_contentLayer->markAsDirty(m_contentLayerContent.dirtyRegion());
+        m_contentLayerContent.dirtyRegion().setEmpty();
         m_needsRepaint = false;
 
         return true;
@@ -831,8 +838,8 @@ bool GraphicsLayerAndroid::repaint()
     if (m_needsRepaint && m_image && m_newImage) {
         // We need to tell the GL thread that we will need to repaint the
         // texture. Only do so if we effectively have a new image!
-        m_contentLayer->markAsDirty(m_dirtyRegion);
-        m_dirtyRegion.setEmpty();
+        m_contentLayer->markAsDirty(m_contentLayerContent.dirtyRegion());
+        m_contentLayerContent.dirtyRegion().setEmpty();
         m_newImage = false;
         m_needsRepaint = false;
         return true;
@@ -840,44 +847,29 @@ bool GraphicsLayerAndroid::repaint()
     return false;
 }
 
-SkPicture* GraphicsLayerAndroid::paintPicture(const IntRect& rect)
+void GraphicsLayerAndroid::paintContents(GraphicsContext* gc, IntRect& dirty)
 {
-    SkPicture* picture = new SkPicture();
-    SkCanvas* canvas = picture->beginRecording(rect.width(), rect.height(), 0);
-    if (!canvas) {
-        picture->endRecording();
-        SkSafeUnref(picture);
-        return 0;
-    }
-
-    PlatformGraphicsContextSkia platformContext(canvas);
-    GraphicsContext graphicsContext(&platformContext);
-
-    paintGraphicsLayerContents(graphicsContext, rect);
-
-    return picture;
+    paintGraphicsLayerContents(*gc, dirty);
 }
 
 bool GraphicsLayerAndroid::paintContext(LayerAndroid* layer,
-                                        const IntRect& rect,
-                                        bool checkOptimisations)
+                                        PicturePile& picture)
 {
     if (!layer)
         return false;
 
-    SkPicture* picture = paintPicture(rect);
-    if (!picture)
-        return false;
-    picture->endRecording();
+    TRACE_METHOD();
 
-    PictureLayerContent* layerContent = new PictureLayerContent(picture);
-    if (checkOptimisations)
-        layerContent->checkForOptimisations();
-    else
-        layerContent->setCheckForOptimisations(false);
-    layer->setContent(layerContent);
-    SkSafeUnref(layerContent);
-    SkSafeUnref(picture);
+    picture.setSize(IntSize(layer->getWidth(), layer->getHeight()));
+
+    // TODO: add content checks (text, opacity, etc.)
+    picture.updatePicturesIfNeeded(this);
+
+    // store the newly painted content in the layer if it's not empty
+    PicturePileLayerContent* content = new PicturePileLayerContent(picture);
+    layer->setContent(content->isEmpty() ? 0 : content);
+    SkSafeUnref(content);
+
     return true;
 }
 
@@ -891,11 +883,9 @@ void GraphicsLayerAndroid::setNeedsDisplayInRect(const FloatRect& rect)
         return;
     }
 
-    SkRegion region;
-    region.setRect(rect.x(), rect.y(),
-                   rect.x() + rect.width(),
-                   rect.y() + rect.height());
-    m_dirtyRegion.op(region, SkRegion::kUnion_Op);
+    m_contentLayerContent.invalidate(enclosingIntRect(rect));
+    if (m_foregroundLayer)
+        m_foregroundLayerContent.invalidate(enclosingIntRect(rect));
 
     m_needsRepaint = true;
     askForSync();
@@ -962,6 +952,7 @@ bool GraphicsLayerAndroid::createAnimationFromKeyframes(const KeyframeValueList&
         RefPtr<AndroidOpacityAnimation> anim = AndroidOpacityAnimation::create(animation,
                                                                                operationsList,
                                                                                beginTime);
+        operationsList = NULL; // Claimed by create
         if (keyframesName.isEmpty())
             anim->setName(propertyIdToString(valueList.property()));
         else
@@ -1004,6 +995,7 @@ bool GraphicsLayerAndroid::createTransformAnimationsFromKeyframes(const Keyframe
     RefPtr<AndroidTransformAnimation> anim = AndroidTransformAnimation::create(animation,
                                                                                operationsList,
                                                                                beginTime);
+    operationsList = NULL; // Claimed by create
 
     if (keyframesName.isEmpty())
         anim->setName(propertyIdToString(valueList.property()));
@@ -1114,8 +1106,16 @@ void GraphicsLayerAndroid::setContentsToCanvas(PlatformLayer* canvasLayer)
         m_contentLayer->unref();
         m_contentLayer = canvasLayer;
 
+        // If the parent exists then notify it to re-sync it's children
+        if (m_parent) {
+            GraphicsLayerAndroid* parent = static_cast<GraphicsLayerAndroid*>(m_parent);
+            parent->m_needsSyncChildren = true;
+        }
+
         m_needsSyncChildren = true;
         m_is3DCanvas = true;
+        setNeedsDisplay();
+        askForSync();
 
         setDrawsContent(true);
     }

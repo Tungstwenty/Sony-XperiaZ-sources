@@ -40,7 +40,7 @@ class SurfaceBacking : public SkRefCnt {
 public:
     SurfaceBacking(bool isBaseSurface);
     ~SurfaceBacking();
-    void prepareGL(GLWebViewState* state, bool allowZoom,
+    void prepareGL(GLWebViewState* state, float maxZoomScale,
                    const IntRect& prepareArea, const IntRect& fullContentArea,
                    TilePainter* painter, bool aggressiveRendering,
                    bool updateWithBlit);
@@ -85,7 +85,7 @@ private:
     void swapTileGrids();
 
     // Delay before we schedule a new tile at the new scale factor
-    static const double s_zoomUpdateDelay = 0.2; // 200 ms
+    static const double s_zoomUpdateDelay = 0.1; // 100 ms
 
     TileGrid* m_frontTileGrid;
     TileGrid* m_backTileGrid;
@@ -95,6 +95,7 @@ private:
     float m_futureScale;
     double m_zoomUpdateTime;
     bool m_zooming;
+    float m_maxZoomScale;
 };
 
 } // namespace WebCore

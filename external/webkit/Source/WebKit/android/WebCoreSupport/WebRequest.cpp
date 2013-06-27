@@ -1,6 +1,6 @@
 /*
  * Copyright 2010, The Android Open Source Project
- * Copyright (c) 2011, 2012 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012 The Linux Foundation. All rights reserved.
  * Copyright (C) 2012 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -105,6 +105,7 @@ WebRequest::WebRequest(WebUrlLoaderClient* loader, const WebResourceRequest& web
     : m_urlLoader(loader)
     , m_url(webResourceRequest.url())
     , m_userAgent(webResourceRequest.userAgent())
+    , m_referer(webResourceRequest.referrer())
     , m_loadState(Created)
     , m_authRequestCount(0)
     , m_cacheMode(0)
@@ -137,6 +138,7 @@ WebRequest::WebRequest(WebUrlLoaderClient* loader, const WebResourceRequest& web
     , m_interceptResponse(intercept)
     , m_url(webResourceRequest.url())
     , m_userAgent(webResourceRequest.userAgent())
+    , m_referer(webResourceRequest.referrer())
     , m_loadState(Created)
     , m_authRequestCount(0)
     , m_cacheMode(0)
@@ -162,6 +164,11 @@ const std::string& WebRequest::getUrl() const
 const std::string& WebRequest::getUserAgent() const
 {
     return m_userAgent;
+}
+
+const std::string& WebRequest::getReferer() const
+{
+    return m_referer;
 }
 
 #ifdef LOG_REQUESTS

@@ -221,6 +221,7 @@ static void stream_state_changed(struct avdtp_stream *stream,
 			g_dbus_send_message(p->conn, reply);
 			pending_request_free(dev, p);
 			if (sink->session) {
+				sink_set_protected(dev, FALSE);
 				avdtp_disconnect_session(sink->session);
 			}
 		}

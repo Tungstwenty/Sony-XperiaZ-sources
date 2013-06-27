@@ -156,7 +156,6 @@ amm-info@iis.fraunhofer.de
 #endif
 
 
-
 /* Define preferred Multiplication type */
 #if defined(FDK_HIGH_PERFORMANCE) && !defined(FDK_HIGH_QUALITY) /* FDK_HIGH_PERFORMANCE */
 

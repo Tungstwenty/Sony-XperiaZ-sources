@@ -125,6 +125,13 @@ namespace {
         return false;
     }
 
+    bool isPrefixReserved(const String& name)
+    {
+        if (name.startsWith("gl_") || name.startsWith("webgl_") || name.startsWith("_webgl_"))
+            return true;
+        return false;
+    }
+
     // Strips comments from shader text. This allows non-ASCII characters
     // to be used in comments without potentially breaking OpenGL
     // implementations not expecting characters outside the GLSL ES set.
@@ -672,6 +679,14 @@ void WebGLRenderingContext::bindAttribLocation(WebGLProgram* program, GC3Duint i
         return;
     if (!validateString(name))
         return;
+    if (isPrefixReserved(name)) {
+        m_context->synthesizeGLError(GraphicsContext3D::INVALID_OPERATION);
+        return;
+    }
+    if (index >= m_maxVertexAttribs) {
+        m_context->synthesizeGLError(GraphicsContext3D::INVALID_VALUE);
+        return;
+    }
     m_context->bindAttribLocation(objectOrZero(program), index, name);
     cleanupAfterGraphicsCall(false);
 }
@@ -1944,12 +1959,18 @@ bool WebGLRenderingContext::getAttachedShaders(WebGLProgram* program, Vector<Web
 
 GC3Dint WebGLRenderingContext::getAttribLocation(WebGLProgram* program, const String& name)
 {
-    if (isContextLost())
+    if (isContextLost() || !validateWebGLObject(program))
         return -1;
     if (!validateLocationLength(name))
         return -1;
     if (!validateString(name))
         return -1;
+    if (isPrefixReserved(name))
+        return -1;
+    if (!program->getLinkStatus()) {
+        m_context->synthesizeGLError(GraphicsContext3D::INVALID_OPERATION);
+        return 0;
+    }
     return m_context->getAttribLocation(objectOrZero(program), name);
 }
 
@@ -2627,6 +2648,12 @@ PassRefPtr<WebGLUniformLocation> WebGLRenderingContext::getUniformLocation(WebGL
         return 0;
     if (!validateString(name))
         return 0;
+    if (isPrefixReserved(name))
+        return 0;
+    if (!program->getLinkStatus()) {
+        m_context->synthesizeGLError(GraphicsContext3D::INVALID_OPERATION);
+        return 0;
+    }
     WebGLStateRestorer(this, false);
     GC3Dint uniformLocation = m_context->getUniformLocation(objectOrZero(program), name);
     if (uniformLocation == -1)

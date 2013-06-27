@@ -2,8 +2,8 @@
  * Copyright (C) 2006, 2007, 2008, 2009 Apple Inc.  All rights reserved.
  * Copyright (C) 2007-2009 Torch Mobile, Inc.
  * Copyright (C) Research In Motion Limited 2010. All rights reserved.
- * Copyright (C) 2011, Sony Ericsson Mobile Communications AB
  * Copyright (C) 2012 Sony Mobile Communications AB
+ * Copyright (C) 2011, Sony Ericsson Mobile Communications AB
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -731,6 +731,7 @@
 #define ENABLE_OFFLINE_WEB_APPLICATIONS 1
 #define ENABLE_TOUCH_EVENTS 1
 #define ENABLE_GEOLOCATION 1
+#define ENABLE_CLIENT_BASED_GEOLOCATION 1
 #define ENABLE_INSPECTOR 0
 #define ENABLE_EVENT_SOURCE 0
 #define ENABLE_DEVICE_ORIENTATION 1
@@ -743,6 +744,10 @@
 #define ENABLE_LINK_PREFETCH 1
 #define ENABLE_WEB_TIMING 1
 #define ENABLE_MEDIA_CAPTURE 1
+
+// WebAudio
+#define ENABLE_WEB_AUDIO 1
+#define WTF_USE_WEBAUDIO_KISSFFT 1
 
 // Android ENABLE guards not present upstream
 #define ENABLE_COMPOSITED_FIXED_ELEMENTS 1 // FIXME: Rename to ENABLE_ANDROID_COMPOSITED_FIXED_ELEMENTS
@@ -786,8 +791,6 @@
 #define ANDROID_ANIMATED_GIF
 // apple-touch-icon support in <link> tags
 #define ANDROID_APPLE_TOUCH_ICON
-// track changes to the style that may change what is drawn
-#define ANDROID_STYLE_VERSION
 
 // This is present in JavaScriptCore/config.h, which Android does not use.
 #define WTF_CHANGES 1

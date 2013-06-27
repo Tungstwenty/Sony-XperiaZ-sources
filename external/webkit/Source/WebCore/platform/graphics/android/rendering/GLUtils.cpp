@@ -386,6 +386,7 @@ bool GLUtils::isPureColorBitmap(const SkBitmap& bitmap, Color& pureColor)
     // If the bitmap is the pure color, skip the transfer step, and update the Tile Info.
     // This check is taking < 1ms if we do full bitmap check per tile.
     // TODO: use the SkPicture to determine whether or not a tile is single color.
+    TRACE_METHOD();
     pureColor = Color(Color::transparent);
     bitmap.lockPixels();
     bool sameColor = true;
@@ -411,7 +412,7 @@ bool GLUtils::isPureColorBitmap(const SkBitmap& bitmap, Color& pureColor)
     pixelsRow = 0;
 
     if (sameColor) {
-        char* rgbaPtr = static_cast<char*>(bitmap.getPixels());
+        unsigned char* rgbaPtr = static_cast<unsigned char*>(bitmap.getPixels());
         pureColor = Color(rgbaPtr[0], rgbaPtr[1], rgbaPtr[2], rgbaPtr[3]);
         ALOGV("sameColor tile found , %x at (%d, %d, %d, %d)",
               *firstPixelPtr, rgbaPtr[0], rgbaPtr[1], rgbaPtr[2], rgbaPtr[3]);
@@ -447,7 +448,7 @@ bool GLUtils::skipTransferForPureColor(const TileRenderInfo* renderInfo,
 }
 
 void GLUtils::paintTextureWithBitmap(const TileRenderInfo* renderInfo,
-                                     const SkBitmap& bitmap)
+                                     SkBitmap& bitmap)
 {
     if (!renderInfo)
         return;
@@ -473,7 +474,7 @@ void GLUtils::paintTextureWithBitmap(const TileRenderInfo* renderInfo,
     }
 }
 
-void GLUtils::updateQueueWithBitmap(const TileRenderInfo* renderInfo, const SkBitmap& bitmap)
+void GLUtils::updateQueueWithBitmap(const TileRenderInfo* renderInfo, SkBitmap& bitmap)
 {
     if (!renderInfo
         || !renderInfo->textureInfo
@@ -485,6 +486,7 @@ void GLUtils::updateQueueWithBitmap(const TileRenderInfo* renderInfo, const SkBi
 
 bool GLUtils::updateSharedSurfaceTextureWithBitmap(ANativeWindow* anw, const SkBitmap& bitmap)
 {
+    TRACE_METHOD();
     SkAutoLockPixels alp(bitmap);
     if (!bitmap.getPixels())
         return false;

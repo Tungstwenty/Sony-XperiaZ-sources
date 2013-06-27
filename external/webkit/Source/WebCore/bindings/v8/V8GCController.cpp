@@ -377,6 +377,7 @@ public:
                 if (!values.isEmpty())
                     v8::V8::AddImplicitReferences(wrapper, values.data(), values.size());
             }
+
         }
     }
 

@@ -512,39 +512,6 @@ void ChromeClientAndroid::populateVisitedLinks()
     android::WebViewCore::getWebViewCore(view)->populateVisitedLinks(&page->group());
 }
 
-void ChromeClientAndroid::requestGeolocationPermissionForFrame(Frame* frame, Geolocation* geolocation)
-{
-    ASSERT(geolocation);
-    if (!m_geolocationPermissions) {
-        m_geolocationPermissions = new GeolocationPermissions(android::WebViewCore::getWebViewCore(frame->view()),
-                                                              m_webFrame->page()->mainFrame());
-    }
-    m_geolocationPermissions->queryPermissionState(frame);
-}
-
-void ChromeClientAndroid::cancelGeolocationPermissionRequestForFrame(Frame* frame, WebCore::Geolocation*)
-{
-    if (m_geolocationPermissions)
-        m_geolocationPermissions->cancelPermissionStateQuery(frame);
-}
-
-void ChromeClientAndroid::provideGeolocationPermissions(const String &origin, bool allow, bool remember)
-{
-    ASSERT(m_geolocationPermissions);
-    m_geolocationPermissions->providePermissionState(origin, allow, remember);
-}
-
-void ChromeClientAndroid::storeGeolocationPermissions()
-{
-    GeolocationPermissions::maybeStorePermanentPermissions();
-}
-
-void ChromeClientAndroid::onMainFrameLoadStarted()
-{
-    if (m_geolocationPermissions.get())
-        m_geolocationPermissions->resetTemporaryPermissionStates();
-}
-
 void ChromeClientAndroid::runOpenPanel(Frame* frame,
         PassRefPtr<FileChooser> chooser)
 {
@@ -605,16 +572,6 @@ void ChromeClientAndroid::reachedApplicationCacheOriginQuota(SecurityOrigin*)
     notImplemented();
 }
 
-#if ENABLE(ANDROID_INSTALLABLE_WEB_APPS)
-void ChromeClientAndroid::webAppCanBeInstalled()
-{
-    FrameView* frameView = m_webFrame->page()->mainFrame()->view();
-    android::WebViewCore* core = android::WebViewCore::getWebViewCore(frameView);
-    if (core)
-        core->notifyWebAppCanBeInstalled();
-}
-#endif
-
 #if ENABLE(VIDEO)
 bool ChromeClientAndroid::supportsFullscreenForNode(const Node* node)
 {
@@ -627,16 +584,23 @@ void ChromeClientAndroid::enterFullscreenForNode(Node* node)
           return;
 
       HTMLMediaElement* videoElement = static_cast<HTMLMediaElement*>(node);
-      String url = videoElement->currentSrc();
-      LayerAndroid* layer = videoElement->platformLayer();
-      if (!layer)
-          return;
 
       FrameView* frameView = m_webFrame->page()->mainFrame()->view();
       android::WebViewCore* core = android::WebViewCore::getWebViewCore(frameView);
-      m_webFrame->page()->mainFrame()->document()->webkitWillEnterFullScreenForElement(videoElement);
       if (core)
-          core->enterFullscreenForVideoLayer(layer->uniqueId(), url);
+          core->enterFullscreenForVideoLayer();
+
+      MediaPlayer* player = videoElement->player();
+      if (player) {
+          // We need to use the same document object as the
+          // MediaPlayerPrivateAndroid::onStopFullscreen().
+          Document* doc = player->mediaPlayerClient()->mediaPlayerOwningDocument();
+          if (doc)
+              doc->webkitWillEnterFullScreenForElement(videoElement);
+          // Now the player is responsible to trigger to the java side for
+          // entering full screen mode.
+          player->enterFullscreenMode();
+      }
 }
 
 void ChromeClientAndroid::exitFullscreenForNode(Node* node)

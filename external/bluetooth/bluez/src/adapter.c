@@ -4,7 +4,7 @@
  *
  *  Copyright (C) 2006-2010  Nokia Corporation
  *  Copyright (C) 2004-2010  Marcel Holtmann <marcel@holtmann.org>
- *  Copyright (C) 2010-2012 The Linux Foundation. All rights reserved
+ *  Copyright (C) 2010-2013 The Linux Foundation. All rights reserved
  *  Copyright (C) 2012 Sony Mobile Communications AB
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -84,6 +84,7 @@
 #define IO_CAPABILITY_KEYBOARDDISPLAY	0x04
 #define IO_CAPABILITY_INVALID		0xFF
 
+#define HCI_AT_NO_BONDING 0x0
 #define check_address(address) bachk(address)
 
 static DBusConnection *connection = NULL;
@@ -1251,23 +1252,11 @@ void adapter_service_remove(struct btd_adapter *adapter, void *r)
 	adapter_emit_uuids_updated(adapter);
 }
 
-static struct btd_device *adapter_create_device(DBusConnection *conn,
-						struct btd_adapter *adapter,
-						const char *address,
-						device_type_t type)
+gboolean device_is_hid_mouse(struct btd_adapter *adapter, const char *address)
 {
-	struct btd_device *device;
-	const char *path;
 	bdaddr_t remote;
 	uint32_t class = 0;
 	char *iconstr = NULL;
-
-	DBG("%s", address);
-
-	device = device_create(conn, adapter, address, type);
-	if (!device)
-		return NULL;
-
 
 	str2ba(address, &remote);
 	read_remote_class(&adapter->bdaddr, &remote, &class);
@@ -1277,6 +1266,27 @@ static struct btd_device *adapter_create_device(DBusConnection *conn,
 	iconstr = class_to_icon(class);
 	if ((NULL != iconstr) &&
 		(0 == strcmp("input-mouse", iconstr)))
+		return 1;
+
+	return 0;
+}
+
+static struct btd_device *adapter_create_device(DBusConnection *conn,
+						struct btd_adapter *adapter,
+						const char *address,
+						device_type_t type)
+{
+	struct btd_device *device;
+	const char *path;
+
+	DBG("%s", address);
+
+	device = device_create(conn, adapter, address, type);
+	if (!device)
+		return NULL;
+
+
+	if (device_is_hid_mouse(adapter, address))
 		device_set_temporary(device, FALSE);
 	else
 		device_set_temporary(device, TRUE);
@@ -1430,8 +1440,6 @@ static DBusMessage *adapter_start_discovery(DBusConnection *conn,
 
 	if (!adapter->up)
 		return btd_error_not_ready(msg);
-
-	force_master_role(adapter);
 
 	req = find_session(adapter->disc_sessions, sender);
 	if (req) {
@@ -1767,7 +1775,7 @@ static DBusMessage *cancel_device_creation(DBusConnection *conn,
 {
 	struct btd_adapter *adapter = data;
 	const gchar *address, *sender = dbus_message_get_sender(msg);
-	struct btd_device *device;
+	struct btd_device *device, *device1;
 
 	if (dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &address,
 						DBUS_TYPE_INVALID) == FALSE)
@@ -1778,8 +1786,12 @@ static DBusMessage *cancel_device_creation(DBusConnection *conn,
 
 	device = adapter_find_device(adapter, address);
 	if (!device || !device_is_creating(device, NULL))
-		return btd_error_does_not_exist(msg);
+	{
+		device1 = adapter_get_device(conn, adapter, address);
+		temp_records_clean_up(device1, adapter, address);
 
+		return btd_error_does_not_exist(msg);
+	}
 	if (!device_is_creating(device, sender))
 		return btd_error_not_authorized(msg);
 
@@ -2075,15 +2087,26 @@ static DBusMessage *create_paired_device_generic(DBusConnection *conn,
 			return btd_error_failed(msg, strerror(-err));
 	}
 
-	//if (device_get_type(device) != DEVICE_TYPE_LE)
-		return device_create_bonding(device, conn, msg,
-							agent_path, cap, oob);
+	err = device_create_bonding(device, conn, msg,
+						agent_path, cap, oob);
 
-	//err = device_browse_primary(device, conn, msg, TRUE);
-	//if (err < 0)
-		//return btd_error_failed(msg, strerror(-err));
+	if (err < 0)
+		return err;
 
-	//return NULL;
+	/* Pairing proceedure is not required for HID Mouse devices
+	** if it is a 2.0 device. So when user selects dedicated bonding
+	** with HID mouse device, set the auth_type to NO_BONDING and
+	** security level to LOW. When the remote device features are
+	** read and if it supports SSP, then internally the seruity level
+	** is set to HIGH and Dedicated bond is mandated. Thus we can
+	** make sure no bonding happens with 2.0 HID devices, at the
+	** same time dedicated bonding with 2.1 SSP devices.
+	*/
+	if( device_is_hid_mouse(adapter, address))
+		err = conn_set_auth_type(device, HCI_AT_NO_BONDING);
+
+	return err;
+
 }
 
 static DBusMessage *create_paired_device_oob(DBusConnection *conn,
@@ -2993,7 +3016,10 @@ static DBusMessage *add_reserved_service_records(DBusConnection *conn,
 				 * once it is addressed
 				 */
 				ret = mas0_handle = add_mas0_record(adapter);
-				mas1_handle = add_mas1_record(adapter);
+				DBG("add map sdp, main_opts.map_email = %d", main_opts.map_email);
+				if(main_opts.map_email) {
+					mas1_handle = add_mas1_record(adapter);
+				}
 				break;
 		}
 		if (ret < 0) {
@@ -3032,12 +3058,13 @@ static DBusMessage *remove_reserved_service_records(DBusConnection *conn,
 			 * introducing new interface. To be removed,
 			 * once it is addressed
 			 */
-			if (mas1_handle && remove_record_from_server(mas1_handle))
-				return g_dbus_create_error(msg,
-					ERROR_INTERFACE ".Failed", "Failed to remove sdp record");
-			/* clear the mas handles*/
 			mas0_handle = 0;
-			mas1_handle = 0;
+			if(main_opts.map_email) {
+				if (mas1_handle && remove_record_from_server(mas1_handle))
+					return g_dbus_create_error(msg,
+					ERROR_INTERFACE ".Failed", "Failed to remove sdp record");
+				mas1_handle = 0;
+			}
 		}
 	}
 
@@ -5140,4 +5167,12 @@ int btd_adapter_le_remove_dev_white_list(struct btd_adapter *adapter,
 	}
 	return adapter_ops->le_remove_dev_white_list(adapter->dev_id, bdaddr,
 								addr_type);
+}
+
+int btd_adapter_le_cancel_create_conn(struct btd_adapter *adapter,
+		bdaddr_t *bdaddr)
+{
+	DBG("");
+	return adapter_ops->le_cancel_create_conn(adapter->dev_id,
+					bdaddr);
 }

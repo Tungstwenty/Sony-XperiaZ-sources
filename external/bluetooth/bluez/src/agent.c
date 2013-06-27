@@ -2,6 +2,7 @@
  *
  *  BlueZ - Bluetooth protocol stack for Linux
  *
+ *  Copyright (C) 2013 The Linux Foundation. All rights reserved.
  *  Copyright (C) 2006-2010  Nokia Corporation
  *  Copyright (C) 2004-2010  Marcel Holtmann <marcel@holtmann.org>
  *
@@ -528,7 +529,7 @@ int agent_request_pincode(struct agent *agent, struct btd_device *device,
 
 	conn_get_pending_sec_level(device, &pending_sec_level);
 	DBG("Connection pending security level is %d", (int)pending_sec_level);
-	secure = (pending_sec_level == BT_SECURITY_HIGH);
+	secure = (pending_sec_level == BT_SECURITY_VERY_HIGH);
 	DBG("Secure Pairing %d", secure);
 	err = pincode_request_new(req, dev_path, FALSE, secure);
 	if (err < 0)

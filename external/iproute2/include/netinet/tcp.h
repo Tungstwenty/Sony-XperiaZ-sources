@@ -192,7 +192,6 @@ struct tcp_info
   u_int8_t	tcpi_backoff;
   u_int8_t	tcpi_options;
   u_int8_t	tcpi_snd_wscale : 4, tcpi_rcv_wscale : 4;
-  u_int8_t  tcpi_count;
 
   u_int32_t	tcpi_rto;
   u_int32_t	tcpi_ato;

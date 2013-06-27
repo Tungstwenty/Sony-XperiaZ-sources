@@ -26,7 +26,6 @@
 #include "config.h"
 #include "Pattern.h"
 
-#include "android_graphics.h"
 #include "GraphicsContext.h"
 #include "SkBitmapRef.h"
 #include "SkCanvas.h"
@@ -51,6 +50,8 @@ SkShader* Pattern::platformPattern(const AffineTransform&)
     if (m_pattern)
         return m_pattern;
 
+    if (!tileImage())
+        return 0;
     SkBitmapRef* ref = tileImage()->nativeImageForCurrentFrame();
     if (!ref)
         return 0;

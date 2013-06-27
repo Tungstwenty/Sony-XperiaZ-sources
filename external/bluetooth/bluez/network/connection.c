@@ -257,10 +257,10 @@ static gboolean bnep_setup_cb(GIOChannel *chan, GIOCondition cond,
 	}
 
 	rsp = (void *) pkt;
-	if (rsp->type != BNEP_CONTROL) {
-		error("Packet received is not bnep type");
-		goto failed;
-	}
+
+	// if response is not of type CTRL, ignore it
+	if (rsp->type != BNEP_CONTROL)
+		return TRUE;
 
 	if (rsp->ctrl != BNEP_SETUP_CONN_RSP)
 		return TRUE;

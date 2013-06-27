@@ -31,7 +31,6 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Listener;
-import org.eclipse.swt.widgets.Sash;
 import org.eclipse.swt.widgets.Tracker;
 import org.eclipse.wb.core.controls.Messages;
 import org.eclipse.wb.draw2d.IColorConstants;
@@ -273,17 +272,30 @@ public final class FlyoutControlComposite extends Composite {
   }
 
   // BEGIN ADT MODIFICATIONS
+  /**
+   * Applies the given preferences into the preferences of this flyout
+   * control. This does not cause any visual updates; call {@link #layout()}
+   * to update the widget.
+   *
+   * @param preferences the preferences to apply
+   */
+  public void apply(IFlyoutPreferences preferences) {
+    m_preferences.setDockLocation(preferences.getDockLocation());
+    m_preferences.setState(preferences.getState());
+    m_preferences.setWidth(preferences.getWidth());
+  }
+
   /** If the flyout hover is showing, dismiss it */
   public void dismissHover() {
-      if (m_flyoutContainer != null) {
-          m_flyoutContainer.dismissHover();
-      }
+    if (m_flyoutContainer != null) {
+      m_flyoutContainer.dismissHover();
+    }
   }
 
   /** Sets a listener to be modified when windows are opened, collapsed and expanded */
   public void setListener(IFlyoutListener listener) {
-      assert m_listener == null; // Only one listener supported
-      m_listener = listener;
+    assert m_listener == null; // Only one listener supported
+    m_listener = listener;
   }
   private IFlyoutListener m_listener;
   // END ADT MODIFICATIONS

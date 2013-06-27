@@ -47,7 +47,6 @@
 #include "SkString.h"
 #include "SkiaUtils.h"
 #include "TransformationMatrix.h"
-#include "android_graphics.h"
 
 using namespace std;
 
@@ -111,7 +110,7 @@ GraphicsContext* GraphicsContext::createOffscreenContext(int width, int height)
     bitmap.setConfig(SkBitmap::kARGB_8888_Config, width, height);
     bitmap.allocPixels();
     bitmap.eraseColor(0);
-    pgc->getCanvas()->setBitmapDevice(bitmap);
+    pgc->canvas()->setBitmapDevice(bitmap);
 
     GraphicsContext* ctx = new GraphicsContext(pgc);
     return ctx;
@@ -488,7 +487,7 @@ void GraphicsContext::clearRect(const FloatRect& rect)
     if (paintingDisabled())
         return;
 
-    FloatRect recordingRect(0, 0, platformContext()->getCanvas()->getDevice()->width(), platformContext()->getCanvas()->getDevice()->height());
+    FloatRect recordingRect(0, 0, platformContext()->recordingCanvas()->getDevice()->width(), platformContext()->recordingCanvas()->getDevice()->height());
     if (rect == recordingRect && !platformContext()->isAnimating()) {
         m_animationTimeCounter->tick();
 
@@ -552,6 +551,8 @@ void GraphicsContext::rotate(float angleInRadians)
 void GraphicsContext::translate(float x, float y)
 {
     if (paintingDisabled())
+        return;
+    if (!x && !y)
         return;
     platformContext()->translate(x, y);
 }
@@ -702,10 +703,3 @@ void GraphicsContext::drawHighlightForText(const Font& font, const TextRun& run,
 }
 
 } // namespace WebCore
-
-///////////////////////////////////////////////////////////////////////////////
-
-SkCanvas* android_gc2canvas(WebCore::GraphicsContext* gc)
-{
-    return gc->platformContext()->getCanvas();
-}

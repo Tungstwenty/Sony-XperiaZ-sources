@@ -26,11 +26,8 @@ LOCAL_SRC_FILES := $(call all-java-files-under, src)
 # note: ideally this should be junit-host, but leave as is for now to avoid
 # changing all its dependencies
 LOCAL_MODULE := junit
-
 LOCAL_MODULE_TAGS := optional
-
 LOCAL_STATIC_JAVA_LIBRARIES := hamcrest-host
-
 include $(BUILD_HOST_JAVA_LIBRARY)
 
 # ----------------------------------
@@ -69,4 +66,40 @@ LOCAL_BUILD_HOST_DEX := true
 include $(BUILD_HOST_JAVA_LIBRARY)
 
 endif
+
+#-------------------------------------------------------
+# build a junit-runner jar representing the
+# junit classes in the frameworks/base android.test.runner.jar
+
+include $(CLEAR_VARS)
+
+LOCAL_SRC_FILES := $(junit-runner-files)
+LOCAL_MODULE := junit-runner
+LOCAL_MODULE_TAGS := optional
+include $(BUILD_STATIC_JAVA_LIBRARY)
+
+#-------------------------------------------------------
+# build a junit4-target jar representing the
+# classes in external/junit that are not in the core public API 4
+# Note: 'core' here means excluding the classes that are contained
+# in the optional library android.test.runner. Developers who
+# build against this jar shouldn't have to also include android.test.runner
+
+include $(CLEAR_VARS)
+
+LOCAL_SRC_FILES := $(call all-java-files-under, src/org)
+LOCAL_SRC_FILES += $(call all-java-files-under, src/junit/extensions)
+LOCAL_SRC_FILES += $(call all-java-files-under, src/junit/runner)
+LOCAL_SRC_FILES += $(call all-java-files-under, src/junit/textui)
+LOCAL_SRC_FILES += \
+	src/junit/framework/ComparisonCompactor.java \
+	src/junit/framework/JUnit4TestAdapterCache.java \
+	src/junit/framework/JUnit4TestAdapter.java \
+	src/junit/framework/JUnit4TestCaseFacade.java
+
+LOCAL_MODULE := junit4-target
+LOCAL_MODULE_TAGS := optional
+LOCAL_SDK_VERSION := 4
+LOCAL_STATIC_JAVA_LIBRARIES := hamcrest
+include $(BUILD_STATIC_JAVA_LIBRARY)
 

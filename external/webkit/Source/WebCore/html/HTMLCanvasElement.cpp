@@ -2,7 +2,7 @@
  * Copyright (C) 2004, 2006, 2007 Apple Inc. All rights reserved.
  * Copyright (C) 2007 Alp Toker <alp@atoker.com>
  * Copyright (C) 2010 Torch Mobile (Beijing) Co. Ltd. All rights reserved.
- * Copyright (c) 2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012, The Linux Foundation All rights reserved.
  * Copyright (C) 2011, 2012 Sony Ericsson Mobile Communications AB
  * Copyright (C) 2012 Sony Mobile Communications AB
  *
@@ -607,6 +607,15 @@ void HTMLCanvasElement::clearRecording(const FloatRect& rect)
             {
                 disableGpuRendering();
                 CanvasLayer::setGpuCanvasStatus(m_canvasId, false);
+            }
+        }
+        else if(m_imageBuffer->drawsUsingRecording())
+        {
+            IntRect r(rect.x(), rect.y(), rect.width(), rect.height());
+            GraphicsContext* ctx = drawingContext();
+            if(ctx)
+            {
+                CanvasLayer::copyRecording(ctx, r, m_canvasId);
             }
         }
         m_imageBuffer->clearRecording();

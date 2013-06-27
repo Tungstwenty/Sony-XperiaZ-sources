@@ -6,7 +6,6 @@
  * Copyright (C) 2004, 2005, 2006, 2007, 2008, 2011 Apple Inc. All rights reserved.
  * Copyright (C) 2009 Google Inc. All rights reserved.
  * Copyright (C) 2009 Torch Mobile Inc. All rights reserved. (http://www.torchmobile.com/)
- * Copyright (C) 2012 Sony Mobile Communications AB
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -1670,9 +1669,8 @@ void RenderObject::styleWillChange(StyleDifference diff, const RenderStyle* newS
         if (newStyle) {
 #if ENABLE(COMPOSITED_FIXED_ELEMENTS)
             RenderLayer* layer = hasLayer() ? enclosingLayer() : 0;
-            if (layer &&
-                (m_style->position() != newStyle->position() &&
-                 (m_style->position() == FixedPosition || newStyle->position() == FixedPosition)))
+            if (layer && m_style->position() != newStyle->position()
+                && (m_style->position() == FixedPosition || newStyle->position() == FixedPosition))
                 layer->dirtyZOrderLists();
 #endif
             bool visibilityChanged = m_style->visibility() != newStyle->visibility() 

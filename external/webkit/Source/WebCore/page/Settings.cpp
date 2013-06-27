@@ -118,7 +118,6 @@ Settings::Settings(Page* page)
     , m_javaScriptCanAccessClipboard(false)
     , m_shouldPrintBackgrounds(false)
     , m_textAreasAreResizable(false)
-    , m_mediaPreloadEnabled(true)
 #if ENABLE(DASHBOARD_SUPPORT)
     , m_usesDashboardBackwardCompatibilityMode(false)
 #endif
@@ -206,6 +205,8 @@ Settings::Settings(Page* page)
 #else
     , m_passwordEchoEnabled(false)
 #endif
+    , m_mediaPlaybackRequiresUserGesture(false)
+    , m_mediaPlaybackAllowsInline(true)
 {
     // A Frame may not have been created yet, so we initialize the AtomicString 
     // hash before trying to use it.
@@ -372,11 +373,6 @@ void Settings::setPluginsEnabled(bool arePluginsEnabled)
 void Settings::setLocalStorageEnabled(bool localStorageEnabled)
 {
     m_localStorageEnabled = localStorageEnabled;
-}
-
-void Settings::setMediaPreloadEnabled(bool mediaPreloadEnabled)
-{
-    m_mediaPreloadEnabled = mediaPreloadEnabled;
 }
 
 #if ENABLE(DOM_STORAGE)

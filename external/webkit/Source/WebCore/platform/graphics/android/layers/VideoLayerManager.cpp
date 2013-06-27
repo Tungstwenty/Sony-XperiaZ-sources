@@ -1,5 +1,6 @@
 /*
  * Copyright 2011 The Android Open Source Project
+ * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -73,7 +74,7 @@ int VideoLayerManager::getButtonSize()
     return VIDEO_BUTTON_SIZE;
 }
 
-GLuint VideoLayerManager::createTextureFromImage(int buttonType)
+GLuint VideoLayerManager::createTextureFromImage(RenderSkinMediaButton::MediaButton buttonType)
 {
     SkRect rect = SkRect(m_buttonRect);
     SkBitmap bitmap;
@@ -83,8 +84,7 @@ GLuint VideoLayerManager::createTextureFromImage(int buttonType)
 
     SkCanvas canvas(bitmap);
     canvas.drawARGB(0, 0, 0, 0, SkXfermode::kClear_Mode);
-    RenderSkinMediaButton::Draw(&canvas, m_buttonRect, buttonType, true, 0,
-                                false);
+    RenderSkinMediaButton::Draw(&canvas, m_buttonRect, buttonType, true, false);
 
     GLuint texture;
     glGenTextures(1, &texture);
@@ -166,10 +166,17 @@ GLuint VideoLayerManager::getTextureId(const int layerId)
 float VideoLayerManager::getAspectRatio(const int layerId)
 {
     android::Mutex::Autolock lock(m_videoLayerInfoMapLock);
-    float result = 0;
+    VideoLayerInfo *pInfo = m_videoLayerInfoMap.get(layerId);
+    if (pInfo && !pInfo->videoSize.isZero())
+        return pInfo->videoSize.aspectRatio();
+    return DEFAULT_VIDEO_ASPECT_RATIO;
+}
+
+IntSize VideoLayerManager::getVideoNaturalSize(const int layerId) {
+    android::Mutex::Autolock lock(m_videoLayerInfoMapLock);
     if (m_videoLayerInfoMap.contains(layerId))
-        result = m_videoLayerInfoMap.get(layerId)->aspectRatio;
-    return result;
+        return m_videoLayerInfoMap.get(layerId)->videoSize;
+    return IntSize();
 }
 
 // Getting the video PlayerState, in the UI thread
@@ -180,6 +187,16 @@ PlayerState VideoLayerManager::getPlayerState(const int layerId)
     if (m_videoLayerInfoMap.contains(layerId))
         result = m_videoLayerInfoMap.get(layerId)->playerState;
     return result;
+}
+
+// This is called only from UI thread, at drawGL time.
+void VideoLayerManager::updatePlayerState(const int layerId, const PlayerState playerState)
+{
+    android::Mutex::Autolock lock(m_videoLayerInfoMapLock);
+    if (m_videoLayerInfoMap.contains(layerId)) {
+        VideoLayerInfo* pInfo = m_videoLayerInfoMap.get(layerId);
+        pInfo->playerState = playerState;
+    }
 }
 
 // Getting matrix for GL draw call, in the UI thread.
@@ -193,12 +210,52 @@ GLfloat* VideoLayerManager::getMatrix(const int layerId)
     return result;
 }
 
+void VideoLayerManager::requestFrameCapture(const int layerId) {
+    android::Mutex::Autolock lock(m_videoLayerInfoMapLock);
+    VideoLayerInfo* pInfo = m_videoLayerInfoMap.get(layerId);
+    if (pInfo)
+        pInfo->frameCapture = true;
+}
+
+bool VideoLayerManager::serviceFrameCapture(const int layerId) {
+    android::Mutex::Autolock lock(m_videoLayerInfoMapLock);
+    VideoLayerInfo* pInfo = m_videoLayerInfoMap.get(layerId);
+    if (pInfo && pInfo->frameCapture) {
+        // Clear the frame capture flag
+        pInfo->frameCapture = false;
+        return true;
+    }
+    return false;
+}
+
+void VideoLayerManager::pushBitmap(const int layerId, SkBitmapRef* bitmap) {
+    android::Mutex::Autolock lock(m_videoLayerInfoMapLock);
+    VideoLayerInfo* pInfo = m_videoLayerInfoMap.get(layerId);
+    if (pInfo) {
+        // If there is a previous bitmap queued, it will replaced by the
+        // new bitmap
+        pInfo->bitmapRef = bitmap;
+    }
+}
+
+SkBitmapRef* VideoLayerManager::popBitmap(const int layerId) {
+    android::Mutex::Autolock lock(m_videoLayerInfoMapLock);
+    VideoLayerInfo* pInfo = m_videoLayerInfoMap.get(layerId);
+    if (pInfo) {
+        SkBitmapRef* tmp = pInfo->bitmapRef.get();
+        SkSafeRef(tmp);
+        pInfo->bitmapRef = NULL;
+        return tmp;
+    }
+    return NULL;
+}
+
 int VideoLayerManager::getTotalMemUsage()
 {
     int sum = 0;
     InfoIterator end = m_videoLayerInfoMap.end();
     for (InfoIterator it = m_videoLayerInfoMap.begin(); it != end; ++it)
-        sum += it->second->videoSize;
+        sum += it->second->videoSize.width() * it->second->videoSize.height();
     return sum;
 }
 
@@ -209,7 +266,6 @@ void VideoLayerManager::registerTexture(const int layerId, const GLuint textureI
     android::Mutex::Autolock lock(m_videoLayerInfoMapLock);
     // If the texture has been registered, then early return.
     VideoLayerInfo* pPreviousInfo = m_videoLayerInfoMap.get(layerId);
-
     if (pPreviousInfo && pPreviousInfo->textureId == textureId)
         return;
 
@@ -219,22 +275,22 @@ void VideoLayerManager::registerTexture(const int layerId, const GLuint textureI
     if (pPreviousInfo == NULL) {
         memset(pInfo->surfaceMatrix, 0, sizeof(pInfo->surfaceMatrix));
         pInfo->matrixInitialized = false;
-        pInfo->videoSize = 0;
-        pInfo->aspectRatio = DEFAULT_VIDEO_ASPECT_RATIO;
-    } else {
+    }
+    else {
         // Need the previous surface matrix to composite the new texture
         memcpy(pInfo->surfaceMatrix, pPreviousInfo->surfaceMatrix, sizeof(pInfo->surfaceMatrix));
         pInfo->matrixInitialized = true;
         pInfo->videoSize = pPreviousInfo->videoSize;
-        pInfo->aspectRatio = pPreviousInfo->aspectRatio;
         // Can now delete the previous entry
         removeLayerInternal(layerId);
     }
+
     m_currentTimeStamp++;
     pInfo->timeStamp = m_currentTimeStamp;
     pInfo->canBeRecycled = false;
     pInfo->lastIconShownTime = 0;
     pInfo->iconState = Registered;
+    pInfo->playerState = INITIALIZED;
 
     m_videoLayerInfoMap.add(layerId, pInfo);
     ALOGV("GL texture %d registered for layerId %d", textureId, layerId);
@@ -245,15 +301,14 @@ void VideoLayerManager::registerTexture(const int layerId, const GLuint textureI
 // Only when the video is prepared, we got the video size. So we should update
 // the size for the video accordingly.
 // This is called from webcore thread, from MediaPlayerPrivateAndroid.
-void VideoLayerManager::updateVideoLayerSize(const int layerId, const int size,
-                                             const float ratio)
+void VideoLayerManager::updateVideoLayerSize(const int layerId, const int width,
+                                             const int height)
 {
     android::Mutex::Autolock lock(m_videoLayerInfoMapLock);
     if (m_videoLayerInfoMap.contains(layerId)) {
         VideoLayerInfo* pInfo = m_videoLayerInfoMap.get(layerId);
         if (pInfo) {
-            pInfo->videoSize = size;
-            pInfo->aspectRatio = ratio;
+            pInfo->videoSize = IntSize(width, height);
         }
     }
 
@@ -264,16 +319,6 @@ void VideoLayerManager::updateVideoLayerSize(const int layerId, const int size,
         if (!recycleTextureMem())
             break;
     return;
-}
-
-// This is called only from UI thread, at drawGL time.
-void VideoLayerManager::updatePlayerState(const int layerId, const PlayerState playerState)
-{
-    android::Mutex::Autolock lock(m_videoLayerInfoMapLock);
-    if (m_videoLayerInfoMap.contains(layerId)) {
-        VideoLayerInfo* pInfo = m_videoLayerInfoMap.get(layerId);
-        pInfo->playerState = playerState;
-    }
 }
 
 // This is called only from UI thread, at drawGL time.
@@ -305,7 +350,6 @@ void VideoLayerManager::markTextureForRecycling(const int layerId, const GLuint 
         m_videoLayerInfoMap.get(layerId)->canBeRecycled = true;
     }
 }
-
 // This is called on the webcore thread, save the GL texture for recycle in
 // the retired queue. They will be deleted in deleteUnusedTextures() in the UI
 // thread.
@@ -321,7 +365,9 @@ bool VideoLayerManager::recycleTextureMem()
     ALOGV("VideoLayerManager::recycleTextureMem m_videoLayerInfoMap contains");
     for (InfoIterator it = m_videoLayerInfoMap.begin(); it != end; ++it)
         ALOGV("  layerId %d, textureId %d, videoSize %d, timeStamp %d ",
-              it->first, it->second->textureId, it->second->videoSize, it->second->timeStamp);
+              it->first, it->second->textureId,
+              it->second->videoSize.width() * it->second->videoSize.height(),
+              it->second->timeStamp);
 #endif
     for (InfoIterator it = m_videoLayerInfoMap.begin(); it != end; ++it) {
         if (it->second->canBeRecycled && it->second->timeStamp < oldestTimeStamp) {

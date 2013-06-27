@@ -58,6 +58,7 @@
 #include "FrameLoadRequest.h"
 #include "FrameTree.h"
 #include "FrameView.h"
+#include "GeolocationClientAndroid.h"
 #include "GraphicsContext.h"
 #include "HistoryItem.h"
 #include "HTMLCollection.h"
@@ -97,7 +98,6 @@
 #include "WebFrameView.h"
 #include "WebUrlLoaderClient.h"
 #include "WebViewCore.h"
-#include "android_graphics.h"
 #include "jni.h"
 #include "wds/DebugServer.h"
 
@@ -290,7 +290,7 @@ WebFrame::WebFrame(JNIEnv* env, jobject obj, jobject historyList, WebCore::Page*
     mJavaFrame->mReportSslCertError = env->GetMethodID(clazz, "reportSslCertError", "(II[BLjava/lang/String;)V");
     mJavaFrame->mRequestClientCert = env->GetMethodID(clazz, "requestClientCert", "(ILjava/lang/String;)V");
     mJavaFrame->mDownloadStart = env->GetMethodID(clazz, "downloadStart",
-            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;J)V");
+            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;J)V");
     mJavaFrame->mDidReceiveData = env->GetMethodID(clazz, "didReceiveData", "([BI)V");
     mJavaFrame->mDidFinishLoading = env->GetMethodID(clazz, "didFinishLoading", "()V");
     mJavaFrame->mSetCertificate = env->GetMethodID(clazz, "setCertificate", "([B)V");
@@ -335,7 +335,6 @@ WebFrame::WebFrame(JNIEnv* env, jobject obj, jobject historyList, WebCore::Page*
     mUserAgent = WTF::String();
     mBlockNetworkLoads = false;
     m_renderSkins = 0;
-    mUserAgentProfile = WTF::String();
 
     mPageLoadStarted = false;
     mCloseUnusedSocketsEnabled = false;
@@ -344,6 +343,8 @@ WebFrame::WebFrame(JNIEnv* env, jobject obj, jobject historyList, WebCore::Page*
                     netCloseUnusedSocketsSystemProperty, "1")) {
         mCloseUnusedSocketsEnabled = (bool)atoi(netCloseUnusedSocketsSystemProperty);
     }
+
+    mUserAgentProfile = WTF::String();
 }
 
 WebFrame::~WebFrame()
@@ -499,12 +500,11 @@ WebFrame::loadStarted(WebCore::Frame* frame)
     WebCore::FrameLoadType loadType = frame->loader()->loadType();
 
     if (isMainFrame) {
-        StatHubCmd(INPUT_CMD_WK_START_PAGE_LOAD, (void*)url.string().utf8().data(), strlen( url.string().utf8().data())+1, (void*)frame, 0);
-        if (true == mCloseUnusedSocketsEnabled) {
-            if (false == mPageLoadStarted) {
-                gPageLoadCounter++;
-                mPageLoadStarted = true;
-            }
+        StatHubCmd* cmd = StatHubCmdCreate(SH_CMD_WK_PAGE, SH_ACTION_WILL_START_LOAD);
+        if (NULL!=cmd) {
+            StatHubCmdAddParamAsString(cmd, url.string().utf8().data());
+            StatHubCmdAddParamAsUint32(cmd, (unsigned int)frame);
+            StatHubCmdCommit(cmd);
         }
     }
 
@@ -533,15 +533,9 @@ WebFrame::loadStarted(WebCore::Frame* frame)
     if (favicon)
         env->DeleteLocalRef(favicon);
 
-    // Inform the client that the main frame has started a new load.
-    if (isMainFrame && mPage) {
-        Chrome* chrome = mPage->chrome();
-        if (chrome) {
-            ChromeClientAndroid* client = static_cast<ChromeClientAndroid*>(chrome->client());
-            if (client)
-                client->onMainFrameLoadStarted();
-        }
-    }
+    // The main frame has started a new load.
+    if (isMainFrame && mPage)
+        WebViewCore::getWebViewCore(mPage->mainFrame()->view())->geolocationManager()->resetRealClientTemporaryPermissionStates();
 }
 
 void
@@ -586,7 +580,12 @@ WebFrame::didFinishLoad(WebCore::Frame* frame)
     env->DeleteLocalRef(urlStr);
 
     if (isMainFrame) {
-        StatHubCmd(INPUT_CMD_WK_FINISH_PAGE_LOAD, (void*)url.string().utf8().data(), strlen( url.string().utf8().data())+1, (void*)frame, 0);
+        StatHubCmd* cmd = StatHubCmdCreate(SH_CMD_WK_PAGE, SH_ACTION_DID_FINISH_LOAD);
+        if (NULL!=cmd) {
+            StatHubCmdAddParamAsString(cmd, url.string().utf8().data());
+            StatHubCmdAddParamAsUint32(cmd, (unsigned int)frame);
+            StatHubCmdCommit(cmd);
+        }
         if (true == mCloseUnusedSocketsEnabled) {
             if ((gPageLoadCounter > 0) && (true == mPageLoadStarted)) {
                 mPageLoadStarted = false;
@@ -897,7 +896,7 @@ WebFrame::requestClientCert(WebUrlLoaderClient* client, const std::string& hostA
 }
 
 void
-WebFrame::downloadStart(const std::string& url, const std::string& userAgent, const std::string& contentDisposition, const std::string& mimetype, long long contentLength)
+WebFrame::downloadStart(const std::string& url, const std::string& userAgent, const std::string& contentDisposition, const std::string& mimetype, const std::string& referer, long long contentLength)
 {
     JNIEnv* env = getJNIEnv();
     AutoJObject javaFrame = mJavaFrame->frame(env);
@@ -907,13 +906,15 @@ WebFrame::downloadStart(const std::string& url, const std::string& userAgent, co
     jstring jUserAgent = stdStringToJstring(env, userAgent, true);
     jstring jContentDisposition = stdStringToJstring(env, contentDisposition, true);
     jstring jMimetype = stdStringToJstring(env, mimetype, true);
+    jstring jReferer = stdStringToJstring(env, referer, true);
 
-    env->CallVoidMethod(javaFrame.get(), mJavaFrame->mDownloadStart, jUrl, jUserAgent, jContentDisposition, jMimetype, contentLength);
+    env->CallVoidMethod(javaFrame.get(), mJavaFrame->mDownloadStart, jUrl, jUserAgent, jContentDisposition, jMimetype, jReferer, contentLength);
 
     env->DeleteLocalRef(jUrl);
     env->DeleteLocalRef(jUserAgent);
     env->DeleteLocalRef(jContentDisposition);
     env->DeleteLocalRef(jMimetype);
+    env->DeleteLocalRef(jReferer);
     checkException(env);
 }
 
@@ -1154,6 +1155,7 @@ static void CreateFrame(JNIEnv* env, jobject obj, jobject javaview, jobject jAss
     EditorClientAndroid* editorC = new EditorClientAndroid;
     DeviceMotionClientAndroid* deviceMotionC = new DeviceMotionClientAndroid;
     DeviceOrientationClientAndroid* deviceOrientationC = new DeviceOrientationClientAndroid;
+    GeolocationClientAndroid* geolocationC = new GeolocationClientAndroid;
 
     WebCore::Page::PageClients pageClients;
     pageClients.chromeClient = chromeC;
@@ -1165,6 +1167,7 @@ static void CreateFrame(JNIEnv* env, jobject obj, jobject javaview, jobject jAss
 #endif
     pageClients.deviceMotionClient = deviceMotionC;
     pageClients.deviceOrientationClient = deviceOrientationC;
+    pageClients.geolocationClient = geolocationC;
     WebCore::Page* page = new WebCore::Page(pageClients);
 
     editorC->setPage(page);
@@ -1207,6 +1210,7 @@ static void CreateFrame(JNIEnv* env, jobject obj, jobject javaview, jobject jAss
     frame->page()->focusController()->setFocused(true);
     deviceMotionC->setWebViewCore(webViewCore);
     deviceOrientationC->setWebViewCore(webViewCore);
+    geolocationC->setWebViewCore(webViewCore);
 
     // Allow local access to file:/// and substitute data
     WebCore::SecurityOrigin::setLocalLoadPolicy(

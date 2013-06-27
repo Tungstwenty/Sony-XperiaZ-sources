@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2008 Apple Inc. All Rights Reserved.
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -213,8 +214,10 @@ void PageGroup::clearDomStorage()
         // open are private browsing pages. Hence no pages are currently using local
         // storage, so we don't need a page pointer to send any events and the
         // clear function will handle a 0 input.
-        it->second->localStorage()->clear(page);
-        it->second->localStorage()->close();
+        if(it->second->hasLocalStorage()) {
+            it->second->localStorage()->clear(page);
+            it->second->localStorage()->close();
+        }
 
         // Closing the storage areas will stop the background thread and so
         // we need to remove the local storage ref here so that next time
@@ -343,6 +346,7 @@ StorageNamespace* PageGroup::localStorage()
         // Having these parameters attached to the page settings is unfortunate since these settings are
         // not per-page (and, in fact, we simply grab the settings from some page at random), but
         // at this point we're stuck with it.
+        ASSERT(!m_pages.isEmpty());
         Page* page = *m_pages.begin();
         const String& path = page->settings()->localStorageDatabasePath();
         unsigned quota = m_groupSettings->localStorageQuotaBytes();
@@ -351,7 +355,6 @@ StorageNamespace* PageGroup::localStorage()
 
     return m_localStorage.get();
 }
-
 #endif
 
 #if ENABLE(INDEXED_DATABASE)

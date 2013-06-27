@@ -27,6 +27,9 @@ LOCAL_SRC_FILES := \
 	android/WebCoreSupport/EditorClientAndroid.cpp \
 	android/WebCoreSupport/FrameLoaderClientAndroid.cpp \
 	android/WebCoreSupport/FrameNetworkingContextAndroid.cpp \
+	android/WebCoreSupport/GeolocationClientAndroid.cpp \
+	android/WebCoreSupport/GeolocationClientImpl.cpp \
+	android/WebCoreSupport/GeolocationManager.cpp \
 	android/WebCoreSupport/GeolocationPermissions.cpp \
 	android/WebCoreSupport/MediaPlayerPrivateAndroid.cpp \
 	android/WebCoreSupport/MemoryUsage.cpp \
@@ -67,6 +70,7 @@ LOCAL_SRC_FILES += \
 	android/jni/DeviceMotionClientImpl.cpp \
 	android/jni/DeviceOrientationClientImpl.cpp \
 	android/jni/GeolocationPermissionsBridge.cpp \
+	android/jni/GeolocationServiceBridge.cpp \
 	android/jni/JavaBridge.cpp \
 	android/jni/JavaSharedClient.cpp \
 	android/jni/MIMETypeRegistry.cpp \
@@ -123,3 +127,11 @@ LOCAL_SRC_FILES += \
 	android/WebCoreSupport/autofill/FormManagerAndroid.cpp \
 	android/WebCoreSupport/autofill/WebAutofill.cpp
 endif # ENABLE_AUTOFILL == true
+
+ifeq ($(ENABLE_WEBAUDIO),true)
+LOCAL_SRC_FILES := $(LOCAL_SRC_FILES) \
+	android/webaudio/InMemoryDataSource.cpp \
+	android/webaudio/WebAudioAssetsAndroid.cpp \
+	android/webaudio/WebAudioDestinationAndroid.cpp \
+	android/webaudio/WebAudioDecoderAndroid.cpp
+endif

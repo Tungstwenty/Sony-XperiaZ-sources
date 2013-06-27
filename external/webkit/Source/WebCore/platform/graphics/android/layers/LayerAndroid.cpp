@@ -176,7 +176,9 @@ LayerAndroid::LayerAndroid(const LayerAndroid& layer) : Layer(layer),
 
     KeyframesMap::const_iterator end = layer.m_animations.end();
     for (KeyframesMap::const_iterator it = layer.m_animations.begin(); it != end; ++it) {
-        m_animations.add(it->first, it->second);
+        // Deep copy the key's string, to avoid cross-thread refptr use
+        pair<String, int> newKey(it->first.first.threadsafeCopy(), it->first.second);
+        m_animations.add(newKey, it->second);
     }
 
     if (layer.m_replicatedLayer) {
@@ -214,9 +216,9 @@ LayerAndroid::~LayerAndroid()
 #endif
 }
 
-bool LayerAndroid::hasText()
+float LayerAndroid::maxZoomScale() const
 {
-    return m_content && m_content->hasText();
+    return m_content ? m_content->maxZoomScale() : 1.0f;
 }
 
 static int gDebugNbAnims = 0;
@@ -401,22 +403,27 @@ void LayerAndroid::updateLocalTransformAndClip(const TransformationMatrix& paren
 {
     FloatPoint position(getPosition().x() + m_replicatedLayerPosition.x() - getScrollOffset().x(),
                         getPosition().y() + m_replicatedLayerPosition.y() - getScrollOffset().y());
-    float originX = getAnchorPoint().x() * getWidth();
-    float originY = getAnchorPoint().y() * getHeight();
-
-    TransformationMatrix localMatrix;
 
     if (isPositionFixed())
         m_drawTransform.makeIdentity();
     else
         m_drawTransform = parentMatrix;
-    m_drawTransform.translate3d(originX + position.x(),
-                                originY + position.y(),
-                                anchorPointZ());
-    m_drawTransform.multiply(m_transform);
-    m_drawTransform.translate3d(-originX,
-                                -originY,
-                                -anchorPointZ());
+
+    if (m_transform.isIdentity()) {
+        m_drawTransform.translate3d(position.x(),
+                                    position.y(),
+                                    0);
+    } else {
+        float originX = getAnchorPoint().x() * getWidth();
+        float originY = getAnchorPoint().y() * getHeight();
+        m_drawTransform.translate3d(originX + position.x(),
+                                    originY + position.y(),
+                                    anchorPointZ());
+        m_drawTransform.multiply(m_transform);
+        m_drawTransform.translate3d(-originX,
+                                    -originY,
+                                    -anchorPointZ());
+    }
 
     m_drawTransformUnfudged = m_drawTransform;
     if (m_drawTransform.isIdentityOrTranslation()
@@ -476,23 +483,19 @@ void LayerAndroid::updateGLPositionsAndScale(const TransformationMatrix& parentM
     if (!countChildren() || !m_visible)
         return;
 
-    TransformationMatrix localMatrix = m_drawTransformUnfudged;
-
+    TransformationMatrix childMatrix = m_drawTransformUnfudged;
     // Flatten to 2D if the layer doesn't preserve 3D.
     if (!preserves3D()) {
-        localMatrix.setM13(0);
-        localMatrix.setM23(0);
-        localMatrix.setM31(0);
-        localMatrix.setM32(0);
-        localMatrix.setM33(1);
-        localMatrix.setM34(0);
-        localMatrix.setM43(0);
+        childMatrix.setM13(0);
+        childMatrix.setM23(0);
+        childMatrix.setM31(0);
+        childMatrix.setM32(0);
+        childMatrix.setM33(1);
+        childMatrix.setM34(0);
+        childMatrix.setM43(0);
     }
 
     // now apply it to our children
-
-    TransformationMatrix childMatrix;
-    childMatrix = localMatrix;
     childMatrix.translate3d(getScrollOffset().x(), getScrollOffset().y(), 0);
     if (!m_childrenTransform.isIdentity()) {
         childMatrix.translate(getSize().width() * 0.5f, getSize().height() * 0.5f);
@@ -604,7 +607,7 @@ void LayerAndroid::showLayer(int indent)
                  m_clippingRect.width(), m_clippingRect.height());
     ALOGD("%s s:%x %s %s (%d) [%d:%x - 0x%x] - %s %s - area (%d, %d, %d, %d) - visible (%d, %d, %d, %d) "
           "clip (%d, %d, %d, %d) %s %s m_content(%x), pic w: %d h: %d originalLayer: %x %d",
-          spaces, m_surface, m_haveClip ? "CLIP LAYER" : "", subclassName().ascii().data(),
+          spaces, m_surface, m_haveClip ? "CLIP LAYER" : "", subclassName(),
           subclassType(), uniqueId(), this, m_owningLayer,
           needsTexture() ? "needsTexture" : "",
           m_imageCRC ? "hasImage" : "",
@@ -805,13 +808,14 @@ bool LayerAndroid::drawCanvas(SkCanvas* canvas, bool drawChildren, PaintStyle st
         r.set(m_clippingRect.x(), m_clippingRect.y(),
               m_clippingRect.x() + m_clippingRect.width(),
               m_clippingRect.y() + m_clippingRect.height());
-        canvas->clipRect(r);
-        SkMatrix matrix;
-        GLUtils::toSkMatrix(matrix, m_drawTransform);
-        SkMatrix canvasMatrix = canvas->getTotalMatrix();
-        matrix.postConcat(canvasMatrix);
-        canvas->setMatrix(matrix);
-        onDraw(canvas, m_drawOpacity, 0, style);
+        if (canvas->clipRect(r)) {
+            SkMatrix matrix;
+            GLUtils::toSkMatrix(matrix, m_drawTransform);
+            SkMatrix canvasMatrix = canvas->getTotalMatrix();
+            matrix.postConcat(canvasMatrix);
+            canvas->setMatrix(matrix);
+            onDraw(canvas, m_drawOpacity, 0, style);
+        }
     }
 
     if (!drawChildren)
@@ -819,6 +823,55 @@ bool LayerAndroid::drawCanvas(SkCanvas* canvas, bool drawChildren, PaintStyle st
 
     // When the layer is dirty, the UI thread should be notified to redraw.
     askScreenUpdate |= drawChildrenCanvas(canvas, style);
+    return askScreenUpdate;
+}
+
+void LayerAndroid::collect3dRenderingContext(Vector<LayerAndroid*>& layersInContext)
+{
+    layersInContext.append(this);
+    if (preserves3D()) {
+        int count = countChildren();
+        for (int i = 0; i < count; i++)
+            getChild(i)->collect3dRenderingContext(layersInContext);
+    }
+}
+
+bool LayerAndroid::drawSurfaceAndChildrenGL()
+{
+    bool askScreenUpdate = false;
+    if (surface()->getFirstLayer() == this)
+        askScreenUpdate |= surface()->drawGL(false);
+
+    // return early, since children will be painted directly by drawTreeSurfacesGL
+    if (preserves3D())
+        return askScreenUpdate;
+
+    int count = countChildren();
+    Vector <LayerAndroid*> sublayers;
+    for (int i = 0; i < count; i++)
+        sublayers.append(getChild(i));
+
+    std::stable_sort(sublayers.begin(), sublayers.end(), compareLayerZ);
+    for (int i = 0; i < count; i++)
+        askScreenUpdate |= sublayers[i]->drawTreeSurfacesGL();
+
+    return askScreenUpdate;
+}
+
+bool LayerAndroid::drawTreeSurfacesGL()
+{
+    bool askScreenUpdate = false;
+    if (preserves3D()) {
+        // hit a preserve-3d layer, so render the entire 3D rendering context in z order
+        Vector<LayerAndroid*> contextLayers;
+        collect3dRenderingContext(contextLayers);
+        std::stable_sort(contextLayers.begin(), contextLayers.end(), compareLayerZ);
+
+        for (unsigned int i = 0; i < contextLayers.size(); i++)
+            askScreenUpdate |= contextLayers[i]->drawSurfaceAndChildrenGL();
+    } else
+        askScreenUpdate |= drawSurfaceAndChildrenGL();
+
     return askScreenUpdate;
 }
 
@@ -960,60 +1013,42 @@ void LayerAndroid::setFixedPosition(FixedPositioning* position) {
     m_fixedPosition = position;
 }
 
-void LayerAndroid::dumpLayer(FILE* file, int indentLevel) const
+void LayerAndroid::dumpLayer(LayerDumper* dumper) const
 {
-    writeHexVal(file, indentLevel + 1, "layer", (int)this);
-    writeIntVal(file, indentLevel + 1, "layerId", m_uniqueId);
-    writeIntVal(file, indentLevel + 1, "haveClip", m_haveClip);
-    writeIntVal(file, indentLevel + 1, "isFixed", isPositionFixed());
+    dumper->writeIntVal("layerId", m_uniqueId);
+    dumper->writeIntVal("haveClip", m_haveClip);
+    dumper->writeIntVal("isFixed", isPositionFixed());
 
-    writeFloatVal(file, indentLevel + 1, "opacity", getOpacity());
-    writeSize(file, indentLevel + 1, "size", getSize());
-    writePoint(file, indentLevel + 1, "position", getPosition());
-    writePoint(file, indentLevel + 1, "anchor", getAnchorPoint());
+    dumper->writeFloatVal("opacity", getOpacity());
+    dumper->writeSize("size", getSize());
+    dumper->writePoint("position", getPosition());
+    dumper->writePoint("anchor", getAnchorPoint());
 
-    writeMatrix(file, indentLevel + 1, "drawMatrix", m_drawTransform);
-    writeMatrix(file, indentLevel + 1, "transformMatrix", m_transform);
-    writeRect(file, indentLevel + 1, "clippingRect", SkRect(m_clippingRect));
+    dumper->writeMatrix("drawMatrix", m_drawTransform);
+    dumper->writeMatrix("transformMatrix", m_transform);
+    dumper->writeRect("clippingRect", SkRect(m_clippingRect));
 
     if (m_content) {
-        writeIntVal(file, indentLevel + 1, "m_content.width", m_content->width());
-        writeIntVal(file, indentLevel + 1, "m_content.height", m_content->height());
+        dumper->writeIntVal("m_content.width", m_content->width());
+        dumper->writeIntVal("m_content.height", m_content->height());
     }
 
     if (m_fixedPosition)
-        return m_fixedPosition->dumpLayer(file, indentLevel);
+        m_fixedPosition->dumpLayer(dumper);
 }
 
-void LayerAndroid::dumpLayers(FILE* file, int indentLevel) const
+void LayerAndroid::dumpLayers(LayerDumper* dumper) const
 {
-    writeln(file, indentLevel, "{");
+    dumper->beginLayer(subclassName(), this);
+    dumpLayer(dumper);
 
-    dumpLayer(file, indentLevel);
-
+    dumper->beginChildren(countChildren());
     if (countChildren()) {
-        writeln(file, indentLevel + 1, "children = [");
-        for (int i = 0; i < countChildren(); i++) {
-            if (i > 0)
-                writeln(file, indentLevel + 1, ", ");
-            getChild(i)->dumpLayers(file, indentLevel + 1);
-        }
-        writeln(file, indentLevel + 1, "];");
+        for (int i = 0; i < countChildren(); i++)
+            getChild(i)->dumpLayers(dumper);
     }
-    writeln(file, indentLevel, "}");
-}
-
-void LayerAndroid::dumpToLog() const
-{
-    FILE* file = fopen("/data/data/com.android.browser/layertmp", "w");
-    dumpLayers(file, 0);
-    fclose(file);
-    file = fopen("/data/data/com.android.browser/layertmp", "r");
-    char buffer[512];
-    bzero(buffer, sizeof(buffer));
-    while (fgets(buffer, sizeof(buffer), file))
-        SkDebugf("%s", buffer);
-    fclose(file);
+    dumper->endChildren();
+    dumper->endLayer();
 }
 
 LayerAndroid* LayerAndroid::findById(int match)

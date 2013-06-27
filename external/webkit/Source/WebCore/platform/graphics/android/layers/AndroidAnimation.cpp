@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2009 The Android Open Source Project
+ * Copyright (C) 2012 Sony Mobile Communications AB.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,6 +13,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * NOTE: This file has been modified by Sony Mobile Communications AB.
+ * Modifications are licensed under the License.
  */
 
 #define LOG_TAG "AndroidAnimation"
@@ -64,6 +68,7 @@ AndroidAnimation::AndroidAnimation(AnimatedPropertyID type,
 
 AndroidAnimation::~AndroidAnimation()
 {
+    delete m_operations;
     gDebugAndroidAnimationInstances--;
 }
 

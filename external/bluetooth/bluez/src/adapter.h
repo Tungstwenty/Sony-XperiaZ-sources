@@ -251,6 +251,7 @@ struct btd_adapter_ops {
 	int (*le_remove_dev_white_list) (int index, bdaddr_t *bdaddr,
 							uint8_t addr_type);
 	int (*le_clear_white_list) (int index);
+	int (*le_cancel_create_conn) (int index, bdaddr_t *bdaddr);
 };
 
 int btd_register_adapter_ops(struct btd_adapter_ops *ops, gboolean priority);
@@ -327,3 +328,7 @@ int btd_adapter_register_rssi_watcher(struct btd_adapter *adapter,
 int btd_adapter_unregister_rssi_watcher(struct btd_adapter *adapter,
 		bdaddr_t *bdaddr);
 gboolean adapter_is_authenticating(struct btd_adapter *adapter);
+
+int btd_adapter_le_cancel_create_conn(struct btd_adapter *adapter,
+			bdaddr_t *bdaddr);
+gboolean device_is_hid_mouse(struct btd_adapter *adapter, const char *address);

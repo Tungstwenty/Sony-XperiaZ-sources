@@ -4,7 +4,7 @@ Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC 
 
 © Copyright  1995 - 2012 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
-  Copyright (C) 2012 Sony Mobile Communications AB.
+  Copyright (C) 2012-2013 Sony Mobile Communications AB.
 
  1.    INTRODUCTION
 The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
@@ -80,6 +80,9 @@ Am Wolfsmantel 33
 
 www.iis.fraunhofer.de/amm
 amm-info@iis.fraunhofer.de
+
+Changes made in the code.
+2013-03-21 - Added CStreamInfo->numAuBitsRemaining to enable decoding down to last bit of the buffers.
 ----------------------------------------------------------------------------------------------------------- */
 
 /*****************************  MPEG-4 AAC Decoder  **************************
@@ -866,6 +869,17 @@ LINKSPEC_CPP AAC_DECODER_ERROR CAacDecoder_Init(HANDLE_AACDECODER self, const CS
       self->chMapping[ch] = 255;
     }
   }
+ #ifdef TP_PCE_ENABLE
+  else {
+    if (CProgramConfig_IsValid(&asc->m_progrConfigElement)) {
+      /* Set matrix mixdown infos if available from PCE. */
+      pcmDmx_SetMatrixMixdownFromPce ( self->hPcmUtils,
+                                       asc->m_progrConfigElement.MatrixMixdownIndexPresent,
+                                       asc->m_progrConfigElement.MatrixMixdownIndex,
+                                       asc->m_progrConfigElement.PseudoSurroundEnable );
+    }
+  }
+ #endif
 
   self->streamInfo.channelConfig = asc->m_channelConfiguration;
 
@@ -1057,8 +1071,10 @@ LINKSPEC_CPP AAC_DECODER_ERROR CAacDecoder_DecodeFrame(
 
   self->frameOK = 1;
 
+  self->streamInfo.numAuBitsRemaining = transportDec_GetAuBitsRemaining(self->hInput, 0);
+
   /* Any supported base layer valid AU will require more than 16 bits. */
-  if ( (transportDec_GetAuBitsRemaining(self->hInput, 0) < 15) && (flags & (AACDEC_CONCEAL|AACDEC_FLUSH)) == 0) {
+  if ( (self->streamInfo.numAuBitsRemaining < 15) && (flags & (AACDEC_CONCEAL|AACDEC_FLUSH)) == 0) {
     self->frameOK = 0;
     ErrorStatus = AAC_DEC_DECODE_FRAME_ERROR;
   }
@@ -1436,6 +1452,7 @@ LINKSPEC_CPP AAC_DECODER_ERROR CAacDecoder_DecodeFrame(
 
           /* get the remaining bits of this frame */
           bitCnt = transportDec_GetAuBitsRemaining(self->hInput, 0);
+          self->streamInfo.numAuBitsRemaining = bitCnt;
 
           if ( (bitCnt > 0) && (self->flags & AC_SBR_PRESENT) && (self->flags & (AC_USAC|AC_RSVD50|AC_ELD)) )
           {
@@ -1503,8 +1520,8 @@ LINKSPEC_CPP AAC_DECODER_ERROR CAacDecoder_DecodeFrame(
 
     /* Check if all bits of the raw_data_block() have been read. */
     if ( transportDec_GetAuBitsTotal(self->hInput, 0) > 0 ) {
-      INT unreadBits = transportDec_GetAuBitsRemaining(self->hInput, 0);
-      if ( unreadBits != 0 ) {
+      self->streamInfo.numAuBitsRemaining = transportDec_GetAuBitsRemaining(self->hInput, 0);
+      if ( self->streamInfo.numAuBitsRemaining != 0 ) {
 
         self->frameOK = 0;
         /* Do not overwrite current error */
@@ -1512,7 +1529,7 @@ LINKSPEC_CPP AAC_DECODER_ERROR CAacDecoder_DecodeFrame(
           ErrorStatus = AAC_DEC_PARSE_ERROR;
         }
         /* Always put the bitbuffer at the right position after the current Access Unit. */
-        FDKpushBiDirectional(bs, unreadBits);
+        FDKpushBiDirectional(bs, self->streamInfo.numAuBitsRemaining);
       }
     }
 
@@ -1566,7 +1583,7 @@ LINKSPEC_CPP AAC_DECODER_ERROR CAacDecoder_DecodeFrame(
   self->streamInfo.numChannels = aacChannels;
 
  #ifdef TP_PCE_ENABLE
-  if (pceRead == 1 || CProgramConfig_IsValid(pce)) {
+  if (pceRead == 1 && CProgramConfig_IsValid(pce)) {
     /* Set matrix mixdown infos if available from PCE. */
     pcmDmx_SetMatrixMixdownFromPce ( self->hPcmUtils,
                                      pce->MatrixMixdownIndexPresent,
@@ -1647,10 +1664,6 @@ LINKSPEC_CPP AAC_DECODER_ERROR CAacDecoder_DecodeFrame(
               self->sbrEnabled
             );
 
-      if ( flags&AACDEC_FLUSH ) {
-        FDKmemclear(pAacDecoderChannelInfo->pSpectralCoefficient, sizeof(FIXP_DBL)*self->streamInfo.aacSamplesPerFrame);
-      }
-
       switch (pAacDecoderChannelInfo->renderMode)
       {
         case AACDEC_RENDER_IMDCT:
@@ -1678,6 +1691,7 @@ LINKSPEC_CPP AAC_DECODER_ERROR CAacDecoder_DecodeFrame(
           break;
       }
       if ( flags&AACDEC_FLUSH ) {
+          FDKmemclear(pAacDecoderChannelInfo->pSpectralCoefficient, sizeof(FIXP_DBL)*self->streamInfo.aacSamplesPerFrame);
         FDKmemclear(self->pAacDecoderStaticChannelInfo[c]->pOverlapBuffer, OverlapBufferSize*sizeof(FIXP_DBL));
       }
     }
@@ -1714,6 +1728,8 @@ LINKSPEC_CPP AAC_DECODER_ERROR CAacDecoder_DecodeFrame(
   }
 
   self->blockNumber++;
+
+  self->streamInfo.numAuBitsRemaining = transportDec_GetAuBitsRemaining(self->hInput, 0);
 
   return ErrorStatus;
 }

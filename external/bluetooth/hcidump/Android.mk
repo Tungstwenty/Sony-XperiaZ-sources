@@ -1,4 +1,4 @@
-ifeq ($(BOARD_HAVE_BLUETOOTH),true)
+ifeq ($(BOARD_HAVE_BLUETOOTH_BLUEZ),true)
 
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)

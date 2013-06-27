@@ -622,7 +622,7 @@ static inline bool shouldIgnoreAttributeCase(const Element* e)
     return e && e->document()->isHTMLDocument() && e->isHTMLElement();
 }
 
-const AtomicString& Element::getAttribute(const String& name) const
+const AtomicString& Element::getAttribute(const AtomicString& name) const
 {
     bool ignoreCase = shouldIgnoreAttributeCase(this);
     
@@ -645,7 +645,7 @@ const AtomicString& Element::getAttribute(const String& name) const
     return nullAtom;
 }
 
-const AtomicString& Element::getAttributeNS(const String& namespaceURI, const String& localName) const
+const AtomicString& Element::getAttributeNS(const AtomicString& namespaceURI, const AtomicString& localName) const
 {
     return getAttribute(QualifiedName(nullAtom, localName, namespaceURI));
 }
@@ -1069,21 +1069,6 @@ bool Element::pseudoStyleCacheIsInvalid(const RenderStyle* currentStyle, RenderS
     return false;
 }
 
-#ifdef ANDROID_STYLE_VERSION
-static bool displayDiff(const RenderStyle* s1, const RenderStyle* s2)
-{
-    if (!s1 && !s2)
-        return false;
-    else if ((!s1 && s2) || (s1 && !s2))
-        return true;
-
-    return s1->display() != s2->display()
-        || s1->left() != s2->left() || s1->top() != s2->top()
-        || s1->right() != s2->right() || s1->bottom() != s2->bottom()
-        || s1->width() != s2->width() || s1->height() != s2->height();
-}
-#endif
-
 void Element::recalcStyle(StyleChange change)
 {
     // Ref currentStyle in case it would otherwise be deleted when setRenderStyle() is called.
@@ -1092,11 +1077,6 @@ void Element::recalcStyle(StyleChange change)
     bool hasDirectAdjacentRules = currentStyle && currentStyle->childrenAffectedByDirectAdjacentRules();
 
     if ((change > NoChange || needsStyleRecalc())) {
-#ifdef ANDROID_STYLE_VERSION
-        RefPtr<RenderStyle> newStyle = document()->styleForElementIgnoringPendingStylesheets(this);
-        if (displayDiff(currentStyle.get(), newStyle.get()))
-            document()->incStyleVersion();
-#endif
         if (hasRareData())
             rareData()->resetComputedStyle();
     }
@@ -1491,11 +1471,11 @@ void Element::setAttributeNS(const AtomicString& namespaceURI, const AtomicStrin
     setAttribute(qName, value, ec);
 }
 
-void Element::removeAttribute(const String& name, ExceptionCode& ec)
+void Element::removeAttribute(const AtomicString& name, ExceptionCode& ec)
 {
     InspectorInstrumentation::willModifyDOMAttr(document(), this);
 
-    String localName = shouldIgnoreAttributeCase(this) ? name.lower() : name;
+    AtomicString localName = shouldIgnoreAttributeCase(this) ? name.lower() : name;
 
     if (m_attributeMap) {
         m_attributeMap->removeNamedItem(localName, ec);
@@ -1506,21 +1486,21 @@ void Element::removeAttribute(const String& name, ExceptionCode& ec)
     InspectorInstrumentation::didModifyDOMAttr(document(), this);
 }
 
-void Element::removeAttributeNS(const String& namespaceURI, const String& localName, ExceptionCode& ec)
+void Element::removeAttributeNS(const AtomicString& namespaceURI, const AtomicString& localName, ExceptionCode& ec)
 {
     removeAttribute(QualifiedName(nullAtom, localName, namespaceURI), ec);
 }
 
-PassRefPtr<Attr> Element::getAttributeNode(const String& name)
+PassRefPtr<Attr> Element::getAttributeNode(const AtomicString& name)
 {
     NamedNodeMap* attrs = attributes(true);
     if (!attrs)
         return 0;
-    String localName = shouldIgnoreAttributeCase(this) ? name.lower() : name;
+    AtomicString localName = shouldIgnoreAttributeCase(this) ? name.lower() : name;
     return static_pointer_cast<Attr>(attrs->getNamedItem(localName));
 }
 
-PassRefPtr<Attr> Element::getAttributeNodeNS(const String& namespaceURI, const String& localName)
+PassRefPtr<Attr> Element::getAttributeNodeNS(const AtomicString& namespaceURI, const AtomicString& localName)
 {
     NamedNodeMap* attrs = attributes(true);
     if (!attrs)
@@ -1528,7 +1508,7 @@ PassRefPtr<Attr> Element::getAttributeNodeNS(const String& namespaceURI, const S
     return static_pointer_cast<Attr>(attrs->getNamedItem(QualifiedName(nullAtom, localName, namespaceURI)));
 }
 
-bool Element::hasAttribute(const String& name) const
+bool Element::hasAttribute(const AtomicString& name) const
 {
     NamedNodeMap* attrs = attributes(true);
     if (!attrs)
@@ -1536,11 +1516,11 @@ bool Element::hasAttribute(const String& name) const
 
     // This call to String::lower() seems to be required but
     // there may be a way to remove it.
-    String localName = shouldIgnoreAttributeCase(this) ? name.lower() : name;
+    AtomicString localName = shouldIgnoreAttributeCase(this) ? name.lower() : name;
     return attrs->getAttributeItem(localName, false);
 }
 
-bool Element::hasAttributeNS(const String& namespaceURI, const String& localName) const
+bool Element::hasAttributeNS(const AtomicString& namespaceURI, const AtomicString& localName) const
 {
     NamedNodeMap* attrs = attributes(true);
     if (!attrs)

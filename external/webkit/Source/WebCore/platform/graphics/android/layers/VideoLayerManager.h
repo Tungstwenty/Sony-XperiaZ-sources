@@ -1,5 +1,6 @@
 /*
  * Copyright 2011 The Android Open Source Project
+ * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,9 +29,12 @@
 
 #include "GLUtils.h"
 #include "IntRect.h"
+#include "IntSize.h"
+#include "RenderSkinMediaButton.h"
 #include <wtf/HashMap.h>
 #include <wtf/Vector.h>
 #include <utils/threads.h>
+#include "SkBitmapRef.h"
 
 #if USE(ACCELERATED_COMPOSITING)
 
@@ -47,6 +51,8 @@ enum IconType {
     PauseIcon
 };
 
+static const size_t surfaceMatrixSize = 4 * 4;
+
 // state get from UI thread to decide which image to draw.
 // PREPARING should be the progressing image
 // PLAYING will be the Video (Surface Texture).
@@ -55,22 +61,20 @@ enum IconType {
 // Please keep them in sync when changed here.
 typedef enum {RELEASED, INITIALIZED, PREPARING, PREPARED, PLAYING, BUFFERING, DETACHED} PlayerState;
 
-static const size_t surfaceMatrixSize = 4 * 4;
-
 // Every video layer can use its uniqueId to query VideoLayerManager about such
 // info globally.
 struct VideoLayerInfo {
     GLuint textureId; // GL texture bound with the surface texture.
-    int videoSize; // The size of the video.
-    float aspectRatio; // The aspect ratio of the video.
+    IntSize videoSize; // The video size.
     int timeStamp; // Used to decide which VideoLayerInfo is the oldest one.
     GLfloat surfaceMatrix[surfaceMatrixSize];
     bool matrixInitialized;
     bool canBeRecycled;
-
+    bool frameCapture;
+    SkRefPtr<SkBitmapRef> bitmapRef;
+    PlayerState playerState;
     double lastIconShownTime;
     IconState iconState;
-    PlayerState playerState;
 };
 
 
@@ -84,16 +88,15 @@ public:
     // Register the texture when we got setSurfaceTexture call.
     void registerTexture(const int layerId, const GLuint textureId);
     // Update the size when the video is prepared.
-    void updateVideoLayerSize(const int layerId, const int size, const float ratio);
-    // At draw time, update the matrix for every video frame update.
-    void updateMatrix(const int layerId, const GLfloat* matrix);
+    void updateVideoLayerSize(const int layerId, const int width, const int height);
     // Set the player state
     void updatePlayerState(const int layerId, const PlayerState playerState);
+    // At draw time, update the matrix for every video frame update.
+    void updateMatrix(const int layerId, const GLfloat* matrix);
     // Remove the layer info from the mapping.
     void removeLayer(const int layerId);
     // Mark this texture to be eligible for recycling if needed
     void markTextureForRecycling(const int layerId, const GLuint textureId);
-
     // Return the texture name corresponding to the layerId
     GLuint getTextureId(const int layerId);
     // Return the matrix for surface texture corresponding to the layerId
@@ -102,6 +105,11 @@ public:
     float getAspectRatio(const int layerId);
     // Return the player state
     PlayerState getPlayerState(const int layerId);
+    IntSize getVideoNaturalSize(const int layerId);
+    void requestFrameCapture(const int layerId);
+    bool serviceFrameCapture(const int layerId);
+    void pushBitmap(const int layerId, SkBitmapRef* bitmap);
+    SkBitmapRef* popBitmap(const int layerId);
 
     // Delete the GL textures
     void deleteUnusedTextures();
@@ -141,7 +149,7 @@ private:
     WTF::Vector<GLuint> m_retiredTextures;
     android::Mutex m_retiredTexturesLock;
 
-    GLuint createTextureFromImage(int buttonType);
+    GLuint createTextureFromImage(RenderSkinMediaButton::MediaButton buttonType);
 
     // Texture for showing the static image will be created at native side.
     bool m_createdTexture;

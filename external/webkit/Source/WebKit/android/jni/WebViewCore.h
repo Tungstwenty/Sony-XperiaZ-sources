@@ -1,5 +1,6 @@
 /*
  * Copyright 2006, The Android Open Source Project
+ * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
  * Copyright (C) 2012 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,6 +35,7 @@
 #include "DOMSelection.h"
 #include "FileChooser.h"
 #include "FocusDirection.h"
+#include "GeolocationManager.h"
 #include "HitTestResult.h"
 #include "PicturePile.h"
 #include "PlatformGraphicsContext.h"
@@ -84,6 +86,7 @@ namespace WebCore {
 #endif
 
 namespace WebCore {
+    class AudioDestination;
     class BaseLayerAndroid;
 }
 
@@ -205,13 +208,9 @@ namespace android {
         /**
          * Tell the java side to update the focused textfield
          * @param pointer   Pointer to the node for the input field.
-         * @param   changeToPassword  If true, we are changing the textfield to
-         *          a password field, and ignore the WTF::String
-         * @param text  If changeToPassword is false, this is the new text that
-         *              should go into the textfield.
+         * @param text  This is the new text that should go into the textfield.
          */
-        void updateTextfield(WebCore::Node* pointer,
-                bool changeToPassword, const WTF::String& text);
+        void updateTextfield(WebCore::Node* pointer, const WTF::String& text);
 
         /**
          * Tell the java side to update the current selection in the focused
@@ -400,7 +399,7 @@ namespace android {
         /**
          * Scroll the focused textfield to (x, y) in document space
          */
-        WebCore::IntRect scrollFocusedTextInput(float x, int y);
+        void scrollFocusedTextInput(float x, int y);
         /**
          * Set the FocusController's active and focused states, so that
          * the caret will draw (true) or not.
@@ -423,6 +422,17 @@ namespace android {
 
         void dumpDomTree(bool);
         void dumpRenderTree(bool);
+
+#if ENABLE(WEB_AUDIO)
+        /*  We maintain a list of active audio tracks. The list is edited by the
+            AudioDestination. The list is used to pause/resume audio playback
+            when WebViewCore thread is paused/resumed.
+         */
+        void addAudioDestination(WebCore::AudioDestination*);
+        void removeAudioDestination(WebCore::AudioDestination*);
+        void pauseAudioDestinations();
+        void resumeAudioDestinations();
+#endif
 
         /*  We maintain a list of active plugins. The list is edited by the
             pluginview itself. The list is used to service invals to the plugin
@@ -512,8 +522,6 @@ namespace android {
         // reset the picture set to empty
         void clearContent();
 
-        bool focusBoundsChanged();
-
         // record content in a new BaseLayerAndroid, copying the layer tree as well
         WebCore::BaseLayerAndroid* recordContent(SkIPoint* );
 
@@ -530,8 +538,6 @@ namespace android {
         WebCore::Frame* mainFrame() const { return m_mainFrame; }
         WebCore::Frame* focusedFrame() const;
 
-        void notifyWebAppCanBeInstalled();
-
         void deleteText(int startX, int startY, int endX, int endY);
         WTF::String getText(int startX, int startY, int endX, int endY);
         void insertText(const WTF::String &text);
@@ -543,18 +549,18 @@ namespace android {
         void updateMatchCount() const;
 
 #if ENABLE(VIDEO)
-        void enterFullscreenForVideoLayer(int layerId, const WTF::String& url);
+        void enterFullscreenForVideoLayer();
         void exitFullscreenVideo();
 #endif
 
         void setWebTextViewAutoFillable(int queryId, const string16& previewSummary);
 
         DeviceMotionAndOrientationManager* deviceMotionAndOrientationManager() { return &m_deviceMotionAndOrientationManager; }
+        GeolocationManager* geolocationManager() { return &m_geolocationManager; }
 
         void listBoxRequest(WebCoreReply* reply, const uint16_t** labels,
                 size_t count, const int enabled[], size_t enabledCount,
                 bool multiple, const int selected[], size_t selectedCountOrSelection);
-        bool isPaused() const { return m_isPaused; }
         void setIsPaused(bool isPaused) { m_isPaused = isPaused; }
         void setIsContentDrawPaused(bool isPaused);
         bool drawIsPaused() const;
@@ -576,6 +582,7 @@ namespace android {
         static jobject getApplicationContext();
         // Check whether a media mimeType is supported in Android media framework.
         static bool isSupportedMediaMimeType(const WTF::String& mimeType);
+        static bool isPlayListMimeType(const WTF::String& mimeType);
 
         /**
          * Returns all text ranges consumed by the cursor points referred
@@ -586,7 +593,7 @@ namespace android {
                 int startX, int startY, int endX, int endY);
         static int platformLayerIdFromNode(WebCore::Node* node,
                                            WebCore::LayerAndroid** outLayer = 0);
-        void selectText(int startX, int startY, int endX, int endY);
+        void selectText(SelectText::HandleId handleId, int x, int y);
         bool selectWordAt(int x, int y);
 
         // Converts from the global content coordinates that WebView sends
@@ -734,18 +741,20 @@ namespace android {
         void setSelectionCaretInfo(SelectText* selectTextContainer,
                 const WebCore::Position& position,
                 const WebCore::IntPoint& frameOffset,
-                SelectText::HandleId handleId, int offset,
-                EAffinity affinity);
+                SelectText::HandleId handleId, SelectText::HandleType handleType,
+                int offset, EAffinity affinity);
         static int getMaxLength(WebCore::Node* node);
         static WTF::String getFieldName(WebCore::Node* node);
         static bool isAutoCompleteEnabled(WebCore::Node* node);
-        WebCore::IntRect absoluteContentRect(WebCore::Node* node,
+        WebCore::IntRect absoluteClientRect(WebCore::Node* node,
                 WebCore::LayerAndroid* layer);
         static WebCore::IntRect positionToTextRect(const WebCore::Position& position,
-                WebCore::EAffinity affinity, const WebCore::IntPoint& offset);
+                WebCore::EAffinity affinity, const WebCore::IntPoint& offset,
+                const WebCore::IntRect& caretRect);
         static bool isLtr(const WebCore::Position& position);
-        static WebCore::Position trimSelectionPosition(
-                const WebCore::Position& start, const WebCore::Position& stop);
+        static WebCore::VisiblePosition trimSelectionPosition(
+                const WebCore::VisiblePosition& start,
+                const WebCore::VisiblePosition& stop);
 
         // called from constructor, to add this to a global list
         static void addInstance(WebViewCore*);
@@ -765,7 +774,6 @@ namespace android {
         // Used in passToJS to avoid updating the UI text field until after the
         // key event has been processed.
         bool m_blockTextfieldUpdates;
-        bool m_focusBoundsChanged;
         bool m_skipContentDraw;
         // Passed in with key events to know when they were generated.  Store it
         // with the cache so that we can ignore stale text changes.
@@ -799,6 +807,9 @@ namespace android {
         int m_activeMatchIndex;
         RefPtr<WebCore::Range> m_activeMatch;
 
+#if ENABLE(WEB_AUDIO)
+        SkTDArray<AudioDestination*> m_audioDestinations;
+#endif
         SkTDArray<PluginWidgetAndroid*> m_plugins;
         WebCore::Timer<WebViewCore> m_pluginInvalTimer;
         void pluginInvalTimerFired(WebCore::Timer<WebViewCore>*) {
@@ -808,6 +819,7 @@ namespace android {
         int m_screenOnCounter;
         WebCore::Node* m_currentNodeDomNavigationAxis;
         DeviceMotionAndOrientationManager m_deviceMotionAndOrientationManager;
+        GeolocationManager m_geolocationManager;
 
 #if ENABLE(TOUCH_EVENTS)
         bool m_forwardingTouchEvents;

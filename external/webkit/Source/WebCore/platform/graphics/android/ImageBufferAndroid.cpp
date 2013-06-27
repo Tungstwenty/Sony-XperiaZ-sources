@@ -34,6 +34,7 @@
 #include "NotImplemented.h"
 #include "PlatformBridge.h"
 #include "PlatformGraphicsContext.h"
+#include "PlatformGraphicsContextSkia.h"
 #include "SkBitmapRef.h"
 #include "SkCanvas.h"
 #include "SkColorPriv.h"
@@ -43,7 +44,6 @@
 #include "SkPicture.h"
 #include "SkStream.h"
 #include "SkUnPreMultiply.h"
-#include "android_graphics.h"
 #include "CanvasLayerAndroid.h"
 
 #include "image-encoders/skia/JPEGImageEncoder.h"
@@ -53,6 +53,16 @@
 using namespace std;
 
 namespace WebCore {
+
+SkCanvas* imageBufferCanvas(const ImageBuffer* buffer)
+{
+    // We know that our PlatformGraphicsContext is a PlatformGraphicsContextSkia
+    // because that is what we create in GraphicsContext::createOffscreenContext
+    if (!buffer || !buffer->context())
+        return 0;
+    PlatformGraphicsContext* pc = buffer->context()->platformContext();
+    return static_cast<PlatformGraphicsContextSkia*>(pc)->canvas();
+}
 
 ImageBufferData::ImageBufferData(const IntSize&)
 {
@@ -141,7 +151,7 @@ PassRefPtr<Image> ImageBuffer::copyImage() const
     if (context()->platformContext()->isRecording())
         context()->platformContext()->convertToNonRecording();
 
-    SkCanvas* canvas = context()->platformContext()->getCanvas();
+    SkCanvas* canvas = imageBufferCanvas(this);
     if (!canvas)
       return 0;
 
@@ -188,7 +198,7 @@ PassRefPtr<ByteArray> ImageBuffer::getUnmultipliedImageData(const IntRect& rect)
         return 0;
     }
 
-    const SkBitmap& src = android_gc2canvas(gc)->getDevice()->accessBitmap(false);
+    const SkBitmap& src = imageBufferCanvas(this)->getDevice()->accessBitmap(false);
     SkAutoLockPixels alp(src);
     if (!src.getPixels()) {
         return 0;
@@ -256,7 +266,7 @@ void ImageBuffer::putUnmultipliedImageData(ByteArray* source, const IntSize& sou
         return;
     }
 
-    const SkBitmap& dst = android_gc2canvas(gc)->getDevice()->accessBitmap(true);
+    const SkBitmap& dst = imageBufferCanvas(this)->getDevice()->accessBitmap(true);
     SkAutoLockPixels alp(dst);
     if (!dst.getPixels()) {
         return;
@@ -343,20 +353,23 @@ String ImageBuffer::toDataURL(const String& mimeType, const double* quality) con
     if (context()->platformContext()->isRecording())
         context()->platformContext()->convertToNonRecording();
 
-    SkCanvas* canvas = android_gc2canvas(context());
-    SkDevice* device = canvas->getDevice();
-    SkBitmap bitmap = device->accessBitmap(false);
-    // if we can't see the pixels directly, call readPixels() to get a copy.
-    // this could happen if the device is backed by a GPU.
-    bitmap.lockPixels(); // balanced by our destructor, or explicitly if getPixels() fails
-    if (!bitmap.getPixels()) {
-        bitmap.unlockPixels();
-        SkIRect bounds = SkIRect::MakeWH(device->width(), device->height());
-        if (!canvas->readPixels(bounds, &bitmap))
-            return "data:,";
-    }
+    // Encode the image into a vector.
+    SkDynamicMemoryWStream pngStream;
+    const SkBitmap& dst = imageBufferCanvas(this)->getDevice()->accessBitmap(true);
+    SkImageEncoder::EncodeStream(&pngStream, dst, SkImageEncoder::kPNG_Type, 100);
 
-    return ImageToDataURL(bitmap, mimeType, quality);
+    // Convert it into base64.
+    Vector<char> pngEncodedData;
+    SkData* streamData = pngStream.copyToData();
+    pngEncodedData.append((char*)streamData->data(), streamData->size());
+    streamData->unref();
+    Vector<char> base64EncodedData;
+    base64Encode(pngEncodedData, base64EncodedData);
+    // Append with a \0 so that it's a valid string.
+    base64EncodedData.append('\0');
+
+    // And the resulting string.
+    return String::format("data:image/png;base64,%s", base64EncodedData.data());
 }
 
 void ImageBuffer::platformTransformColorSpace(const Vector<int>& lookupTable)

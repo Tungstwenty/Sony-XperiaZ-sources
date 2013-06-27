@@ -6,7 +6,6 @@
  *  Copyright (C) 2004-2010  Marcel Holtmann <marcel@holtmann.org>
  *  Copyright (C) 2010-2012, The Linux Foundation. All rights reserved.
  *  Copyright (C) 2012 Sony Ericsson Mobile Communications AB
- *  Copyright (C) 2013 Sony Mobile Communications AB
  *
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -75,6 +74,7 @@ struct a2dp_data {
 	struct avdtp *session;
 	struct avdtp_stream *stream;
 	struct a2dp_sep *sep;
+	guint timer_id;
 };
 
 struct headset_data {
@@ -228,59 +228,7 @@ static service_type_t select_service(struct audio_device *dev, const char *inter
 	return TYPE_NONE;
 }
 
-static void a2dp_local_resume_complete(struct avdtp *session,
-				struct avdtp_error *err, void *user_data)
-{
-	struct unix_client *client = user_data;
-	struct a2dp_data *a2dp;
 
-	if (!g_slist_find(clients, client)) {
-		DBG("Client disconnected");
-		return;
-	}
-
-	if (!err)
-		return;
-
-	a2dp = &client->d.a2dp;
-	error("resume failed with err %d", err);
-	if (client->cb_id > 0) {
-		avdtp_stream_remove_cb(a2dp->session, a2dp->stream,
-					client->cb_id);
-		client->cb_id = 0;
-	}
-
-	if (a2dp->sep) {
-		a2dp_sep_unlock(a2dp->sep, a2dp->session);
-		a2dp->sep = NULL;
-	}
-
-	avdtp_unref(a2dp->session);
-	a2dp->session = NULL;
-	a2dp->stream = NULL;
-}
-
-static gboolean a2dp_local_resume(void *data)
-{
-	struct unix_client *client = data;
-	struct a2dp_data *a2dp;
-	DBG("a2dp_resume being called");
-
-	if (!g_slist_find(clients, client)) {
-		DBG("Client disconnected");
-		return FALSE;
-	}
-
-	a2dp = &client->d.a2dp;
-	if (!a2dp)
-		return TRUE;
-
-	if (a2dp->session)
-		a2dp_resume(a2dp->session, a2dp->sep,
-				a2dp_local_resume_complete, client);
-
-	return FALSE;
-}
 
 static void stream_state_changed(struct avdtp_stream *stream,
 					avdtp_state_t old_state,
@@ -313,11 +261,6 @@ static void stream_state_changed(struct avdtp_stream *stream,
 		break;
 	case AVDTP_STATE_OPEN:
 		DBG("new state and old state are %d, %d", new_state, old_state);
-		if ((old_state == AVDTP_STATE_STREAMING) &&
-		    (client->local_suspend == FALSE)) {
-			DBG("a2dp_resume being called as remote suspend triggered");
-			g_timeout_add(RESUME_TIMEOUT, a2dp_local_resume, client);
-		}
 	default:
 		break;
 	}

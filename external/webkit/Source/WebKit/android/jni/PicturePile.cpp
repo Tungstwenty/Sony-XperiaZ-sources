@@ -1,6 +1,5 @@
 /*
  * Copyright 2012, The Android Open Source Project
- * Copyright (C) 2012 Sony Mobile Communications AB
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -22,9 +21,6 @@
  * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * NOTE: This file has been modified by Sony Mobile Communications AB.
- * Modifications are licensed under the License.
  */
 
 #define LOG_TAG "PicturePile"
@@ -39,12 +35,17 @@
 #include "PlatformGraphicsContextSkia.h"
 #include "SkCanvas.h"
 #include "SkNWayCanvas.h"
-#include "SkPicture.h"
 #include "SkPixelRef.h"
 #include "SkRect.h"
 #include "SkRegion.h"
 
-#define ENABLE_PRERENDERED_INVALS false
+#if USE_RECORDING_CONTEXT
+#include "PlatformGraphicsContextRecording.h"
+#else
+#include "SkPicture.h"
+#endif
+
+#define ENABLE_PRERENDERED_INVALS true
 #define MAX_OVERLAP_COUNT 2
 #define MAX_OVERLAP_AREA .7
 
@@ -54,11 +55,18 @@ static SkIRect toSkIRect(const IntRect& rect) {
     return SkIRect::MakeXYWH(rect.x(), rect.y(), rect.width(), rect.height());
 }
 
-static IntRect extractClipBounds(SkCanvas* canvas, const IntSize& size) {
-    SkRect clip;
-    canvas->getClipBounds(&clip);
-    clip.intersect(0, 0, size.width(), size.height());
-    return enclosingIntRect(clip);
+PictureContainer::PictureContainer(const PictureContainer& other)
+    : picture(other.picture)
+    , area(other.area)
+    , dirty(other.dirty)
+    , prerendered(other.prerendered)
+{
+    SkSafeRef(picture);
+}
+
+PictureContainer::~PictureContainer()
+{
+    SkSafeUnref(picture);
 }
 
 PicturePile::PicturePile(const PicturePile& other)
@@ -66,15 +74,6 @@ PicturePile::PicturePile(const PicturePile& other)
     , m_pile(other.m_pile)
     , m_webkitInvals(other.m_webkitInvals)
 {
-}
-
-PicturePile::PicturePile(SkPicture* picture)
-{
-    m_size = IntSize(picture->width(), picture->height());
-    PictureContainer pc(IntRect(0, 0, m_size.width(), m_size.height()));
-    pc.picture = picture;
-    pc.dirty = false;
-    m_pile.append(pc);
 }
 
 void PicturePile::draw(SkCanvas* canvas)
@@ -85,10 +84,10 @@ void PicturePile::draw(SkCanvas* canvas)
      * the rect bounds of the SkRegion for the clip, so this still can't be
      * used for translucent surfaces
      */
-    TRACE_METHOD();
-    IntRect clipBounds = extractClipBounds(canvas, m_size);
-    SkRegion clipRegion(toSkIRect(clipBounds));
-    drawWithClipRecursive(canvas, clipRegion, m_pile.size() - 1);
+    if (canvas->quickReject(SkRect::MakeWH(m_size.width(), m_size.height()),
+            SkCanvas::kBW_EdgeType))
+        return;
+    drawWithClipRecursive(canvas, m_pile.size() - 1);
 }
 
 void PicturePile::clearPrerenders()
@@ -97,25 +96,23 @@ void PicturePile::clearPrerenders()
         m_pile[i].prerendered.clear();
 }
 
-void PicturePile::drawWithClipRecursive(SkCanvas* canvas, SkRegion& clipRegion,
-                                        int index)
+void PicturePile::drawWithClipRecursive(SkCanvas* canvas, int index)
 {
     // TODO: Add some debug visualizations of this
-    if (index < 0 || clipRegion.isEmpty())
+    if (index < 0)
         return;
     PictureContainer& pc = m_pile[index];
-    IntRect intersection = clipRegion.getBounds();
-    intersection.intersect(pc.area);
-    if (pc.picture && !intersection.isEmpty()) {
-        clipRegion.op(intersection, SkRegion::kDifference_Op);
-        drawWithClipRecursive(canvas, clipRegion, index - 1);
-        int saved = canvas->save();
-        canvas->clipRect(intersection);
-        canvas->translate(pc.area.x(), pc.area.y());
-        canvas->drawPicture(*pc.picture);
+    if (pc.picture && !canvas->quickReject(pc.area, SkCanvas::kBW_EdgeType)) {
+        int saved = canvas->save(SkCanvas::kClip_SaveFlag);
+        if (canvas->clipRect(pc.area, SkRegion::kDifference_Op))
+            drawWithClipRecursive(canvas, index - 1);
+        canvas->restoreToCount(saved);
+        saved = canvas->save(SkCanvas::kClip_SaveFlag);
+        if (canvas->clipRect(pc.area))
+            drawPicture(canvas, pc);
         canvas->restoreToCount(saved);
     } else
-        drawWithClipRecursive(canvas, clipRegion, index - 1);
+        drawWithClipRecursive(canvas, index - 1);
 }
 
 // Used by WebViewCore
@@ -144,14 +141,30 @@ void PicturePile::setSize(const IntSize& size)
 {
     if (m_size == size)
         return;
+    IntSize oldSize = m_size;
     m_size = size;
-    // TODO: See above about just adding invals for new content
-    m_pile.clear();
-    m_webkitInvals.clear();
-    if (!size.isEmpty()) {
-        IntRect area(0, 0, size.width(), size.height());
-        m_webkitInvals.append(area);
-        m_pile.append(area);
+    if (size.width() <= oldSize.width() && size.height() <= oldSize.height()) {
+        // We are shrinking - huzzah, nothing to do!
+        // TODO: Loop through and throw out Pictures that are now clipped out
+    } else if (oldSize.width() == size.width()) {
+        // Only changing vertically
+        IntRect rect(0, std::min(oldSize.height(), size.height()),
+                     size.width(), std::abs(oldSize.height() - size.height()));
+        invalidate(rect);
+    } else if (oldSize.height() == size.height()) {
+        // Only changing horizontally
+        IntRect rect(std::min(oldSize.width(), size.width()), 0,
+                     std::abs(oldSize.width() - size.width()), size.height());
+        invalidate(rect);
+    } else {
+        // Both width & height changed, full inval :(
+        m_pile.clear();
+        m_webkitInvals.clear();
+        if (!size.isEmpty()) {
+            IntRect area(0, 0, size.width(), size.height());
+            m_webkitInvals.append(area);
+            m_pile.append(area);
+        }
     }
 }
 
@@ -167,43 +180,8 @@ void PicturePile::updatePicturesIfNeeded(PicturePainter* painter)
 
 void PicturePile::updatePicture(PicturePainter* painter, PictureContainer& pc)
 {
-    /* The ref counting here is a bit unusual. What happens is begin/end recording
-     * will ref/unref the recording canvas. However, 'canvas' might be pointing
-     * at an SkNWayCanvas instead of the recording canvas, which needs to be
-     * unref'd. Thus what we do is ref the recording canvas so that we can
-     * always unref whatever canvas we have at the end.
-     */
     TRACE_METHOD();
-    SkPicture* picture = new SkPicture();
-    SkCanvas* canvas = picture->beginRecording(pc.area.width(), pc.area.height(),
-            SkPicture::kUsePathBoundsForClip_RecordingFlag);
-    SkSafeRef(canvas);
-    canvas->translate(-pc.area.x(), -pc.area.y());
-    IntRect drawArea = pc.area;
-    if (pc.prerendered.get()) {
-        SkCanvas* prerender = painter->createPrerenderCanvas(pc.prerendered.get());
-        if (!prerender) {
-            ALOGV("Failed to create prerendered for " INT_RECT_FORMAT,
-                    INT_RECT_ARGS(pc.prerendered->area));
-            pc.prerendered.clear();
-        } else {
-            drawArea.unite(pc.prerendered->area);
-            SkNWayCanvas* nwayCanvas = new SkNWayCanvas(drawArea.width(), drawArea.height());
-            nwayCanvas->translate(-drawArea.x(), -drawArea.y());
-            nwayCanvas->addCanvas(canvas);
-            nwayCanvas->addCanvas(prerender);
-            SkSafeUnref(canvas);
-            SkSafeUnref(prerender);
-            canvas = nwayCanvas;
-        }
-    }
-    WebCore::PlatformGraphicsContextSkia pgc(canvas);
-    WebCore::GraphicsContext gc(&pgc);
-    ALOGV("painting picture: " INT_RECT_FORMAT, INT_RECT_ARGS(drawArea));
-    painter->paintContents(&gc, drawArea);
-    SkSafeUnref(canvas);
-    picture->endRecording();
-
+    Picture* picture = recordPicture(painter, pc);
     SkSafeUnref(pc.picture);
     pc.picture = picture;
     pc.dirty = false;
@@ -301,5 +279,98 @@ PrerenderedInval* PicturePile::prerenderedInvalForArea(const IntRect& area)
     }
     return 0;
 }
+
+float PicturePile::maxZoomScale() const
+{
+    float maxZoomScale = 1;
+    for (size_t i = 0; i < m_pile.size(); i++) {
+        maxZoomScale = std::max(maxZoomScale, m_pile[i].maxZoomScale);
+    }
+    return maxZoomScale;
+}
+
+bool PicturePile::isEmpty() const
+{
+    for (size_t i = 0; i < m_pile.size(); i++) {
+        if (m_pile[i].picture)
+            return false;
+    }
+    return true;
+}
+
+#if USE_RECORDING_CONTEXT
+void PicturePile::drawPicture(SkCanvas* canvas, PictureContainer& pc)
+{
+    TRACE_METHOD();
+    pc.picture->draw(canvas);
+}
+
+Picture* PicturePile::recordPicture(PicturePainter* painter, PictureContainer& pc)
+{
+    pc.prerendered.clear(); // TODO: Support? Not needed?
+
+    Recording* picture = new Recording();
+    WebCore::PlatformGraphicsContextRecording pgc(picture);
+    WebCore::GraphicsContext gc(&pgc);
+    painter->paintContents(&gc, pc.area);
+    pc.maxZoomScale = pgc.maxZoomScale();
+    if (pgc.isEmpty()) {
+        SkSafeUnref(picture);
+        picture = 0;
+    }
+
+    return picture;
+}
+#else
+void PicturePile::drawPicture(SkCanvas* canvas, PictureContainer& pc)
+{
+    canvas->translate(pc.area.x(), pc.area.y());
+    pc.picture->draw(canvas);
+}
+
+Picture* PicturePile::recordPicture(PicturePainter* painter, PictureContainer& pc)
+{
+    /* The ref counting here is a bit unusual. What happens is begin/end recording
+     * will ref/unref the recording canvas. However, 'canvas' might be pointing
+     * at an SkNWayCanvas instead of the recording canvas, which needs to be
+     * unref'd. Thus what we do is ref the recording canvas so that we can
+     * always unref whatever canvas we have at the end.
+     */
+    SkPicture* picture = new SkPicture();
+    SkCanvas* canvas = picture->beginRecording(pc.area.width(), pc.area.height(),
+            SkPicture::kUsePathBoundsForClip_RecordingFlag);
+    SkSafeRef(canvas);
+    canvas->translate(-pc.area.x(), -pc.area.y());
+    IntRect drawArea = pc.area;
+    if (pc.prerendered.get()) {
+        SkCanvas* prerender = painter->createPrerenderCanvas(pc.prerendered.get());
+        if (!prerender) {
+            ALOGV("Failed to create prerendered for " INT_RECT_FORMAT,
+                    INT_RECT_ARGS(pc.prerendered->area));
+            pc.prerendered.clear();
+        } else {
+            drawArea.unite(pc.prerendered->area);
+            SkNWayCanvas* nwayCanvas = new SkNWayCanvas(drawArea.width(), drawArea.height());
+            nwayCanvas->translate(-drawArea.x(), -drawArea.y());
+            nwayCanvas->addCanvas(canvas);
+            nwayCanvas->addCanvas(prerender);
+            SkSafeUnref(canvas);
+            SkSafeUnref(prerender);
+            canvas = nwayCanvas;
+        }
+    }
+    WebCore::PlatformGraphicsContextSkia pgc(canvas);
+    WebCore::GraphicsContext gc(&pgc);
+    ALOGV("painting picture: " INT_RECT_FORMAT, INT_RECT_ARGS(drawArea));
+    painter->paintContents(&gc, drawArea);
+
+    // TODO: consider paint-time checking for these with SkPicture painting?
+    pc.maxZoomScale = 1e6;
+
+    SkSafeUnref(canvas);
+    picture->endRecording();
+    return picture;
+}
+#endif
 
 } // namespace WebCore

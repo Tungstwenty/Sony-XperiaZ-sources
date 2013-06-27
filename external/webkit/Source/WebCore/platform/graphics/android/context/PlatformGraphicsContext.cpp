@@ -82,6 +82,8 @@ static bool setBitmapDash(SkPaint* paint, int width) {
     s->setLocalMatrix(matrix);
 
     paint->setShader(s)->unref();
+    paint->setFilterBitmap(true);
+    paint->setAntiAlias(true);
     return true;
 }
 
@@ -159,7 +161,7 @@ bool PlatformGraphicsContext::State::setupShadowPaint(SkPaint* paint, SkPoint* o
     // HTMLCanvasElement have shadows ignore transforms set.  This
     // allows us to distinguish between CSS and Canvas shadows which
     // have different rendering specifications.
-    uint32_t flags = SkBlurMaskFilter::kHighQuality_BlurFlag;
+    uint32_t flags = SkBlurMaskFilter::kNone_BlurFlag;
     if (shadowsIgnoreTransforms) {
         offset->fY = -offset->fY;
         flags |= SkBlurMaskFilter::kIgnoreTransform_BlurFlag;
@@ -167,7 +169,7 @@ bool PlatformGraphicsContext::State::setupShadowPaint(SkPaint* paint, SkPoint* o
 
     if (shadow.blur > 0) {
         paint->setMaskFilter(SkBlurMaskFilter::Create(shadow.blur,
-                             SkBlurMaskFilter::kNormal_BlurStyle))->unref();
+                             SkBlurMaskFilter::kNormal_BlurStyle, flags))->unref();
     }
     return SkColorGetA(shadow.color) && (shadow.blur || shadow.dx || shadow.dy);
 }
@@ -244,22 +246,31 @@ void PlatformGraphicsContext::setCompositeOperation(CompositeOperator op)
     m_state->mode = WebCoreCompositeToSkiaComposite(op);
 }
 
-void PlatformGraphicsContext::setFillColor(const Color& c)
+bool PlatformGraphicsContext::setFillColor(const Color& c)
 {
-    m_state->fillColor = c.rgb();
-    setFillShader(0);
+    bool dirty = false;
+    if (m_state->fillColor != c.rgb()) {
+        m_state->fillColor = c.rgb();
+        dirty = true;
+    }
+    return setFillShader(0) || dirty;
 }
 
-void PlatformGraphicsContext::setFillShader(SkShader* fillShader)
+bool PlatformGraphicsContext::setFillShader(SkShader* fillShader)
 {
-    if (fillShader)
+    bool dirty = false;
+    if (fillShader && m_state->fillColor != Color::black) {
         m_state->fillColor = Color::black;
+        dirty = true;
+    }
 
     if (fillShader != m_state->fillShader) {
         SkSafeUnref(m_state->fillShader);
         m_state->fillShader = fillShader;
         SkSafeRef(m_state->fillShader);
+        dirty = true;
     }
+    return dirty;
 }
 
 void PlatformGraphicsContext::setLineCap(LineCap cap)
@@ -331,22 +342,31 @@ void PlatformGraphicsContext::setShouldAntialias(bool useAA)
     m_state->useAA = useAA;
 }
 
-void PlatformGraphicsContext::setStrokeColor(const Color& c)
+bool PlatformGraphicsContext::setStrokeColor(const Color& c)
 {
-    m_state->strokeColor = c.rgb();
-    setStrokeShader(0);
+    bool dirty = false;
+    if (m_state->strokeColor != c.rgb()) {
+        m_state->strokeColor = c.rgb();
+        dirty = true;
+    }
+    return setStrokeShader(0) || dirty;
 }
 
-void PlatformGraphicsContext::setStrokeShader(SkShader* strokeShader)
+bool PlatformGraphicsContext::setStrokeShader(SkShader* strokeShader)
 {
-    if (strokeShader)
+    bool dirty = false;
+    if (strokeShader && m_state->strokeColor != Color::black) {
         m_state->strokeColor = Color::black;
+        dirty = true;
+    }
 
     if (strokeShader != m_state->strokeShader) {
         SkSafeUnref(m_state->strokeShader);
         m_state->strokeShader = strokeShader;
         SkSafeRef(m_state->strokeShader);
+        dirty = true;
     }
+    return dirty;
 }
 
 void PlatformGraphicsContext::setStrokeStyle(StrokeStyle style)
@@ -375,7 +395,7 @@ void PlatformGraphicsContext::setupPaintCommon(SkPaint* paint) const
         // allows us to distinguish between CSS and Canvas shadows which
         // have different rendering specifications.
         SkScalar dy = m_state->shadow.dy;
-        uint32_t flags = SkBlurDrawLooper::kHighQuality_BlurFlag;
+        uint32_t flags = SkBlurDrawLooper::kNone_BlurFlag;
         if (shadowsIgnoreTransforms()) {
             dy = -dy;
             flags |= SkBlurDrawLooper::kIgnoreTransform_BlurFlag;

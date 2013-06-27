@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2007, 2008, 2009, 2010, 2011 Apple Inc. All rights reserved.
+ * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -20,7 +21,7 @@
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
  * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #ifndef MediaPlayer_h
@@ -40,6 +41,10 @@
 #include <wtf/Noncopyable.h>
 #include <wtf/PassOwnPtr.h>
 #include <wtf/text/StringHash.h>
+
+#if ENABLE(WEB_AUDIO)
+#include "AudioSourceProvider.h"
+#endif
 
 #if USE(ACCELERATED_COMPOSITING)
 #include "GraphicsLayer.h"
@@ -190,6 +195,8 @@ public:
     enum MediaElementType { Video, Audio };
     void setMediaElementType(MediaElementType type) { m_mediaElementType = type; }
     MediaElementType mediaElementType() { return m_mediaElementType; }
+    void enterFullscreenMode();
+    String getMimeType() const { return m_contentMIMEType; };
 #endif
 
     void setFrameView(FrameView* frameView) { m_frameView = frameView; }
@@ -207,7 +214,7 @@ public:
 
     void prepareToPlay();
     void play();
-    void pause();    
+    void pause();
 
     bool paused() const;
     bool seeking() const;
@@ -221,7 +228,7 @@ public:
     float rate() const;
     void setRate(float);
 
-    bool preservesPitch() const;    
+    bool preservesPitch() const;
     void setPreservesPitch(bool);
 
     PassRefPtr<TimeRanges> buffered();
@@ -238,7 +245,7 @@ public:
     bool hasClosedCaptions() const;
     void setClosedCaptionsVisible(bool closedCaptionsVisible);
 
-    bool autoplay() const;    
+    bool autoplay() const;
     void setAutoplay(bool);
 
     void paint(GraphicsContext*, const IntRect&);
@@ -306,6 +313,10 @@ public:
 
     void setPrivateBrowsingMode(bool);
 
+#if ENABLE(WEB_AUDIO)
+    AudioSourceProvider* audioSourceProvider();
+#endif
+
 private:
     MediaPlayer(MediaPlayerClient*);
     void loadWithNextMediaEngine(MediaPlayerFactory*);
@@ -345,8 +356,8 @@ typedef void (*MediaEngineGetSitesInMediaCache)(Vector<String>&);
 typedef void (*MediaEngineClearMediaCache)();
 typedef void (*MediaEngineClearMediaCacheForSite)(const String&);
 
-typedef void (*MediaEngineRegistrar)(CreateMediaEnginePlayer, MediaEngineSupportedTypes, MediaEngineSupportsType, 
-    MediaEngineGetSitesInMediaCache, MediaEngineClearMediaCache, MediaEngineClearMediaCacheForSite); 
+typedef void (*MediaEngineRegistrar)(CreateMediaEnginePlayer, MediaEngineSupportedTypes, MediaEngineSupportsType,
+    MediaEngineGetSitesInMediaCache, MediaEngineClearMediaCache, MediaEngineClearMediaCacheForSite);
 
 
 }

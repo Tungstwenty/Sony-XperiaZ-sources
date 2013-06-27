@@ -1,9 +1,8 @@
 /*
  * Copyright 2006, The Android Open Source Project
- * Copyright (C) 2011, 2012 The Linux Foundation. All rights reserved.
- * Copyright (C) 2012 Sony Mobile Communications AB.
+ * Copyright (C) 2011-2013 The Linux Foundation All rights reserved.
  * Copyright (C) 2012 Sony Ericsson Mobile Communications AB.
- * Copyright (C) 2012 Sony Mobile Communications AB
+ * Copyright (C) 2012-2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,12 +28,7 @@
  * NOTE: This file has been modified by Sony Mobile Communications AB.
  * Modifications are licensed under the License.
  */
-/*
-* This file has been modified by SonyEricsson.
-* 2010-09-26:
-*     Check that Node object is still valid after
-*     forceLayout in method setSizeScreenWidthAndScale.
-*/
+
 #define LOG_TAG "webcoreglue"
 
 #include "config.h"
@@ -42,8 +36,12 @@
 
 #include "AccessibilityObject.h"
 #include "AndroidHitTestResult.h"
+#include "ApplicationCacheStorage.h"
 #include "Attribute.h"
 #include "content/address_detector.h"
+#if ENABLE(WEB_AUDIO)
+#include "AudioDestination.h"
+#endif
 #include "Chrome.h"
 #include "ChromeClientAndroid.h"
 #include "ChromiumIncludes.h"
@@ -74,7 +72,6 @@
 #include "Geolocation.h"
 #include "GraphicsContext.h"
 #include "GraphicsJNI.h"
-#include "GraphicsOperationCollection.h"
 #include "HTMLAnchorElement.h"
 #include "HTMLAreaElement.h"
 #include "HTMLElement.h"
@@ -144,10 +141,10 @@
 #include "WebCoreJni.h"
 #include "WebFrameView.h"
 #include "WindowsKeyboardCodes.h"
-#include "android_graphics.h"
 #include "autofill/WebAutofill.h"
 #include "htmlediting.h"
 #include "markup.h"
+#include "unicode/uloc.h"
 #include "visible_units.h"
 
 #include <JNIHelp.h>
@@ -299,6 +296,7 @@ jobject WebViewCore::getApplicationContext() {
 
 struct WebViewCoreStaticMethods {
     jmethodID    m_isSupportedMediaMimeType;
+    jmethodID    m_isPlayListMimeType;
 } gWebViewCoreStaticMethods;
 
 // Check whether a media mimeType is supported in Android media framework.
@@ -308,6 +306,19 @@ bool WebViewCore::isSupportedMediaMimeType(const WTF::String& mimeType) {
     jclass webViewCore = env->FindClass("android/webkit/WebViewCore");
     bool val = env->CallStaticBooleanMethod(webViewCore,
           gWebViewCoreStaticMethods.m_isSupportedMediaMimeType, jMimeType);
+    checkException(env);
+    env->DeleteLocalRef(webViewCore);
+    env->DeleteLocalRef(jMimeType);
+
+    return val;
+}
+
+bool WebViewCore::isPlayListMimeType(const WTF::String& mimeType) {
+    JNIEnv* env = JSC::Bindings::getJNIEnv();
+    jstring jMimeType = wtfStringToJstring(env, mimeType);
+    jclass webViewCore = env->FindClass("android/webkit/WebViewCore");
+    bool val = env->CallStaticBooleanMethod(webViewCore,
+          gWebViewCoreStaticMethods.m_isPlayListMimeType, jMimeType);
     checkException(env);
     env->DeleteLocalRef(webViewCore);
     env->DeleteLocalRef(jMimeType);
@@ -380,8 +391,6 @@ struct WebViewCore::JavaGlue {
     jmethodID   m_showRect;
     jmethodID   m_centerFitRect;
     jmethodID   m_setScrollbarModes;
-    jmethodID   m_setInstallableWebApp;
-    jmethodID   m_enterFullscreenForVideoLayer;
     jmethodID   m_exitFullscreenVideo;
     jmethodID   m_setWebTextViewAutoFillable;
     jmethodID   m_selectAt;
@@ -414,7 +423,7 @@ struct WebViewCore::TextFieldInitDataGlue {
     jfieldID   m_maxLength;
     jfieldID   m_contentBounds;
     jfieldID   m_nodeLayerId;
-    jfieldID   m_contentRect;
+    jfieldID   m_clientRect;
 };
 
 /*
@@ -436,7 +445,6 @@ WebViewCore::WebViewCore(JNIEnv* env, jobject javaWebViewCore, WebCore::Frame* m
     , m_mainFrame(mainframe)
     , m_popupReply(0)
     , m_blockTextfieldUpdates(false)
-    , m_focusBoundsChanged(false)
     , m_skipContentDraw(false)
     , m_textGeneration(0)
     , m_maxXScroll(320/4)
@@ -450,7 +458,6 @@ WebViewCore::WebViewCore(JNIEnv* env, jobject javaWebViewCore, WebCore::Frame* m
     , m_textWrapWidth(320)
     , m_scale(1.0f)
     , m_groupForVisitedLinks(0)
-    , m_isPaused(false)
     , m_isContentDrawPaused(false)
     , m_cacheMode(0)
     , m_fullscreenVideoMode(false)
@@ -461,6 +468,7 @@ WebViewCore::WebViewCore(JNIEnv* env, jobject javaWebViewCore, WebCore::Frame* m
     , m_screenOnCounter(0)
     , m_currentNodeDomNavigationAxis(0)
     , m_deviceMotionAndOrientationManager(this)
+    , m_geolocationManager(this)
 #if ENABLE(TOUCH_EVENTS)
     , m_forwardingTouchEvents(false)
 #endif
@@ -486,7 +494,7 @@ WebViewCore::WebViewCore(JNIEnv* env, jobject javaWebViewCore, WebCore::Frame* m
     m_javaGlue->m_updateViewport = GetJMethod(env, clazz, "updateViewport", "()V");
     m_javaGlue->m_sendNotifyProgressFinished = GetJMethod(env, clazz, "sendNotifyProgressFinished", "()V");
     m_javaGlue->m_sendViewInvalidate = GetJMethod(env, clazz, "sendViewInvalidate", "(IIII)V");
-    m_javaGlue->m_updateTextfield = GetJMethod(env, clazz, "updateTextfield", "(IZLjava/lang/String;I)V");
+    m_javaGlue->m_updateTextfield = GetJMethod(env, clazz, "updateTextfield", "(ILjava/lang/String;I)V");
     m_javaGlue->m_updateTextSelection = GetJMethod(env, clazz, "updateTextSelection", "(IIIII)V");
     m_javaGlue->m_updateTextSizeAndScroll = GetJMethod(env, clazz, "updateTextSizeAndScroll", "(IIIII)V");
     m_javaGlue->m_clearTextEntry = GetJMethod(env, clazz, "clearTextEntry", "()V");
@@ -494,7 +502,7 @@ WebViewCore::WebViewCore(JNIEnv* env, jobject javaWebViewCore, WebCore::Frame* m
     m_javaGlue->m_needTouchEvents = GetJMethod(env, clazz, "needTouchEvents", "(Z)V");
     m_javaGlue->m_requestKeyboard = GetJMethod(env, clazz, "requestKeyboard", "(Z)V");
     m_javaGlue->m_exceededDatabaseQuota = GetJMethod(env, clazz, "exceededDatabaseQuota", "(Ljava/lang/String;Ljava/lang/String;JJ)V");
-    m_javaGlue->m_reachedMaxAppCacheSize = GetJMethod(env, clazz, "reachedMaxAppCacheSize", "(J)V");
+    m_javaGlue->m_reachedMaxAppCacheSize = GetJMethod(env, clazz, "reachedMaxAppCacheSize", "(JJ)V");
     m_javaGlue->m_populateVisitedLinks = GetJMethod(env, clazz, "populateVisitedLinks", "()V");
     m_javaGlue->m_geolocationPermissionsShowPrompt = GetJMethod(env, clazz, "geolocationPermissionsShowPrompt", "(Ljava/lang/String;)V");
     m_javaGlue->m_geolocationPermissionsHidePrompt = GetJMethod(env, clazz, "geolocationPermissionsHidePrompt", "()V");
@@ -514,9 +522,7 @@ WebViewCore::WebViewCore(JNIEnv* env, jobject javaWebViewCore, WebCore::Frame* m
     m_javaGlue->m_showRect = GetJMethod(env, clazz, "showRect", "(IIIIIIFFFF)V");
     m_javaGlue->m_centerFitRect = GetJMethod(env, clazz, "centerFitRect", "(IIII)V");
     m_javaGlue->m_setScrollbarModes = GetJMethod(env, clazz, "setScrollbarModes", "(II)V");
-    m_javaGlue->m_setInstallableWebApp = GetJMethod(env, clazz, "setInstallableWebApp", "()V");
 #if ENABLE(VIDEO)
-    m_javaGlue->m_enterFullscreenForVideoLayer = GetJMethod(env, clazz, "enterFullscreenForVideoLayer", "(ILjava/lang/String;)V");
     m_javaGlue->m_exitFullscreenVideo = GetJMethod(env, clazz, "exitFullscreenVideo", "()V");
 #endif
     m_javaGlue->m_setWebTextViewAutoFillable = GetJMethod(env, clazz, "setWebTextViewAutoFillable", "(ILjava/lang/String;)V");
@@ -541,7 +547,7 @@ WebViewCore::WebViewCore(JNIEnv* env, jobject javaWebViewCore, WebCore::Frame* m
     m_textFieldInitDataGlue->m_maxLength = env->GetFieldID(tfidClazz, "mMaxLength", "I");
     m_textFieldInitDataGlue->m_contentBounds = env->GetFieldID(tfidClazz, "mContentBounds", "Landroid/graphics/Rect;");
     m_textFieldInitDataGlue->m_nodeLayerId = env->GetFieldID(tfidClazz, "mNodeLayerId", "I");
-    m_textFieldInitDataGlue->m_contentRect = env->GetFieldID(tfidClazz, "mContentRect", "Landroid/graphics/Rect;");
+    m_textFieldInitDataGlue->m_clientRect = env->GetFieldID(tfidClazz, "mClientRect", "Landroid/graphics/Rect;");
     m_textFieldInitDataGlue->m_constructor = GetJMethod(env, tfidClazz, "<init>", "()V");
     env->DeleteLocalRef(tfidClazz);
 
@@ -742,13 +748,6 @@ void WebViewCore::clearContent()
 {
     m_content.reset();
     updateLocale();
-}
-
-bool WebViewCore::focusBoundsChanged()
-{
-    bool result = m_focusBoundsChanged;
-    m_focusBoundsChanged = false;
-    return result;
 }
 
 void WebViewCore::paintContents(WebCore::GraphicsContext* gc, WebCore::IntRect& dirty)
@@ -1230,17 +1229,12 @@ void WebViewCore::setSizeScreenWidthAndScale(int width, int height,
                 m_mainFrame->view()->setFixedLayoutSize(IntSize(width, height));
             } else
                 m_mainFrame->view()->setUseFixedLayout(false);
-
-            Frame* frame = NULL;
-            if (node)
-                frame = node->document()->frame();
-
             r->setNeedsLayoutAndPrefWidthsRecalc();
             if (m_mainFrame->view()->didFirstLayout())
                 m_mainFrame->view()->forceLayout();
 
             // scroll to restore current screen center
-            if (node && frame && validNode(m_mainFrame, frame, node.get())) {
+            if (node && node->inDocument()) {
                 const WebCore::IntRect& newBounds = node->getRect();
                 if ((osw && osh && bounds.width() && bounds.height())
                     && (bounds != newBounds)) {
@@ -1531,6 +1525,7 @@ bool WebViewCore::selectWordAroundPosition(Frame* frame, VisiblePosition pos)
     VisibleSelection selection(pos);
     selection.expandUsingGranularity(WordGranularity);
     SelectionController* selectionController = frame->selection();
+    selection = VisibleSelection(selection.start(), selection.end());
 
     bool wordSelected = false;
     if (selectionController->shouldChangeSelection(selection)) {
@@ -1590,7 +1585,8 @@ void WebViewCore::layerToAbsoluteOffset(const LayerAndroid* layer, IntPoint& off
 
 void WebViewCore::setSelectionCaretInfo(SelectText* selectTextContainer,
         const WebCore::Position& pos, const IntPoint& frameOffset,
-        SelectText::HandleId handleId, int caretRectOffset, EAffinity affinity)
+        SelectText::HandleId handleId, SelectText::HandleType handleType,
+        int caretRectOffset, EAffinity affinity)
 {
     Node* node = pos.anchorNode();
     LayerAndroid* layer = 0;
@@ -1608,8 +1604,9 @@ void WebViewCore::setSelectionCaretInfo(SelectText* selectTextContainer,
     caretRect.setX(absoluteOffset.x() - offset.x() + caretRectOffset);
     caretRect.setY(absoluteOffset.y() - offset.y());
     selectTextContainer->setCaretRect(handleId, caretRect);
+    selectTextContainer->setHandleType(handleId, handleType);
     selectTextContainer->setTextRect(handleId,
-            positionToTextRect(pos, affinity, offset));
+            positionToTextRect(pos, affinity, offset, caretRect));
 }
 
 bool WebViewCore::isLtr(const Position& position)
@@ -1625,14 +1622,28 @@ bool WebViewCore::isLtr(const Position& position)
     return isLtr;
 }
 
+static Node* findInputParent(Node* node)
+{
+    Node* testNode = node;
+    while (testNode) {
+        RenderObject* renderer = testNode->renderer();
+        if (renderer
+                && (renderer->isTextArea() || renderer->isTextControl())) {
+            return testNode;
+        }
+        testNode = testNode->parentOrHostNode();
+    }
+    return node;
+}
+
 SelectText* WebViewCore::createSelectText(const VisibleSelection& selection)
 {
     bool isCaret = selection.isCaret();
+    Position base = selection.base();
+    Position extent = selection.extent();
     if (selection.isNone() || (!selection.isContentEditable() && isCaret)
-            || !selection.start().anchorNode()
-            || !selection.start().anchorNode()->renderer()
-            || !selection.end().anchorNode()
-            || !selection.end().anchorNode()->renderer())
+            || !base.anchorNode() || !base.anchorNode()->renderer()
+            || !extent.anchorNode() || !extent.anchorNode()->renderer())
         return 0;
 
     RefPtr<Range> range = selection.firstRange();
@@ -1648,20 +1659,39 @@ SelectText* WebViewCore::createSelectText(const VisibleSelection& selection)
     IntPoint frameOffset = convertGlobalContentToFrameContent(IntPoint());
     SelectText* selectTextContainer = new SelectText();
     if (isCaret) {
-        setSelectionCaretInfo(selectTextContainer, selection.start(), frameOffset,
-                SelectText::LeftHandle, 0, selection.affinity());
-        setSelectionCaretInfo(selectTextContainer, selection.start(), frameOffset,
-                SelectText::RightHandle, 0, selection.affinity());
+        setSelectionCaretInfo(selectTextContainer, base, frameOffset,
+                SelectText::BaseHandle, SelectText::CenterHandle, 0,
+                selection.affinity());
+        setSelectionCaretInfo(selectTextContainer, base, frameOffset,
+                SelectText::ExtentHandle, SelectText::CenterHandle, 0,
+                selection.affinity());
     } else {
-        bool ltr = isLtr(selection.start());
-        Position left = ltr ? selection.start() : selection.end();
-        Position right = ltr ? selection.end() : selection.start();
-        int leftOffset = isLtr(left) ? 0 : -1;
-        int rightOffset = isLtr(right) ? 0 : -1;
-        setSelectionCaretInfo(selectTextContainer, left, frameOffset,
-                SelectText::LeftHandle, leftOffset, selection.affinity());
-        setSelectionCaretInfo(selectTextContainer, right, frameOffset,
-                SelectText::RightHandle, rightOffset, selection.affinity());
+        bool isBaseLtr = isLtr(base);
+        bool isBaseStart = comparePositions(base, extent) <= 0;
+        int baseOffset = isBaseLtr ? 0 : -1;
+        SelectText::HandleType baseHandleType = (isBaseLtr == isBaseStart)
+                ? SelectText::LeftHandle : SelectText::RightHandle;
+        EAffinity affinity = selection.affinity();
+        setSelectionCaretInfo(selectTextContainer, base, frameOffset,
+                SelectText::BaseHandle, baseHandleType, baseOffset, affinity);
+        bool isExtentLtr = isLtr(extent);
+        int extentOffset = isExtentLtr ? 0 : -1;
+        SelectText::HandleType extentHandleType = (isExtentLtr == isBaseStart)
+                ? SelectText::RightHandle : SelectText::LeftHandle;
+        setSelectionCaretInfo(selectTextContainer, extent, frameOffset,
+                SelectText::ExtentHandle, extentHandleType, extentOffset, affinity);
+        IntRect clipRect;
+        if (selection.isContentEditable()) {
+            Node* editable = findInputParent(base.anchorNode());
+            RenderObject* render = editable->renderer();
+            if (render && render->isBox() && !render->isBody()) {
+                RenderBox* renderBox = toRenderBox(render);
+                clipRect = renderBox->clientBoxRect();
+                FloatPoint pos = renderBox->localToAbsolute(clipRect.location());
+                clipRect.setX(pos.x());
+                clipRect.setY(pos.y());
+            }
+        }
 
         Node* stopNode = range->pastLastNode();
         for (Node* node = range->firstNode(); node != stopNode; node = node->traverseNextNode()) {
@@ -1675,7 +1705,8 @@ SelectText* WebViewCore::createSelectText(const VisibleSelection& selection)
             int layerId = platformLayerIdFromNode(node, &layer);
             Vector<IntRect> rects;
             renderText->absoluteRectsForRange(rects, startOffset, endOffset, true);
-            selectTextContainer->addHighlightRegion(layer, rects, frameOffset);
+            selectTextContainer->addHighlightRegion(layer, rects, frameOffset,
+                    clipRect);
         }
     }
     selectTextContainer->setText(range->text());
@@ -1683,9 +1714,9 @@ SelectText* WebViewCore::createSelectText(const VisibleSelection& selection)
 }
 
 IntRect WebViewCore::positionToTextRect(const Position& position,
-        EAffinity affinity, const WebCore::IntPoint& offset)
+        EAffinity affinity, const WebCore::IntPoint& offset, const IntRect& caretRect)
 {
-    IntRect textRect;
+    IntRect textRect = caretRect;
     InlineBox* inlineBox;
     int offsetIndex;
     position.getInlineBoxAndOffset(affinity, inlineBox, offsetIndex);
@@ -1721,25 +1752,25 @@ IntPoint WebViewCore::convertGlobalContentToFrameContent(const IntPoint& point, 
     return IntPoint(point.x() + frameOffset.x(), point.y() + frameOffset.y());
 }
 
-Position WebViewCore::trimSelectionPosition(const Position &start, const Position& stop)
+VisiblePosition WebViewCore::trimSelectionPosition(const VisiblePosition &start,
+        const VisiblePosition& stop)
 {
     int direction = comparePositions(start, stop);
     if (direction == 0)
         return start;
     bool forward = direction < 0;
-    EAffinity affinity = forward ? DOWNSTREAM : UPSTREAM;
     bool move;
-    Position pos = start;
+    VisiblePosition pos = start;
     bool movedTooFar = false;
     do {
         move = true;
-        Node* node = pos.anchorNode();
+        Node* node = pos.deepEquivalent().anchorNode();
         if (node && node->isTextNode() && node->renderer()) {
             RenderText *textRenderer = toRenderText(node->renderer());
             move = !textRenderer->textLength();
         }
         if (move) {
-            Position nextPos = forward ? pos.next() : pos.previous();
+            VisiblePosition nextPos = forward ? pos.next() : pos.previous();
             movedTooFar = nextPos.isNull() || pos == nextPos
                     || ((comparePositions(nextPos, stop) < 0) != forward);
             pos = nextPos;
@@ -1750,47 +1781,65 @@ Position WebViewCore::trimSelectionPosition(const Position &start, const Positio
     return pos;
 }
 
-void WebViewCore::selectText(int startX, int startY, int endX, int endY)
+void WebViewCore::selectText(SelectText::HandleId handleId, int x, int y)
 {
     SelectionController* sc = focusedFrame()->selection();
-    IntPoint startPoint = convertGlobalContentToFrameContent(IntPoint(startX, startY));
-    VisiblePosition startPosition(visiblePositionForContentPoint(startPoint));
-    IntPoint endPoint = convertGlobalContentToFrameContent(IntPoint(endX, endY));
-    VisiblePosition endPosition(visiblePositionForContentPoint(endPoint));
+    VisibleSelection selection = sc->selection();
+    Position base = selection.base();
+    Position extent = selection.extent();
+    IntPoint dragPoint = convertGlobalContentToFrameContent(IntPoint(x, y));
+    VisiblePosition dragPosition(visiblePositionForContentPoint(dragPoint));
 
-    if (startPosition.isNull() || endPosition.isNull())
+    if (base.isNull() || extent.isNull() || dragPosition.isNull())
         return;
+    bool draggingBase = (handleId == SelectText::BaseHandle);
+    if (draggingBase)
+        base = dragPosition.deepEquivalent();
+    else
+        extent = dragPosition.deepEquivalent();
 
-    // Ensure startPosition is before endPosition
-    if (comparePositions(startPosition, endPosition) > 0)
-        swap(startPosition, endPosition);
+    bool baseIsStart = (comparePositions(base, extent) <= 0);
+    Position& start = baseIsStart ? base : extent;
+    Position& end = baseIsStart ? extent : base;
+    VisiblePosition startPosition(start, selection.affinity());
+    VisiblePosition endPosition(end, selection.affinity());
+    bool draggingStart = (baseIsStart == draggingBase);
 
-    if (sc->isContentEditable()) {
-        startPosition = sc->selection().visibleStart().honorEditableBoundaryAtOrAfter(startPosition);
-        endPosition = sc->selection().visibleEnd().honorEditableBoundaryAtOrBefore(endPosition);
-        if (startPosition.isNull() || endPosition.isNull()) {
-            return;
+    if (draggingStart) {
+        if (selection.isRange()) {
+            startPosition = trimSelectionPosition(startPosition, endPosition);
+            if ((startPosition != endPosition) && isEndOfBlock(startPosition)) {
+                // Ensure startPosition is not at end of block
+                VisiblePosition nextStartPosition(startPosition.next());
+                if (nextStartPosition.isNotNull())
+                    startPosition = nextStartPosition;
+            }
         }
+        startPosition = endPosition.honorEditableBoundaryAtOrAfter(startPosition);
+        if (startPosition.isNull())
+            return;
+        start = startPosition.deepEquivalent();
+        if (selection.isCaret())
+            end = start;
+    } else {
+        if (selection.isRange()) {
+            endPosition = trimSelectionPosition(endPosition, startPosition);
+            if ((start != end) && isStartOfBlock(endPosition)) {
+                // Ensure endPosition is not at start of block
+                VisiblePosition prevEndPosition(endPosition.previous());
+                if (!prevEndPosition.isNull())
+                    endPosition = prevEndPosition;
+            }
+        }
+        endPosition = startPosition.honorEditableBoundaryAtOrAfter(endPosition);
+        if (endPosition.isNull())
+            return;
+        end = endPosition.deepEquivalent();
+        if (selection.isCaret())
+            start = end;
     }
 
-    // Ensure startPosition is not at end of block
-    if (startPosition != endPosition && isEndOfBlock(startPosition)) {
-        VisiblePosition nextStartPosition(startPosition.next());
-        if (!nextStartPosition.isNull())
-            startPosition = nextStartPosition;
-    }
-    // Ensure endPosition is not at start of block
-    if (startPosition != endPosition && isStartOfBlock(endPosition)) {
-        VisiblePosition prevEndPosition(endPosition.previous());
-        if (!prevEndPosition.isNull())
-            endPosition = prevEndPosition;
-    }
-
-    Position start = startPosition.deepEquivalent();
-    Position end = endPosition.deepEquivalent();
-    start = trimSelectionPosition(start, end);
-    end = trimSelectionPosition(end, start);
-    VisibleSelection selection(start, end);
+    selection = VisibleSelection(base, extent);
     // Only allow changes between caret positions or to text selection.
     bool selectChangeAllowed = (!selection.isCaret() || sc->isCaret());
     if (selectChangeAllowed && sc->shouldChangeSelection(selection))
@@ -1992,6 +2041,44 @@ AndroidHitTestResult WebViewCore::hitTestAtPoint(int x, int y, int slop, bool do
     return androidHitResult;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
+#if ENABLE(WEB_AUDIO)
+void WebViewCore::addAudioDestination(WebCore::AudioDestination* t)
+{
+//    SkDebugf("----------- addAudioDestination %p", t);
+    *m_audioDestinations.append() = t;
+}
+
+void WebViewCore::removeAudioDestination(WebCore::AudioDestination* t)
+{
+//    SkDebugf("----------- removeAudioDestination %p", t);
+    int index = m_audioDestinations.find(t);
+    if (index < 0) {
+        SkDebugf("--------------- removeAudioDestination not found! %p\n", t);
+    } else {
+        m_audioDestinations.removeShuffle(index);
+    }
+}
+
+void WebViewCore::pauseAudioDestinations()
+{
+    WebCore::AudioDestination** iter = m_audioDestinations.begin();
+    WebCore::AudioDestination** stop = m_audioDestinations.end();
+
+    for (; iter < stop; ++iter)
+        (*iter)->pause();
+}
+
+void WebViewCore::resumeAudioDestinations()
+{
+    WebCore::AudioDestination** iter = m_audioDestinations.begin();
+    WebCore::AudioDestination** stop = m_audioDestinations.end();
+
+    for (; iter < stop; ++iter)
+        (*iter)->start();
+}
+#endif
 ///////////////////////////////////////////////////////////////////////////////
 
 void WebViewCore::addPlugin(PluginWidgetAndroid* w)
@@ -2968,33 +3055,31 @@ void WebViewCore::passToJs(int generation, const WTF::String& current,
     WTF::String test = getInputText(focus);
     if (test != current) {
         // If the text changed during the key event, update the UI text field.
-        updateTextfield(focus, false, test);
+        updateTextfield(focus, test);
     }
     // Now that the selection has settled down, send it.
     updateTextSelection();
 }
 
-WebCore::IntRect WebViewCore::scrollFocusedTextInput(float xPercent, int y)
+void WebViewCore::scrollFocusedTextInput(float xPercent, int y)
 {
     WebCore::Node* focus = currentFocus();
     if (!focus) {
         clearTextEntry();
-        return WebCore::IntRect();
+        return;
     }
     WebCore::RenderTextControl* renderText = toRenderTextControl(focus);
     if (!renderText) {
         clearTextEntry();
-        return WebCore::IntRect();
+        return;
     }
 
-    int x = (int) (xPercent * (renderText->scrollWidth() -
-        renderText->clientWidth()));
+    int x = (int)round(xPercent * (renderText->scrollWidth() -
+        renderText->contentWidth()));
     renderText->setScrollLeft(x);
     renderText->setScrollTop(y);
     focus->document()->frame()->selection()->recomputeCaretRect();
-    LayerAndroid* layer = 0;
-    platformLayerIdFromNode(focus, &layer);
-    return absoluteContentRect(focus, layer);
+    updateTextSelection();
 }
 
 void WebViewCore::setFocusControllerActive(bool active)
@@ -3134,7 +3219,10 @@ bool WebViewCore::key(const PlatformKeyboardEvent& event)
         VisibleSelection old = frame->selection()->selection();
         EditorClientAndroid* client = static_cast<EditorClientAndroid*>(
                 m_mainFrame->editor()->client());
-        client->setUiGeneratedSelectionChange(true);
+        int keycode = event.nativeVirtualKeyCode();
+        bool uiGeneratedSelectionChange =
+                (keycode != AKEYCODE_DPAD_LEFT && keycode != AKEYCODE_DPAD_RIGHT);
+        client->setUiGeneratedSelectionChange(uiGeneratedSelectionChange);
         bool handled = eventHandler->keyEvent(event);
         client->setUiGeneratedSelectionChange(false);
         if (isContentEditable(focusNode)) {
@@ -3388,10 +3476,10 @@ bool WebViewCore::isAutoCompleteEnabled(Node* node)
     return isEnabled;
 }
 
-WebCore::IntRect WebViewCore::absoluteContentRect(WebCore::Node* node,
+WebCore::IntRect WebViewCore::absoluteClientRect(WebCore::Node* node,
         LayerAndroid* layer)
 {
-    IntRect contentRect;
+    IntRect clientRect;
     if (node) {
         RenderObject* render = node->renderer();
         if (render && render->isBox() && !render->isBody()) {
@@ -3400,11 +3488,15 @@ WebCore::IntRect WebViewCore::absoluteContentRect(WebCore::Node* node,
             WebViewCore::layerToAbsoluteOffset(layer, offset);
 
             RenderBox* renderBox = toRenderBox(render);
-            contentRect = renderBox->absoluteContentBox();
-            contentRect.move(-offset.x(), -offset.y());
+            clientRect = renderBox->clientBoxRect();
+            IntRect contentBox = renderBox->contentBoxRect();
+            clientRect.setX(contentBox.x());
+            clientRect.setWidth(contentBox.width());
+            FloatPoint absPos = renderBox->localToAbsolute(FloatPoint());
+            clientRect.move(absPos.x() - offset.x(), absPos.y() - offset.y());
         }
     }
-    return contentRect;
+    return clientRect;
 }
 
 jobject WebViewCore::createTextFieldInitData(Node* node)
@@ -3441,7 +3533,7 @@ jobject WebViewCore::createTextFieldInitData(Node* node)
     env->SetIntField(initData, classDef->m_maxLength, getMaxLength(node));
     LayerAndroid* layer = 0;
     int layerId = platformLayerIdFromNode(node, &layer);
-    IntRect bounds = absoluteContentRect(node, layer);
+    IntRect bounds = absoluteClientRect(node, layer);
     ScopedLocalRef<jobject> jbounds(env, intRectToRect(env, bounds));
     env->SetObjectField(initData, classDef->m_contentBounds, jbounds.get());
     env->SetIntField(initData, classDef->m_nodeLayerId, layerId);
@@ -3453,7 +3545,7 @@ jobject WebViewCore::createTextFieldInitData(Node* node)
         contentRect.move(-rtc->scrollLeft(), -rtc->scrollTop());
     }
     ScopedLocalRef<jobject> jcontentRect(env, intRectToRect(env, contentRect));
-    env->SetObjectField(initData, classDef->m_contentRect, jcontentRect.get());
+    env->SetObjectField(initData, classDef->m_clientRect, jcontentRect.get());
     return initData;
 }
 
@@ -3553,8 +3645,12 @@ void WebViewCore::focusNodeChanged(WebCore::Node* newFocus)
     AutoJObject javaObject = m_javaGlue->object(env);
     if (!javaObject.get())
         return;
-    if (isTextInput(newFocus))
+    if (isTextInput(newFocus)) {
         initializeTextInput(newFocus, true);
+    } else {
+        // not a text entry field, put away the keyboard
+        clearTextEntry();
+    }
     HitTestResult focusHitResult;
     focusHitResult.setInnerNode(newFocus);
     focusHitResult.setInnerNonSharedNode(newFocus);
@@ -3635,6 +3731,19 @@ bool WebViewCore::exceededDatabaseQuota(const WTF::String& url, const WTF::Strin
 #endif
 }
 
+/*
+ * TODO Note that this logic still needs to be cleaned up. Normally the
+ * information provided in this callback is used to resize the appcache.
+ * so we need to provide the current database size. However, webkit provides no
+ * way to reach this information. It can be calculated by fetching all the
+ * origins and their usage, however this is too expensize (requires one inner
+ * join operation for each origin). Rather, we simply return the maximum cache size,
+ * which should be equivalent to the current cache size. This is generally safe.
+ * However, setting the maximum database size to less than the current database size
+ * may cause a problem. In this case, ApplicationCacheStorage ("the owner of database")
+ * uses the updated value, while database internally ignores it and uses the current size
+ * as quota. This means the value we returned here won't reflect the actual database size.
+ */
 bool WebViewCore::reachedMaxAppCacheSize(const unsigned long long spaceNeeded)
 {
 #if ENABLE(OFFLINE_WEB_APPLICATIONS)
@@ -3642,7 +3751,7 @@ bool WebViewCore::reachedMaxAppCacheSize(const unsigned long long spaceNeeded)
     AutoJObject javaObject = m_javaGlue->object(env);
     if (!javaObject.get())
         return false;
-    env->CallVoidMethod(javaObject.get(), m_javaGlue->m_reachedMaxAppCacheSize, spaceNeeded);
+    env->CallVoidMethod(javaObject.get(), m_javaGlue->m_reachedMaxAppCacheSize, spaceNeeded, WebCore::cacheStorage().maximumSize());
     checkException(env);
     return true;
 #endif
@@ -3845,8 +3954,14 @@ void WebViewCore::updateTextSelection()
     VisibleSelection selection = focusedFrame()->selection()->selection();
     int start = 0;
     int end = 0;
-    if (selection.isCaretOrRange())
-        getSelectionOffsets(selection.start().anchorNode(), start, end);
+    if (selection.isCaretOrRange()) {
+        WebCore::Node* focusNode = currentFocus();
+        if (focusNode && isTextInput(focusNode)) {
+            getSelectionOffsets(focusNode, start, end);
+        } else {
+            getSelectionOffsets(selection.start().anchorNode(), start, end);
+        }
+    }
     SelectText* selectText = createSelectText(selection);
     env->CallVoidMethod(javaObject.get(),
             m_javaGlue->m_updateTextSelection, reinterpret_cast<int>(currentFocus()),
@@ -3872,8 +3987,7 @@ void WebViewCore::updateTextSizeAndScroll(WebCore::Node* node)
     checkException(env);
 }
 
-void WebViewCore::updateTextfield(WebCore::Node* ptr, bool changeToPassword,
-        const WTF::String& text)
+void WebViewCore::updateTextfield(WebCore::Node* ptr, const WTF::String& text)
 {
     JNIEnv* env = JSC::Bindings::getJNIEnv();
     AutoJObject javaObject = m_javaGlue->object(env);
@@ -3881,15 +3995,9 @@ void WebViewCore::updateTextfield(WebCore::Node* ptr, bool changeToPassword,
         return;
     if (m_blockTextfieldUpdates)
         return;
-    if (changeToPassword) {
-        env->CallVoidMethod(javaObject.get(), m_javaGlue->m_updateTextfield,
-                (int) ptr, true, 0, m_textGeneration);
-        checkException(env);
-        return;
-    }
     jstring string = wtfStringToJstring(env, text);
     env->CallVoidMethod(javaObject.get(), m_javaGlue->m_updateTextfield,
-            (int) ptr, false, string, m_textGeneration);
+            (int) ptr, string, m_textGeneration);
     env->DeleteLocalRef(string);
     checkException(env);
 }
@@ -4083,27 +4191,11 @@ void WebViewCore::setScrollbarModes(ScrollbarMode horizontalMode, ScrollbarMode 
     checkException(env);
 }
 
-void WebViewCore::notifyWebAppCanBeInstalled()
-{
-    JNIEnv* env = JSC::Bindings::getJNIEnv();
-    AutoJObject javaObject = m_javaGlue->object(env);
-    if (!javaObject.get())
-        return;
-    env->CallVoidMethod(javaObject.get(), m_javaGlue->m_setInstallableWebApp);
-    checkException(env);
-}
-
 #if ENABLE(VIDEO)
-void WebViewCore::enterFullscreenForVideoLayer(int layerId, const WTF::String& url)
+void WebViewCore::enterFullscreenForVideoLayer()
 {
-    JNIEnv* env = JSC::Bindings::getJNIEnv();
-    AutoJObject javaObject = m_javaGlue->object(env);
-    if (!javaObject.get())
-        return;
-    jstring jUrlStr = wtfStringToJstring(env, url);
-    env->CallVoidMethod(javaObject.get(), m_javaGlue->m_enterFullscreenForVideoLayer, layerId, jUrlStr);
+    // Just need to update the video mode, to avoid multiple exit full screen.
     m_fullscreenVideoMode = true;
-    checkException(env);
 }
 
 void WebViewCore::exitFullscreenVideo()
@@ -4405,6 +4497,44 @@ void WebViewCore::getLocale(String& language, String& region)
     region = String(propRegn, 2);
 }
 
+// generate bcp47 identifier for the supplied language/region
+static void toLanguageTag(char* output, size_t outSize, const String& language,
+    const String& region) {
+    if (output == NULL || outSize <= 0)
+        return;
+    String locale = language;
+    locale.append('_');
+    locale.append(region);
+    char canonicalChars[ULOC_FULLNAME_CAPACITY];
+    UErrorCode uErr = U_ZERO_ERROR;
+    uloc_canonicalize(locale.ascii().data(), canonicalChars,
+        ULOC_FULLNAME_CAPACITY, &uErr);
+    if (U_SUCCESS(uErr)) {
+        char likelyChars[ULOC_FULLNAME_CAPACITY];
+        uErr = U_ZERO_ERROR;
+        uloc_addLikelySubtags(canonicalChars, likelyChars,
+            ULOC_FULLNAME_CAPACITY, &uErr);
+        if (U_SUCCESS(uErr)) {
+            uErr = U_ZERO_ERROR;
+            uloc_toLanguageTag(likelyChars, output, outSize, FALSE, &uErr);
+            if (U_SUCCESS(uErr)) {
+                return;
+            } else {
+                ALOGD("uloc_toLanguageTag(\"%s\") failed: %s", likelyChars,
+                    u_errorName(uErr));
+            }
+        } else {
+            ALOGD("uloc_addLikelySubtags(\"%s\") failed: %s", canonicalChars,
+                u_errorName(uErr));
+        }
+    } else {
+        ALOGD("uloc_canonicalize(\"%s\") failed: %s", locale.ascii().data(),
+            u_errorName(uErr));
+    }
+    // unable to build a proper language identifier
+    output[0] = '\0';
+}
+
 void WebViewCore::updateLocale()
 {
     static String prevLang;
@@ -4419,6 +4549,9 @@ void WebViewCore::updateLocale()
         prevRegn = region;
         GlyphPageTreeNode::resetRoots();
         fontCache()->invalidate();
+        char langTag[ULOC_FULLNAME_CAPACITY];
+        toLanguageTag(langTag, ULOC_FULLNAME_CAPACITY, language, region);
+        FontPlatformData::setDefaultLanguage(langTag);
     }
 }
 
@@ -4537,12 +4670,10 @@ static void PassToJs(JNIEnv* env, jobject obj, jint nativeClass,
 }
 
 static void ScrollFocusedTextInput(JNIEnv* env, jobject obj, jint nativeClass,
-        jfloat xPercent, jint y, jobject contentBounds)
+        jfloat xPercent, jint y)
 {
     WebViewCore* viewImpl = reinterpret_cast<WebViewCore*>(nativeClass);
-    IntRect bounds = viewImpl->scrollFocusedTextInput(xPercent, y);
-    if (contentBounds)
-        GraphicsJNI::irect_to_jrect(bounds, env, contentBounds);
+    viewImpl->scrollFocusedTextInput(xPercent, y);
 }
 
 static void SetFocusControllerActive(JNIEnv* env, jobject obj, jint nativeClass,
@@ -4797,30 +4928,13 @@ static void GeolocationPermissionsProvide(JNIEnv* env, jobject obj,
         jint nativeClass, jstring origin, jboolean allow, jboolean remember)
 {
     WebViewCore* viewImpl = reinterpret_cast<WebViewCore*>(nativeClass);
-    Frame* frame = viewImpl->mainFrame();
-
-    ChromeClientAndroid* chromeClient = static_cast<ChromeClientAndroid*>(frame->page()->chrome()->client());
-    chromeClient->provideGeolocationPermissions(jstringToWtfString(env, origin), allow, remember);
+    viewImpl->geolocationManager()->provideRealClientPermissionState(jstringToWtfString(env, origin), allow, remember);
 }
 
 static void RegisterURLSchemeAsLocal(JNIEnv* env, jobject obj, jint nativeClass,
         jstring scheme)
 {
     WebCore::SchemeRegistry::registerURLSchemeAsLocal(jstringToWtfString(env, scheme));
-}
-
-static bool FocusBoundsChanged(JNIEnv* env, jobject obj, jint nativeClass)
-{
-    return reinterpret_cast<WebViewCore*>(nativeClass)->focusBoundsChanged();
-}
-
-static void SetIsPaused(JNIEnv* env, jobject obj, jint nativeClass,
-        jboolean isPaused)
-{
-    // tell the webcore thread to stop thinking while we do other work
-    // (selection and scrolling). This has nothing to do with the lifecycle
-    // pause and resume.
-    reinterpret_cast<WebViewCore*>(nativeClass)->setIsPaused(isPaused);
 }
 
 void WebViewCore::setIsContentDrawPaused(bool isPaused) {
@@ -4837,31 +4951,32 @@ static void Pause(JNIEnv* env, jobject obj, jint nativeClass)
     // browser). The browser can only be killed by the system when it is in the
     // background, so saving the Geolocation permission state now ensures that
     // is maintained when the browser is killed.
-    WebViewCore* viewImpl = reinterpret_cast<WebViewCore*>(nativeClass);
-    ChromeClient* chromeClient = viewImpl->mainFrame()->page()->chrome()->client();
-    ChromeClientAndroid* chromeClientAndroid = static_cast<ChromeClientAndroid*>(chromeClient);
-    chromeClientAndroid->storeGeolocationPermissions();
+    GeolocationPermissions::maybeStorePermanentPermissions();
 
+    WebViewCore* viewImpl = reinterpret_cast<WebViewCore*>(nativeClass);
     Frame* mainFrame = viewImpl->mainFrame();
+
     for (Frame* frame = mainFrame; frame; frame = frame->tree()->traverseNext()) {
-        Geolocation* geolocation = frame->domWindow()->navigator()->optionalGeolocation();
-        if (geolocation)
-            geolocation->suspend();
 #if ENABLE(WEBGL)
         Document* document = frame->document();
         if (document)
             document->suspendDocument();
 #endif
     }
+
     if (mainFrame)
         mainFrame->settings()->setMinDOMTimerInterval(BACKGROUND_TIMER_INTERVAL);
 
     viewImpl->deviceMotionAndOrientationManager()->maybeSuspendClients();
+    viewImpl->geolocationManager()->suspendRealClient();
 
     ANPEvent event;
     SkANP::InitEvent(&event, kLifecycle_ANPEventType);
     event.data.lifecycle.action = kPause_ANPLifecycleAction;
     viewImpl->sendPluginEvent(event);
+#if ENABLE(WEB_AUDIO)
+    viewImpl->pauseAudioDestinations();
+#endif
 
     viewImpl->setIsPaused(true);
     viewImpl->setIsContentDrawPaused(true);
@@ -4871,25 +4986,28 @@ static void Resume(JNIEnv* env, jobject obj, jint nativeClass)
 {
     WebViewCore* viewImpl = reinterpret_cast<WebViewCore*>(nativeClass);
     Frame* mainFrame = viewImpl->mainFrame();
+
     for (Frame* frame = mainFrame; frame; frame = frame->tree()->traverseNext()) {
-        Geolocation* geolocation = frame->domWindow()->navigator()->optionalGeolocation();
-        if (geolocation)
-            geolocation->resume();
 #if ENABLE(WEBGL)
         Document* document = frame->document();
         if (document)
             document->resumeDocument();
 #endif
     }
+
     if (mainFrame)
         mainFrame->settings()->setMinDOMTimerInterval(FOREGROUND_TIMER_INTERVAL);
 
     viewImpl->deviceMotionAndOrientationManager()->maybeResumeClients();
+    viewImpl->geolocationManager()->resumeRealClient();
 
     ANPEvent event;
     SkANP::InitEvent(&event, kLifecycle_ANPEventType);
     event.data.lifecycle.action = kResume_ANPLifecycleAction;
     viewImpl->sendPluginEvent(event);
+#if ENABLE(WEB_AUDIO)
+    viewImpl->resumeAudioDestinations();
+#endif
 
     viewImpl->setIsPaused(false);
     viewImpl->setIsContentDrawPaused(false);
@@ -5010,10 +5128,10 @@ static jobject GetText(JNIEnv* env, jobject obj, jint nativeClass,
 }
 
 static void SelectText(JNIEnv* env, jobject obj, jint nativeClass,
-        jint startX, jint startY, jint endX, jint endY)
+        jint handleId, jint x, jint y)
 {
     WebViewCore* viewImpl = reinterpret_cast<WebViewCore*>(nativeClass);
-    viewImpl->selectText(startX, startY, endX, endY);
+    viewImpl->selectText(static_cast<SelectText::HandleId>(handleId), x, y);
 }
 
 static void ClearSelection(JNIEnv* env, jobject obj, jint nativeClass)
@@ -5057,8 +5175,6 @@ static int FindNext(JNIEnv* env, jobject obj, jint nativeClass,
 static JNINativeMethod gJavaWebViewCoreMethods[] = {
     { "nativeClearContent", "(I)V",
             (void*) ClearContent },
-    { "nativeFocusBoundsChanged", "(I)Z",
-        (void*) FocusBoundsChanged } ,
     { "nativeKey", "(IIIIZZZZ)Z",
         (void*) Key },
     { "nativeContentInvalidateAll", "(I)V",
@@ -5085,7 +5201,7 @@ static JNINativeMethod gJavaWebViewCoreMethods[] = {
         (void*) MoveMouse },
     { "passToJs", "(IILjava/lang/String;IIZZZZ)V",
         (void*) PassToJs },
-    { "nativeScrollFocusedTextInput", "(IFILandroid/graphics/Rect;)V",
+    { "nativeScrollFocusedTextInput", "(IFI)V",
         (void*) ScrollFocusedTextInput },
     { "nativeSetFocusControllerActive", "(IZ)V",
         (void*) SetFocusControllerActive },
@@ -5123,7 +5239,6 @@ static JNINativeMethod gJavaWebViewCoreMethods[] = {
         (void*) SetNewStorageLimit },
     { "nativeGeolocationPermissionsProvide", "(ILjava/lang/String;ZZ)V",
         (void*) GeolocationPermissionsProvide },
-    { "nativeSetIsPaused", "(IZ)V", (void*) SetIsPaused },
     { "nativePause", "(I)V", (void*) Pause },
     { "nativeResume", "(I)V", (void*) Resume },
     { "nativeFreeMemory", "(I)V", (void*) FreeMemory },
@@ -5151,7 +5266,7 @@ static JNINativeMethod gJavaWebViewCoreMethods[] = {
         (void*) InsertText },
     { "nativeGetText", "(IIIII)Ljava/lang/String;",
         (void*) GetText },
-    { "nativeSelectText", "(IIIII)V",
+    { "nativeSelectText", "(IIII)V",
         (void*) SelectText },
     { "nativeClearTextSelection", "(I)V",
         (void*) ClearSelection },
@@ -5217,6 +5332,11 @@ int registerWebViewCore(JNIEnv* env)
         env->GetStaticMethodID(widget, "isSupportedMediaMimeType", "(Ljava/lang/String;)Z");
     LOG_FATAL_IF(!gWebViewCoreStaticMethods.m_isSupportedMediaMimeType,
         "Could not find static method isSupportedMediaMimeType from WebViewCore");
+
+    gWebViewCoreStaticMethods.m_isPlayListMimeType =
+        env->GetStaticMethodID(widget, "isPlayListMimeType", "(Ljava/lang/String;)Z");
+    LOG_FATAL_IF(!gWebViewCoreStaticMethods.m_isPlayListMimeType,
+        "Could not find static method isPlayListMimeType from WebViewCore");
 
     env->DeleteLocalRef(widget);
 

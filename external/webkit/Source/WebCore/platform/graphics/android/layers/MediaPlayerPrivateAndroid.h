@@ -1,6 +1,6 @@
 /*
  * Copyright 2009,2010 The Android Open Source Project
- * Copyright (c) 2011, 2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -98,7 +98,7 @@ public:
 
     virtual bool canLoadPoster() const { return false; }
     virtual void setPoster(const String&) { }
-    virtual void prepareToPlay();
+    virtual void prepareToPlay() { }
 
     virtual void paint(GraphicsContext*, const IntRect&) { }
 
@@ -109,10 +109,10 @@ public:
     void onPaused();
     void onPlaying();
     virtual void onPosterFetched(SkBitmap*) { }
+    virtual void onVideoFrameAvailable() { }
     void onBuffering(int percent);
     void onTimeupdate(int position);
     void onRestoreState();
-    virtual bool mediaPreloadEnabled() { return false; }
 
     // These following two functions are used to turn on inline video support
     bool supportsAcceleratedRendering() const { return true; }
@@ -120,13 +120,14 @@ public:
     {
         return m_videoLayer;
     }
-    void onStopFullscreen();
+    void onStopFullscreen(bool stillPlaying);
 
     virtual void prepareEnterFullscreen() { }
     virtual void prepareExitFullscreen() { }
     VideoLayerObserver* getVideoLayerObserver() { return m_videoLayerObserver; }
     virtual void updateVideoLayerSize() { }
 
+    virtual void enterFullscreenMode() { }
 protected:
     // Android-specific methods and fields.
     static MediaPlayerPrivateInterface* create(MediaPlayer* player);
@@ -150,8 +151,6 @@ protected:
 
     SkBitmap* m_poster; // not owned
     String m_posterUrl;
-
-    bool m_isMediaLoaded;
 
     IntSize m_naturalSize;
     bool m_naturalSizeUnknown;

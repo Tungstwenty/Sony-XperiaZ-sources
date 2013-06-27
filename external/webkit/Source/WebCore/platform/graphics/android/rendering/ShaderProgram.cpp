@@ -1,5 +1,6 @@
 /*
  * Copyright 2010, The Android Open Source Project
+ * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -257,6 +258,16 @@ GLint ShaderProgram::createProgram(const char* pVertexSource, const char* pFragm
     return program;
 }
 
+void ShaderProgram::initProgram(ShaderType type)
+{
+    // initialize shader's static texSampler and position values
+    glUseProgram(m_handleArray[type].programHandle);
+
+    if (m_handleArray[type].texSamplerHandle != -1)
+        glUniform1i(m_handleArray[type].texSamplerHandle, 0);
+    glEnableVertexAttribArray(m_handleArray[type].positionHandle);
+}
+
 ShaderProgram::ShaderProgram()
     : m_blendingEnabled(false)
     , m_contrast(1)
@@ -264,6 +275,11 @@ ShaderProgram::ShaderProgram()
     , m_currentScale(1.0f)
     , m_needsInit(true)
 {
+    // initialize the matrix to calculate z values correctly, since it can be
+    // used for that before setupDrawing is called.
+    GLUtils::setOrthographicMatrix(m_visibleContentRectProjectionMatrix,
+                                   0,0,1,1,
+                                   -1000, 1000);
 }
 
 void ShaderProgram::cleanupGLResources()
@@ -321,6 +337,7 @@ void ShaderProgram::initGLResources()
     GLint pureColorValue = glGetUniformLocation(pureColorProgram, "inputColor");
     m_handleArray[PureColor].init(-1, -1, pureColorPosition, pureColorProgram,
                                   pureColorProjMtx, pureColorValue, -1, -1, -1, -1);
+    initProgram(PureColor);
 
     GLint tex2DAlpha = glGetUniformLocation(tex2DProgram, "alpha");
     GLint tex2DPosition = glGetAttribLocation(tex2DProgram, "vPosition");
@@ -329,6 +346,7 @@ void ShaderProgram::initGLResources()
     GLint tex2DFillPortion = glGetUniformLocation(tex2DProgram, "fillPortion");
     m_handleArray[Tex2D].init(tex2DAlpha, -1, tex2DPosition, tex2DProgram,
                               tex2DProjMtx, -1, tex2DTexSampler, -1, tex2DFillPortion, -1);
+    initProgram(Tex2D);
 
     GLint tex2DInvAlpha = glGetUniformLocation(tex2DInvProgram, "alpha");
     GLint tex2DInvContrast = glGetUniformLocation(tex2DInvProgram, "contrast");
@@ -340,6 +358,7 @@ void ShaderProgram::initGLResources()
                                  tex2DInvPosition, tex2DInvProgram,
                                  tex2DInvProjMtx, -1,
                                  tex2DInvTexSampler, -1, tex2DInvFillPortion, -1);
+    initProgram(Tex2DInv);
 
     GLint repeatTexAlpha = glGetUniformLocation(repeatTexProgram, "alpha");
     GLint repeatTexPosition = glGetAttribLocation(repeatTexProgram, "vPosition");
@@ -351,6 +370,7 @@ void ShaderProgram::initGLResources()
                                   repeatTexProgram,repeatTexProjMtx, -1,
                                   repeatTexTexSampler, -1, repeatTexFillPortion,
                                   repeatTexScale);
+    initProgram(RepeatTex);
 
     GLint repeatTexInvAlpha = glGetUniformLocation(repeatTexInvProgram, "alpha");
     GLint repeatTexInvContrast = glGetUniformLocation(tex2DInvProgram, "contrast");
@@ -364,6 +384,7 @@ void ShaderProgram::initGLResources()
                                      repeatTexInvProjMtx, -1,
                                      repeatTexInvTexSampler, -1,
                                      repeatTexInvFillPortion, repeatTexInvScale);
+    initProgram(RepeatTexInv);
 
     GLint texOESAlpha = glGetUniformLocation(texOESProgram, "alpha");
     GLint texOESPosition = glGetAttribLocation(texOESProgram, "vPosition");
@@ -372,6 +393,7 @@ void ShaderProgram::initGLResources()
     GLint texOESFillPortion = glGetUniformLocation(texOESProgram, "fillPortion");
     m_handleArray[TexOES].init(texOESAlpha, -1, texOESPosition, texOESProgram,
                                texOESProjMtx, -1, texOESTexSampler, -1, texOESFillPortion, -1);
+    initProgram(TexOES);
 
     GLint texOESInvAlpha = glGetUniformLocation(texOESInvProgram, "alpha");
     GLint texOESInvContrast = glGetUniformLocation(texOESInvProgram, "contrast");
@@ -383,6 +405,7 @@ void ShaderProgram::initGLResources()
                                   texOESInvPosition, texOESInvProgram,
                                   texOESInvProjMtx, -1,
                                   texOESInvTexSampler, -1, texOESInvFillPortion, -1);
+    initProgram(TexOESInv);
 
     GLint videoPosition = glGetAttribLocation(videoProgram, "vPosition");
     GLint videoProjMtx = glGetUniformLocation(videoProgram, "projectionMatrix");
@@ -391,6 +414,7 @@ void ShaderProgram::initGLResources()
     m_handleArray[Video].init(-1, -1, videoPosition, videoProgram,
                               videoProjMtx, -1, videoTexSampler,
                               videoTexMtx, -1, -1);
+    initProgram(Video);
 
     const GLfloat coord[] = {
         0.0f, 0.0f, // C
@@ -539,6 +563,16 @@ void ShaderProgram::setupDrawing(const IntRect& invScreenRect,
     // Set up m_clipProjectionMatrix, m_currentScale and m_webViewMatrix before
     // calling this function.
     setupSurfaceProjectionMatrix();
+
+    //// initialize frame-constant values ////
+    glActiveTexture(GL_TEXTURE0);
+    glBindBuffer(GL_ARRAY_BUFFER, m_textureBuffer[0]);
+
+    //// initialize GL cache ////
+    m_cachedProgramType = UndefinedShader;
+    m_cachedOpacity = -1;
+    m_cachedFillPortion = FloatRect();
+    m_cachedPureColor = Color();
 }
 
 // Calculate the right color value sent into the shader considering the (0,1)
@@ -700,23 +734,34 @@ void ShaderProgram::drawQuadInternal(ShaderType type, const GLfloat* matrix,
                                      const Color& pureColor, const FloatRect& fillPortion,
                                      const FloatSize& repeatScale)
 {
-    glUseProgram(m_handleArray[type].programHandle);
+    if (m_cachedProgramType != type) {
+        glUseProgram(m_handleArray[type].programHandle);
+        glVertexAttribPointer(m_handleArray[type].positionHandle,
+                              2, GL_FLOAT, GL_FALSE, 0, 0);
+        m_cachedProgramType = type;
+        m_cachedOpacity = -1; // reset cache for variable shared by multiple programs
+    }
     glUniformMatrix4fv(m_handleArray[type].projMtxHandle, 1, GL_FALSE, matrix);
 
     if (type != PureColor) {
-        glActiveTexture(GL_TEXTURE0);
-        glUniform1i(m_handleArray[type].texSamplerHandle, 0);
         glBindTexture(textureTarget, textureId);
         glTexParameteri(textureTarget, GL_TEXTURE_MIN_FILTER, filter);
         glTexParameteri(textureTarget, GL_TEXTURE_MAG_FILTER, filter);
-        glUniform1f(m_handleArray[type].alphaHandle, opacity);
+
+        if (m_cachedOpacity != opacity) {
+            glUniform1f(m_handleArray[type].alphaHandle, opacity);
+            m_cachedOpacity = opacity;
+        }
 
         GLint contrastHandle = m_handleArray[type].contrastHandle;
         if (contrastHandle != -1)
             glUniform1f(contrastHandle, m_contrast);
 
-        glUniform4f(m_handleArray[type].fillPortionHandle, fillPortion.x(), fillPortion.y(),
-                    fillPortion.width(), fillPortion.height());
+        if (m_cachedFillPortion != fillPortion) {
+            glUniform4f(m_handleArray[type].fillPortionHandle, fillPortion.x(), fillPortion.y(),
+                        fillPortion.width(), fillPortion.height());
+            m_cachedFillPortion = fillPortion;
+        }
 
         // Only when we have repeat scale, this handle can be >= 0;
         if (m_handleArray[type].scaleHandle != -1) {
@@ -724,15 +769,13 @@ void ShaderProgram::drawQuadInternal(ShaderType type, const GLfloat* matrix,
                         repeatScale.width(), repeatScale.height());
         }
     } else {
-        glUniform4f(m_handleArray[type].pureColorHandle,
-                    pureColor.red() / 255.0, pureColor.green() / 255.0,
-                    pureColor.blue() / 255.0, pureColor.alpha() / 255.0);
+        if (m_cachedPureColor != pureColor) {
+            glUniform4f(m_handleArray[type].pureColorHandle,
+                        pureColor.red() / 255.0, pureColor.green() / 255.0,
+                        pureColor.blue() / 255.0, pureColor.alpha() / 255.0);
+            m_cachedPureColor = pureColor;
+        }
     }
-
-    GLint positionHandle = m_handleArray[type].positionHandle;
-    glBindBuffer(GL_ARRAY_BUFFER, m_textureBuffer[0]);
-    glEnableVertexAttribArray(positionHandle);
-    glVertexAttribPointer(positionHandle, 2, GL_FLOAT, GL_FALSE, 0, 0);
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
@@ -824,7 +867,13 @@ void ShaderProgram::drawVideoLayerQuad(const TransformationMatrix& drawMatrix,
                                        int textureId)
 {
     // switch to our custom yuv video rendering program
-    glUseProgram(m_handleArray[Video].programHandle);
+    if (m_cachedProgramType != Video) {
+        glUseProgram(m_handleArray[Video].programHandle);
+        glVertexAttribPointer(m_handleArray[Video].positionHandle,
+                              2, GL_FLOAT, GL_FALSE, 0, 0);
+        m_cachedProgramType = Video;
+    }
+
     // TODO: Merge drawVideoLayerQuad into drawQuad.
     TransformationMatrix modifiedDrawMatrix;
     modifiedDrawMatrix.scale3d(m_currentScale, m_currentScale, 1);
@@ -840,7 +889,93 @@ void ShaderProgram::drawVideoLayerQuad(const TransformationMatrix& drawMatrix,
                        projectionMatrix);
     glUniformMatrix4fv(m_handleArray[Video].videoMtxHandle, 1, GL_FALSE,
                        textureMatrix);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, textureId);
+
+    setBlendingState(false);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+}
+
+// Sets up for drawing video layer to bitmap
+void ShaderProgram::drawToBitmapSetup(SkBitmap& bitmap) {
+    glGetIntegerv(GL_VIEWPORT, m_frameCaptureState.viewport);
+
+    // Save previous FBO
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*) &m_frameCaptureState.previousFbo);
+
+    // Allocate and bind FBO
+    glGenFramebuffers(1, &m_frameCaptureState.frameFbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_frameCaptureState.frameFbo);
+
+    // Gen and bind texture for FBO
+    glGenTextures(1, &m_frameCaptureState.frameTexture);
     glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_frameCaptureState.frameTexture);
+
+    // Configure GL_TEXTURE_2D
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    // Configure to bitmap width and height, always use GL_RGBA
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, bitmap.width(), bitmap.height(),
+            0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+            GL_TEXTURE_2D, m_frameCaptureState.frameTexture, 0);
+
+    GLenum glstatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (glstatus != GL_FRAMEBUFFER_COMPLETE) {
+        ALOGW("glCheckFramebufferStatus returned glstatus=%d", glstatus);
+    }
+    glDisable(GL_SCISSOR_TEST);
+}
+
+// clean up and restore previous settings after drawing video layer to bitmap
+void ShaderProgram::drawToBitmapRestore() {
+    glEnable(GL_SCISSOR_TEST);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_frameCaptureState.previousFbo);
+    glDeleteFramebuffers(1, &m_frameCaptureState.frameFbo);
+    glDeleteTextures(1, &m_frameCaptureState.frameTexture);
+    glViewport(m_frameCaptureState.viewport[0], m_frameCaptureState.viewport[1],
+                m_frameCaptureState.viewport[2], m_frameCaptureState.viewport[3]);
+}
+
+void ShaderProgram::drawVideoLayerToBitmap(float* textureMatrix,
+                                           const SkRect& geometry,
+                                           int textureId,
+                                           SkBitmap& bitmap)
+{
+    GLint maxTextureSize = 0;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
+    if (bitmap.width() > maxTextureSize || bitmap.height() > maxTextureSize ||
+        bitmap.config() != SkBitmap::kARGB_8888_Config) {
+        ALOGE("drawVideoLayerToBitmap bitmap configuration not supported");
+        return; // not supported
+    }
+
+    drawToBitmapSetup(bitmap);
+    SkAutoLockPixels alp(bitmap);
+
+    // switch to our custom yuv video rendering program
+    glUseProgram(m_handleArray[Video].programHandle);
+    TransformationMatrix orthographicMatrix;
+    GLUtils::setOrthographicMatrix(orthographicMatrix, 0, geometry.height(),
+                                   geometry.width(), 0, -1000, 1000);
+
+    glViewport(0, 0, geometry.width(), geometry.height());
+
+    TransformationMatrix modifiedDrawMatrix;
+    modifiedDrawMatrix.scale3d(geometry.width(), geometry.height(), 1);
+    TransformationMatrix renderMatrix =
+            orthographicMatrix * modifiedDrawMatrix;
+
+    GLfloat projectionMatrix[16];
+    GLUtils::toGLMatrix(projectionMatrix, renderMatrix);
+    glUniformMatrix4fv(m_handleArray[Video].projMtxHandle, 1, GL_FALSE,
+                       projectionMatrix);
+    glUniformMatrix4fv(m_handleArray[Video].videoMtxHandle, 1, GL_FALSE,
+                       textureMatrix);
     glUniform1i(m_handleArray[Video].texSamplerHandle, 0);
     glBindTexture(GL_TEXTURE_EXTERNAL_OES, textureId);
 
@@ -851,6 +986,12 @@ void ShaderProgram::drawVideoLayerQuad(const TransformationMatrix& drawMatrix,
 
     setBlendingState(false);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    // Read back from texture
+    glReadPixels(0, 0, bitmap.width(), bitmap.height(), GL_RGBA,
+            GL_UNSIGNED_BYTE, bitmap.getPixels());
+
+    drawToBitmapRestore();
 }
 
 void ShaderProgram::setGLDrawInfo(const android::uirenderer::DrawGlInfo* info)

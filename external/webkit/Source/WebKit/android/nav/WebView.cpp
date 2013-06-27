@@ -1,6 +1,6 @@
 /*
  * Copyright 2007, The Android Open Source Project
- * Copyright (C) 2012 Sony Mobile Communications AB.
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,6 +33,7 @@
 #include "BaseLayerAndroid.h"
 #include "BaseRenderer.h"
 #include "DrawExtra.h"
+#include "DumpLayer.h"
 #include "Frame.h"
 #include "GLWebViewState.h"
 #include "GraphicsJNI.h"
@@ -58,7 +59,6 @@
 #include "WebCoreJni.h"
 #include "WebRequestContext.h"
 #include "WebViewCore.h"
-#include "android_graphics.h"
 #include "HTMLCanvasElement.h"
 
 #ifdef GET_NATIVE_VIEW
@@ -201,9 +201,7 @@ WebView(JNIEnv* env, jobject javaWebView, int viewImpl, WTF::String drawableDir,
     // deallocated base layer.
     stopGL();
 #endif
-    if (m_baseLayer) {
-        m_baseLayer->runUnRefOnMainThread();
-    }
+    SkSafeUnref(m_baseLayer);
     delete m_glDrawFunctor;
     for (int i = 0; i < DRAW_EXTRAS_SIZE; i++)
         delete m_extras[i];
@@ -521,9 +519,7 @@ bool setBaseLayer(BaseLayerAndroid* newBaseLayer, bool showVisualIndicator,
 #if ENABLE(ANDROID_OVERFLOW_SCROLL)
     copyScrollPosition(m_baseLayer, newBaseLayer, scrollingLayer);
 #endif
-    if (m_baseLayer) {
-        m_baseLayer->runUnRefOnMainThread();
-    }
+    SkSafeUnref(m_baseLayer);
     m_baseLayer = newBaseLayer;
 
     return queueFull;
@@ -722,7 +718,7 @@ void findMaxVisibleRect(int movingLayerId, SkIRect& visibleContentRect)
     if (findMaskedRectsForLayer(m_baseLayer, rects, movingLayerId)) {
         float maxSize = 0.0;
         const FloatRect* largest = 0;
-        for (int i = 0; i < rects.size(); i++) {
+        for (unsigned int i = 0; i < rects.size(); i++) {
             const FloatRect& rect = rects[i];
             float size = rect.width() * rect.height();
             if (size > maxSize) {
@@ -735,6 +731,29 @@ void findMaxVisibleRect(int movingLayerId, SkIRect& visibleContentRect)
             largeRect.round(&visibleContentRect);
         }
     }
+}
+
+bool isHandleLeft(SelectText::HandleId handleId)
+{
+    SelectText* selectText = static_cast<SelectText*>(getDrawExtra(DrawExtrasSelection));
+    if (!selectText)
+        return (handleId == SelectText::BaseHandle);
+
+    return (selectText->getHandleType(handleId) == SelectText::LeftHandle);
+}
+
+bool isPointVisible(int layerId, int contentX, int contentY)
+{
+    bool isVisible = true;
+    const TransformationMatrix* transform = getLayerTransform(layerId);
+    if (transform) {
+        // layer is guaranteed to be non-NULL because of getLayerTransform
+        LayerAndroid* layer = m_baseLayer->findById(layerId);
+        IntRect rect = layer->visibleContentArea();
+        rect = transform->mapRect(rect);
+        isVisible = rect.contains(contentX, contentY);
+    }
+    return isVisible;
 }
 
 private: // local state for WebView
@@ -967,6 +986,13 @@ static bool nativeSetBaseLayer(JNIEnv *env, jobject obj, jint nativeView, jint l
                                                                 scrollingLayer);
 }
 
+static void nativeClearBaseLayer(JNIEnv *env, jobject obj, jint layer)
+{
+    BaseLayerAndroid* layerImpl = reinterpret_cast<BaseLayerAndroid*>(layer);
+    if (layerImpl)
+        SkSafeUnref(layerImpl);
+}
+
 static BaseLayerAndroid* nativeGetBaseLayer(JNIEnv *env, jobject obj, jint nativeView)
 {
     return reinterpret_cast<WebView*>(nativeView)->getBaseLayer();
@@ -976,6 +1002,28 @@ static void nativeCopyBaseContentToPicture(JNIEnv *env, jobject obj, jobject pic
 {
     SkPicture* picture = GraphicsJNI::getNativePicture(env, pict);
     GET_NATIVE_VIEW(env, obj)->copyBaseContentToPicture(picture);
+}
+
+static jboolean nativeDumpLayerContentToPicture(JNIEnv *env, jobject obj, jint instance,
+                                                jstring jclassName, jint layerId, jobject pict)
+{
+    bool success = false;
+    SkPicture* picture = GraphicsJNI::getNativePicture(env, pict);
+    std::string classname = jstringToStdString(env, jclassName);
+    BaseLayerAndroid* baseLayer = reinterpret_cast<WebView*>(instance)->getBaseLayer();
+    LayerAndroid* layer = baseLayer->findById(layerId);
+    SkSafeRef(layer);
+    if (layer && layer->subclassName() == classname) {
+        LayerContent* content = layer->content();
+        if (content) {
+            SkCanvas* canvas = picture->beginRecording(content->width(), content->height());
+            content->draw(canvas);
+            picture->endRecording();
+            success = true;
+        }
+    }
+    SkSafeUnref(layer);
+    return success;
 }
 
 static bool nativeHasContent(JNIEnv *env, jobject obj)
@@ -1170,7 +1218,8 @@ static void nativeDumpDisplayTree(JNIEnv* env, jobject jwebview, jstring jurl)
         if (baseLayer) {
           FILE* file = fopen(LAYERS_TREE_LOG_FILE,"w");
           if (file) {
-              baseLayer->dumpLayers(file, 0);
+              WebCore::FileLayerDumper dumper(file);
+              baseLayer->dumpLayers(&dumper);
               fclose(file);
           }
         }
@@ -1294,6 +1343,20 @@ static void nativeFindMaxVisibleRect(JNIEnv *env, jobject obj, jint nativeView,
     GraphicsJNI::irect_to_jrect(nativeRect, env, visibleContentRect);
 }
 
+static bool nativeIsHandleLeft(JNIEnv *env, jobject obj, jint nativeView,
+        jint handleId)
+{
+    WebView* webview = reinterpret_cast<WebView*>(nativeView);
+    return webview->isHandleLeft(static_cast<SelectText::HandleId>(handleId));
+}
+
+static bool nativeIsPointVisible(JNIEnv *env, jobject obj, jint nativeView,
+        jint layerId, jint contentX, jint contentY)
+{
+    WebView* webview = reinterpret_cast<WebView*>(nativeView);
+    return webview->isPointVisible(layerId, contentX, contentY);
+}
+
 /*
  * JNI registration
  */
@@ -1320,10 +1383,14 @@ static JNINativeMethod gJavaWebViewMethods[] = {
         (void*) nativeSetHeightCanMeasure },
     { "nativeSetBaseLayer", "(IIZZI)Z",
         (void*) nativeSetBaseLayer },
+    { "nativeClearBaseLayer", "(I)V",
+        (void*) nativeClearBaseLayer },
     { "nativeGetBaseLayer", "(I)I",
         (void*) nativeGetBaseLayer },
     { "nativeCopyBaseContentToPicture", "(Landroid/graphics/Picture;)V",
         (void*) nativeCopyBaseContentToPicture },
+    { "nativeDumpLayerContentToPicture", "(ILjava/lang/String;ILandroid/graphics/Picture;)Z",
+        (void*) nativeDumpLayerContentToPicture },
     { "nativeHasContent", "()Z",
         (void*) nativeHasContent },
     { "nativeDiscardAllTextures", "()V",
@@ -1372,6 +1439,10 @@ static JNINativeMethod gJavaWebViewMethods[] = {
         (void*) nativeSetHwAccelerated },
     { "nativeFindMaxVisibleRect", "(IILandroid/graphics/Rect;)V",
         (void*) nativeFindMaxVisibleRect },
+    { "nativeIsHandleLeft", "(II)Z",
+        (void*) nativeIsHandleLeft },
+    { "nativeIsPointVisible", "(IIII)Z",
+        (void*) nativeIsPointVisible },
 };
 
 int registerWebView(JNIEnv* env)

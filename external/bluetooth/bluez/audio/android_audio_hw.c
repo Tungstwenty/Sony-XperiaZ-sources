@@ -20,7 +20,7 @@
  */
 
 #define LOG_TAG "a2dp_audio_hw"
-//#define LOG_NDEBUG 0
+#define LOG_NDEBUG 0
 
 #include <errno.h>
 #include <pthread.h>
@@ -236,9 +236,10 @@ static bool _out_validate_parms(struct astream_out *out, audio_format_t format,
     return true;
 }
 
-static int out_standby_stream_locked(struct astream_out *out, int attempts, int timeout)
+static int out_standby_stream_locked(struct astream_out *out)
 {
     int ret = 0;
+    int attempts = MAX_WRITE_COMPLETION_ATTEMPTS;
 
     if (out->standby || !out->data)
         return 0;
@@ -246,7 +247,9 @@ static int out_standby_stream_locked(struct astream_out *out, int attempts, int 
     out->standby = true;
     /* wait for write completion if needed */
     while (out->write_busy && attempts--) {
-        ret = pthread_cond_timeout_np(&out->write_cond, &out->lock, timeout);
+        ret = pthread_cond_timeout_np(&out->write_cond,
+                                &out->lock,
+                                BUF_WRITE_COMPLETION_TIMEOUT_MS);
         ALOGE_IF(ret != 0, "out_standby_stream_locked() wait cond error %d", ret);
     }
     ALOGE_IF(attempts == 0, "out_standby_stream_locked() a2dp_write() would not stop!!!");
@@ -260,25 +263,17 @@ static int out_standby_stream_locked(struct astream_out *out, int attempts, int 
     return ret;
 }
 
-static int out_close_stream_locked(struct astream_out *out, int attempts, int timeout)
+static int out_close_stream_locked(struct astream_out *out)
 {
-    int ret = out_standby_stream_locked(out, attempts, timeout);
+    out_standby_stream_locked(out);
 
     if (out->data) {
-        /* We cannot call a2dp_cleanup() if we got a timeout waiting
-           for a2dp_write() in out_standby_stream_locked() because
-           then we will block. */
-        if (ret == ETIMEDOUT) {
-            ALOGV("%s: calling a2dp_cleanup_nolock()", __func__);
-            a2dp_cleanup_nolock(out->data);
-        } else {
-            ALOGV("%s: calling a2dp_cleanup()", __func__);
-            a2dp_cleanup(out->data);
-        }
+        ALOGV("%s: calling a2dp_cleanup()", __func__);
+        a2dp_cleanup(out->data);
         out->data = NULL;
     }
 
-    return ret;
+    return 0;
 }
 
 static int out_standby(struct audio_stream *stream)
@@ -286,7 +281,7 @@ static int out_standby(struct audio_stream *stream)
     struct astream_out *out = (struct astream_out *)stream;
 
     pthread_mutex_lock(&out->lock);
-    out_standby_stream_locked(out, MAX_WRITE_COMPLETION_ATTEMPTS, BUF_WRITE_COMPLETION_TIMEOUT_MS);
+    out_standby_stream_locked(out);
     pthread_mutex_unlock(&out->lock);
 
     return 0;
@@ -420,7 +415,7 @@ static ssize_t out_write(struct audio_stream_out *stream, const void* buffer,
     pthread_mutex_lock(&out->buf_lock);
     pthread_mutex_lock(&out->lock);
     if (!out->bt_enabled || out->suspended) {
-        ALOGV("a2dp %s: bluetooth disabled bt_en %d, suspended %d",
+        ALOGV("a2dp: bluetooth disabled bt_en %d, suspended %d",
              out->bt_enabled, out->suspended);
         ret = -1;
         goto err_bt_disabled;
@@ -428,7 +423,6 @@ static ssize_t out_write(struct audio_stream_out *stream, const void* buffer,
 
     if (out->standby) {
         acquire_wake_lock(PARTIAL_WAKE_LOCK, A2DP_WAKE_LOCK_NAME);
-        out->standby = false;
         out->last_write_time = system_time();
         out->buf_rd_idx = 0;
         out->buf_wr_idx = 0;
@@ -461,10 +455,16 @@ static ssize_t out_write(struct audio_stream_out *stream, const void* buffer,
         frames_written += frames;
         _out_inc_wr_idx_locked(out, frames);
         pthread_mutex_lock(&out->lock);
-        if (out->standby) {
-            goto err_write;
-        }
-        pthread_mutex_unlock(&out->lock);
+        if (out->standby && out->bt_enabled) {
+            out->standby = false;
+            pthread_mutex_unlock(&out->lock);
+            ALOGV("*********Audio thread wait");
+            pthread_cond_timeout_np(&out->buf_cond,
+                                              &out->buf_lock,
+                                              BUF_WRITE_AVAILABILITY_TIMEOUT_MS);
+            ALOGV("*********Audio thread wait end ");
+        } else
+           pthread_mutex_unlock(&out->lock);
     }
     pthread_mutex_unlock(&out->buf_lock);
 
@@ -476,7 +476,7 @@ err_init:
 err_bt_disabled:
     pthread_mutex_unlock(&out->buf_lock);
     ALOGV("!!!! write error");
-    out_standby_stream_locked(out, MAX_WRITE_COMPLETION_ATTEMPTS, BUF_WRITE_COMPLETION_TIMEOUT_MS);
+    out_standby_stream_locked(out);
     pthread_mutex_unlock(&out->lock);
 
     /* XXX: simulate audio output timing in case of error?!?! */
@@ -504,7 +504,6 @@ static void *_out_buf_thread_func(void *context)
             while (frames > 0 && !out->buf_thread_exit) {
                 int ret;
                 uint32_t buffer_duration_us;
-                a2dpData data;
                 /* PCM format is always 16bit stereo */
                 size_t bytes = frames * sizeof(uint32_t);
                 if (bytes > out->buffer_size) {
@@ -512,39 +511,28 @@ static void *_out_buf_thread_func(void *context)
                 }
 
                 pthread_mutex_lock(&out->lock);
-                if (out->standby) {
+                if (out->standby || !out->bt_enabled) {
                     /* abort and clear all pending frames if standby requested */
                     pthread_mutex_unlock(&out->lock);
                     frames = _out_frames_ready_locked(out);
                     _out_inc_rd_idx_locked(out, frames);
                     goto wait;
                 }
-                if (out->buf_thread_exit) {
-                    pthread_mutex_unlock(&out->lock);
-                    continue;
-                }
-
                 /* indicate to out_standby_stream_locked() that a2dp_write() is active */
                 out->write_busy = true;
-                data = out->data;
                 pthread_mutex_unlock(&out->lock);
                 pthread_mutex_unlock(&out->buf_lock);
 
-                ret = a2dp_write(data, out->buf + out->buf_rd_idx, bytes);
+                ret = a2dp_write(out->data, out->buf + out->buf_rd_idx, bytes);
 
                 /* clear write_busy condition */
                 pthread_mutex_lock(&out->buf_lock);
                 pthread_mutex_lock(&out->lock);
                 out->write_busy = false;
                 pthread_cond_signal(&out->write_cond);
-                if (out->buf_thread_exit) {
-                    pthread_mutex_unlock(&out->lock);
-                    continue;
-                }
                 pthread_mutex_unlock(&out->lock);
 
                 if (ret < 0) {
-                    if (ret != -EINPROGRESS)   //not a Signaling start
                         ALOGE("%s: a2dp_write failed (%d)\n", __func__, ret);
                     /* skip pending frames in case of write error */
                     _out_inc_rd_idx_locked(out, frames);
@@ -582,6 +570,7 @@ static void *_out_buf_thread_func(void *context)
 wait:
         if (!out->buf_thread_exit) {
             pthread_cond_wait(&out->buf_cond, &out->buf_lock);
+            ALOGV("Got Signal");
         }
     }
     pthread_mutex_unlock(&out->buf_lock);
@@ -607,7 +596,7 @@ static int _out_bt_enable(struct astream_out *out, bool enable)
     pthread_mutex_lock(&out->lock);
     out->bt_enabled = enable;
     if (!enable)
-        ret = out_close_stream_locked(out, MAX_WRITE_COMPLETION_ATTEMPTS, BUF_WRITE_COMPLETION_TIMEOUT_MS);
+        ret = out_close_stream_locked(out);
     pthread_mutex_unlock(&out->lock);
 
     return ret;
@@ -615,11 +604,12 @@ static int _out_bt_enable(struct astream_out *out, bool enable)
 
 static int _out_a2dp_suspend(struct astream_out *out, bool suspend)
 {
+    int liba2dpstop = 0;
     pthread_mutex_lock(&out->lock);
-    out->suspended = suspend;
-    out_standby_stream_locked(out, MAX_WRITE_COMPLETION_ATTEMPTS, BUF_WRITE_COMPLETION_TIMEOUT_MS);
+    liba2dpstop = out_standby_stream_locked(out);
+    if (!(liba2dpstop) || !(suspend))
+        out->suspended = suspend;
     pthread_mutex_unlock(&out->lock);
-
     return 0;
 }
 
@@ -657,9 +647,6 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
     }
 
     pthread_mutex_init(&out->lock, NULL);
-    pthread_mutex_init(&out->buf_lock, NULL);
-    pthread_cond_init(&out->buf_cond, NULL);
-    pthread_cond_init(&out->write_cond, NULL);
 
     out->stream.common.get_sample_rate = out_get_sample_rate;
     out->stream.common.set_sample_rate = out_set_sample_rate;
@@ -772,24 +759,17 @@ static void adev_close_output_stream_locked(struct adev_a2dp *dev,
     pthread_mutex_lock(&out->lock);
     /* out_write() must not be executed from now on */
     out->bt_enabled = false;
-    if (out->buf_thread)
-        out->buf_thread_exit = true;
-    /* Retry 3 times for 1s each, keep total time well below 5s to prevent ANR. */
-    out_close_stream_locked(out, 3, 1000);
+    out_close_stream_locked(out);
+    pthread_mutex_unlock(&out->lock);
     if (out->buf_thread) {
-        pthread_mutex_unlock(&out->lock);
         pthread_mutex_lock(&out->buf_lock);
+        out->buf_thread_exit = true;
         pthread_cond_broadcast(&out->buf_cond);
         pthread_mutex_unlock(&out->buf_lock);
         pthread_join(out->buf_thread, (void **) NULL);
-    } else
-        pthread_mutex_unlock(&out->lock);
-
-    pthread_mutex_destroy(&out->lock);
-    pthread_mutex_destroy(&out->buf_lock);
-    pthread_cond_destroy(&out->buf_cond);
-    pthread_cond_destroy(&out->write_cond);
-
+        pthread_cond_destroy(&out->buf_cond);
+        pthread_mutex_destroy(&out->buf_lock);
+    }
     if (out->buf) {
         free(out->buf);
     }

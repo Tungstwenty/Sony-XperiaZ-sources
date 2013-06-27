@@ -1,4 +1,3 @@
-/* Modified 2012 Sony Mobile Communications AB. */
 #define LOG_TAG "Layer"
 #define LOG_NDEBUG 1
 
@@ -7,7 +6,6 @@
 
 #include "AndroidLog.h"
 #include "SkCanvas.h"
-#include "MainThread.h"
 
 //#define DEBUG_DRAW_LAYER_BOUNDS
 //#define DEBUG_TRACK_NEW_DELETE
@@ -57,26 +55,6 @@ Layer::Layer(const Layer& src) : INHERITED() {
     gLayerAllocCount += 1;
     SkDebugf("Layer copy:   %d\n", gLayerAllocCount);
 #endif
-}
-
-struct LayerUnRefTask {
-public:
-    LayerUnRefTask(Layer* layer) : m_doomedLayer(layer){}
-
-    Layer* m_doomedLayer;
-};
-
-static void unrefOnMainThread(void* layerUnRefTask) {
-    if (layerUnRefTask) {
-        LayerUnRefTask* lurt = static_cast<LayerUnRefTask*>(layerUnRefTask);
-        SkSafeUnref(lurt->m_doomedLayer);
-
-        delete lurt;
-    }
-}
-
-void Layer::runUnRefOnMainThread() {
-    callOnMainThread(unrefOnMainThread, new LayerUnRefTask(this));
 }
 
 Layer::~Layer() {

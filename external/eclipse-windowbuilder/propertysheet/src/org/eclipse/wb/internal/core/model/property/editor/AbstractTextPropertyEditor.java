@@ -12,6 +12,9 @@ package org.eclipse.wb.internal.core.model.property.editor;
 
 import org.eclipse.jface.bindings.keys.KeyStroke;
 import org.eclipse.jface.fieldassist.ContentProposalAdapter;
+import org.eclipse.jface.fieldassist.IContentProposal;
+import org.eclipse.jface.fieldassist.IContentProposalListener;
+import org.eclipse.jface.fieldassist.IContentProposalListener2;
 import org.eclipse.jface.fieldassist.IContentProposalProvider;
 import org.eclipse.jface.fieldassist.IControlContentAdapter;
 import org.eclipse.jface.fieldassist.TextContentAdapter;
@@ -51,25 +54,37 @@ public abstract class AbstractTextPropertyEditor extends TextDisplayPropertyEdit
   // that we can open the dialog up immediately on focus gain to show all available
   // alternatives (the default implementation requires at least one keytroke before
   // it shows up)
-    private static class ImmediateProposalAdapter extends ContentProposalAdapter {
-        public ImmediateProposalAdapter(Text control,
+    private class ImmediateProposalAdapter extends ContentProposalAdapter
+        implements FocusListener, IContentProposalListener, IContentProposalListener2 {
+        private final PropertyTable m_propertyTable;
+        private final IContentProposalProvider m_proposalProvider;
+        public ImmediateProposalAdapter(
+                Text control,
                 IControlContentAdapter controlContentAdapter,
-                IContentProposalProvider proposalProvider, KeyStroke keyStroke,
-                char[] autoActivationCharacters) {
+                IContentProposalProvider proposalProvider,
+                KeyStroke keyStroke,
+                char[] autoActivationCharacters,
+                PropertyTable propertyTable) {
             super(control, controlContentAdapter, proposalProvider, keyStroke,
                     autoActivationCharacters);
+            m_propertyTable = propertyTable;
+            m_proposalProvider = proposalProvider;
 
             // On focus gain, start completing
-            control.addFocusListener(new FocusListener() {
-                @Override
-                public void focusGained(FocusEvent event) {
-                    openIfNecessary();
-                }
+            control.addFocusListener(this);
 
-                @Override
-                public void focusLost(FocusEvent event) {
-                }
-            });
+            // Listen on popup open and close events, in order to disable
+            // focus handling on the textfield during those events.
+            // This is necessary since otherwise as soon as the user clicks
+            // on the popup with the mouse, the text field loses focus, and
+            // then instantly closes the popup -- without the selection being
+            // applied. See for example
+            //   http://dev.eclipse.org/viewcvs/viewvc.cgi/org.eclipse.jface.snippets/
+            //      Eclipse%20JFace%20Snippets/org/eclipse/jface/snippets/viewers/
+            //      Snippet060TextCellEditorWithContentProposal.java?view=markup
+            // for another example of this technique.
+            addContentProposalListener((IContentProposalListener) this);
+            addContentProposalListener((IContentProposalListener2) this);
 
             /* Triggering on empty is disabled for now: it has the unfortunate side-effect
                that it's impossible to enter a blank text field - blank matches everything,
@@ -90,6 +105,12 @@ public abstract class AbstractTextPropertyEditor extends TextDisplayPropertyEdit
         }
 
         private void openIfNecessary() {
+            if (m_textControl == null || m_textControl.isDisposed() ||
+                    m_proposalProvider.getProposals(m_textControl.getText(),
+                            m_textControl.getCaretPosition()).length == 0) {
+                return;
+            }
+
             getControl().getDisplay().asyncExec(new Runnable() {
                 @Override
                 public void run() {
@@ -98,6 +119,37 @@ public abstract class AbstractTextPropertyEditor extends TextDisplayPropertyEdit
                     }
                 }
             });
+        }
+
+        // ---- Implements FocusListener ----
+
+        @Override
+        public void focusGained(FocusEvent event) {
+            openIfNecessary();
+        }
+
+        @Override
+        public void focusLost(FocusEvent event) {
+        }
+
+        // ---- Implements IContentProposalListener ----
+
+        @Override
+        public void proposalAccepted(IContentProposal proposal) {
+            closeProposalPopup();
+            m_propertyTable.deactivateEditor(true);
+        }
+
+        // ---- Implements IContentProposalListener2 ----
+
+        @Override
+        public void proposalPopupClosed(ContentProposalAdapter adapter) {
+            m_ignoreFocusLost = false;
+        }
+
+        @Override
+        public void proposalPopupOpened(ContentProposalAdapter adapter) {
+            m_ignoreFocusLost = true;
         }
     }
   // END ADT MODIFICATIONS
@@ -108,7 +160,10 @@ public abstract class AbstractTextPropertyEditor extends TextDisplayPropertyEdit
     // create Text
     {
       m_textControl = new Text(propertyTable, SWT.NONE);
-      new TextControlActionsManager(m_textControl);
+
+      @SuppressWarnings("unused")
+      TextControlActionsManager manager = new TextControlActionsManager(m_textControl);
+
       m_textControl.setEditable(isEditable());
 
         // BEGIN ADT MODIFICATIONS
@@ -117,7 +172,8 @@ public abstract class AbstractTextPropertyEditor extends TextDisplayPropertyEdit
         IContentProposalProvider completion = property.getAdapter(IContentProposalProvider.class);
         if (completion != null) {
             ImmediateProposalAdapter adapter = new ImmediateProposalAdapter(
-                    m_textControl, new TextContentAdapter(), completion, null, null);
+                    m_textControl, new TextContentAdapter(), completion, null, null,
+                    propertyTable);
             adapter.setFilterStyle(ContentProposalAdapter.FILTER_NONE);
             adapter.setProposalAcceptanceStyle(ContentProposalAdapter.PROPOSAL_REPLACE);
             ILabelProvider labelProvider = property.getAdapter(ILabelProvider.class);
@@ -261,6 +317,11 @@ public abstract class AbstractTextPropertyEditor extends TextDisplayPropertyEdit
    * @return <code>true</code> if transfer was successful.
    */
   private boolean toProperty(Property property) throws Exception {
+    // BEGIN ADT MODIFICATIONS
+    if (m_textControl == null) {
+      return false;
+    }
+    // END ADT MODIFICATIONS
     String text = m_textControl.getText();
     // change property only if text was changed
     if (!m_currentText.equals(text)) {

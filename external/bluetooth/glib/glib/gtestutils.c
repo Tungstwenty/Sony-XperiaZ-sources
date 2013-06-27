@@ -1849,7 +1849,7 @@ net_double (const gchar **ipointer)
 {
   union { guint64 vuint64; double vdouble; } u;
   guint64 aligned_int64;
-  memcpy (&aligned_int64, *ipointer, 8);
+  memcpy (&aligned_int64, *ipointer, sizeof(guint64));
   *ipointer += 8;
   u.vuint64 = GUINT64_FROM_BE (aligned_int64);
   return u.vdouble;

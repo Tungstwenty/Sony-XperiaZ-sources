@@ -208,7 +208,7 @@ public class DesignerPlugin {
         if (image == null) {
             ImageDescriptor descriptor = getImageDescriptor(path);
             if (descriptor != null) {
-                return descriptor.createImage();
+                image = descriptor.createImage();
             }
             sImageCache.put(path, image);
         }

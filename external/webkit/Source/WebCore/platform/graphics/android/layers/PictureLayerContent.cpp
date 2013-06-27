@@ -1,6 +1,10 @@
+#define LOG_TAG "PictureLayerContent"
+#define LOG_NDEBUG 1
+
 #include "config.h"
 #include "PictureLayerContent.h"
 
+#include "AndroidLog.h"
 #include "InspectorCanvas.h"
 #include "SkPicture.h"
 
@@ -41,26 +45,16 @@ int PictureLayerContent::height()
     return m_picture->height();
 }
 
-bool PictureLayerContent::isEmpty()
-{
-    if (!m_picture)
-        return true;
-    if (m_picture->width() == 0
-        || m_picture->height() == 0)
-        return true;
-    return false;
-}
-
 void PictureLayerContent::checkForOptimisations()
 {
     if (!m_checkedContent)
-        hasText(); // for now only check the presence of text
+        maxZoomScale(); // for now only check the maximum scale for painting
 }
 
-bool PictureLayerContent::hasText()
+float PictureLayerContent::maxZoomScale()
 {
     if (m_checkedContent)
-        return m_hasText;
+        return m_hasText ? 1e6 : 1.0;
 
     // Let's check if we have text or not. If we don't, we can limit
     // ourselves to scale 1!
@@ -82,7 +76,7 @@ bool PictureLayerContent::hasText()
 
     m_checkedContent = true;
 
-    return m_hasText;
+    return m_hasText ? 1e6 : 1.0;
 }
 
 void PictureLayerContent::draw(SkCanvas* canvas)
@@ -90,6 +84,7 @@ void PictureLayerContent::draw(SkCanvas* canvas)
     if (!m_picture)
         return;
 
+    TRACE_METHOD();
     android::Mutex::Autolock lock(m_drawLock);
     SkRect r = SkRect::MakeWH(width(), height());
     canvas->clipRect(r);

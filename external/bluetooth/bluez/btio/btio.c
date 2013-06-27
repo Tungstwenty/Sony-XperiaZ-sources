@@ -4,6 +4,7 @@
  *
  *  Copyright (C) 2009-2010  Marcel Holtmann <marcel@holtmann.org>
  *  Copyright (C) 2009-2010  Nokia Corporation
+ *  Copyright (C) 2013  Sony Mobile Communications AB
  *
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -1251,6 +1252,11 @@ gboolean bt_io_accept(GIOChannel *io, BtIOConnect connect, gpointer user_data,
 	int sock;
 	char c;
 	struct pollfd pfd;
+
+	if (io == NULL) {
+		ERROR_FAILED(err, "io_null", errno);
+		return FALSE;
+	}
 
 	sock = g_io_channel_unix_get_fd(io);
 

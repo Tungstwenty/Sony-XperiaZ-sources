@@ -4,7 +4,7 @@
  *           (C) 2001 Dirk Mueller (mueller@kde.org)
  * Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc. All rights reserved.
  * Copyright (C) 2008, 2009 Torch Mobile Inc. All rights reserved. (http://www.torchmobile.com/)
- * Copyright (C) 2012 The Linux Foundation. All rights reserved.
+ * Copyright (C) 2012 The Linux Foundation All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -244,6 +244,7 @@ public:
     
     // These low-level calls give the caller responsibility for maintaining the integrity of the tree.
     void setPreviousSibling(Node* previous) { m_previous = previous; }
+#if ENABLE(PLD_DOM_TRAVERSAL)
     ALWAYS_INLINE void updatePrefetchTarget() {
         if (m_next) {
             int skew;
@@ -258,6 +259,9 @@ public:
     }
     void setPrefetchTarget(Node *prefetch) { m_prefetch = prefetch; }
     void setNextSibling(Node* next) { m_next = next; updatePrefetchTarget(); }
+#else
+    void setNextSibling(Node* next) { m_next = next; }
+#endif
     void updatePreviousNode() { m_previousNode = traversePreviousNode(); if (m_previousNode) m_previousNode->setNextNode(this); }
     void updateNextNode() { m_nextNode = traverseNextNode(); if (m_nextNode) m_nextNode->setPreviousNode(this); }
     void updatePrevNextNodesInSubtree();
@@ -421,10 +425,12 @@ public:
     Node* traverseNextNodeFastPath() const { prefetchTarget(); return m_nextNode; }
 
     ALWAYS_INLINE void prefetchTarget() const {
+#if ENABLE(PLD_DOM_TRAVERSAL)
         if (m_prefetch) {
             __builtin_prefetch(((char *) m_prefetch));
             __builtin_prefetch(((char *) m_prefetch) + 64);
         }
+#endif
     }
 
     Node* lastDescendantNode(bool includeThis = false) const;
@@ -735,7 +741,9 @@ private:
     Document* m_document;
     Node* m_previous;
     Node* m_next;
+#if ENABLE(PLD_DOM_TRAVERSAL)
     Node* m_prefetch;
+#endif
     RenderObject* m_renderer;
     mutable uint32_t m_nodeFlags;
     Node* m_previousNode;

@@ -36,6 +36,7 @@ BINDING_C_INCLUDES := \
 endif
 
 BINDING_C_INCLUDES += \
+	\
 	$(LOCAL_PATH)/bindings/v8 \
 	$(LOCAL_PATH)/bindings/v8/custom \
 	$(LOCAL_PATH)/bindings/v8/specialization \
@@ -193,6 +194,13 @@ LOCAL_SRC_FILES += \
 	bindings/v8/custom/V8SVGElementCustom.cpp \
 	bindings/v8/custom/V8SVGLengthCustom.cpp \
 	bindings/v8/custom/V8SVGPathSegCustom.cpp
+endif
+
+ifeq ($(ENABLE_WEBAUDIO), true)
+LOCAL_SRC_FILES += \
+	bindings/v8/custom/V8AudioBufferSourceNodeCustom.cpp \
+	bindings/v8/custom/V8AudioContextCustom.cpp \
+	bindings/v8/custom/V8AudioNodeCustom.cpp
 endif
 
 LOCAL_SRC_FILES += \

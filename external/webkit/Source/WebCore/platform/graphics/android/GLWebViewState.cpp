@@ -1,6 +1,5 @@
 /*
  * Copyright 2010, The Android Open Source Project
- * Copyright (C) 2012 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -361,9 +360,8 @@ int GLWebViewState::drawGL(IntRect& invScreenRect, SkRect& visibleContentRect,
     if (ImagesManager::instance()->prepareTextures(this))
         returnFlags |= DrawGlInfo::kStatusDraw;
 
-    if (scale < MIN_SCALE_WARNING || scale > MAX_SCALE_WARNING) {
+    if (scale < MIN_SCALE_WARNING || scale > MAX_SCALE_WARNING)
         ALOGW("WARNING, scale seems corrupted after update: %e", scale);
-    }
 
     double currentTime = setupDrawing(invScreenRect, visibleContentRect, screenRect,
                                       titleBarHeight, screenClip, scale);

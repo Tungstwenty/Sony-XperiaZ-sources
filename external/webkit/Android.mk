@@ -53,6 +53,10 @@ ifneq ($(ENABLE_AUTOFILL),false)
   ENABLE_AUTOFILL = true
 endif
 
+ifneq ($(ENABLE_WEBAUDIO),false)
+  ENABLE_WEBAUDIO = true
+endif
+
 BASE_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
@@ -224,6 +228,17 @@ LOCAL_CFLAGS += -DWEBKIT_IMPLEMENTATION=1
 LOCAL_C_INCLUDES := $(LOCAL_C_INCLUDES) \
 	$(SOURCE_PATH)/ThirdParty/ANGLE/include/GLSLANG
 
+ifeq ($(ENABLE_WEBAUDIO),true)
+LOCAL_C_INCLUDES := $(LOCAL_C_INCLUDES) \
+	external/kissfft \
+	frameworks/native/include/media/openmax \
+	$(WEBCORE_PATH)/platform/audio \
+	$(WEBCORE_PATH)/platform/audio/android \
+	$(WEBCORE_PATH)/webaudio \
+	$(WEBKIT_PATH)/android/webaudio \
+	$(WEBKIT_PATH)/android/neon
+endif
+
 # Include WTF source file.
 d := Source/JavaScriptCore
 LOCAL_PATH := $(BASE_PATH)/$d
@@ -281,10 +296,22 @@ LOCAL_CFLAGS += -Darm
 LOCAL_CFLAGS += -Wno-psabi
 endif
 
+ifeq ($(TARGET_ARCH_VARIANT),x86-atom)
+LOCAL_CFLAGS += -fno-pic
+endif
+
 # need a flag to tell the C side when we're on devices with large memory
 # budgets (i.e. larger than the low-end devices that initially shipped)
 ifeq ($(ARCH_ARM_HAVE_VFP),true)
 LOCAL_CFLAGS += -DANDROID_LARGE_MEMORY_DEVICE
+endif
+
+ifeq ($(TARGET_ARCH),x86)
+LOCAL_CFLAGS += -DANDROID_LARGE_MEMORY_DEVICE
+endif
+
+ifeq ($(ARCH_ARM_HAVE_NEON),true)
+LOCAL_CFLAGS += -D__USE_ARM_NEON__
 endif
 
 ifeq ($(ENABLE_SVG),true)
@@ -299,36 +326,14 @@ ifeq ($(ENABLE_WTF_USE_ACCELERATED_COMPOSITING),true)
 LOCAL_CFLAGS += -DWTF_USE_ACCELERATED_COMPOSITING=1
 endif
 
-ifeq ($(call is-chipset-prefix-in-board-platform,msm7627),true)
-  LOCAL_CFLAGS += -DVIDEO_PLATFORM_ID=2
-else
-  ifeq ($(call is-chipset-in-board-platform,msm7630),true)
-    LOCAL_CFLAGS += -DVIDEO_PLATFORM_ID=3
-  else
-    ifeq ($(call is-board-platform,msm8660),true)
-      LOCAL_CFLAGS += -DVIDEO_PLATFORM_ID=4
-    else
-      ifeq ($(call is-board-platform,msm8960),true)
-        LOCAL_CFLAGS += -DVIDEO_PLATFORM_ID=5
-      else
-        ifeq ($(call is-board-platform,copper),true)
-          LOCAL_CFLAGS += -DVIDEO_PLATFORM_ID=6
-        else
-          LOCAL_CFLAGS += -DVIDEO_PLATFORM_ID=1
-        endif
-      endif
-    endif
-  endif
-endif
-
-ifeq ($(ENABLE_WEB_SOCKETS),true)
-LOCAL_CFLAGS += -DENABLE_WEB_SOCKETS=1
-endif
-
 LOCAL_CFLAGS += -DENABLE_REQUEST_ANIMATION_FRAME=1
 
 ifeq ($(ENABLE_WEBGL),true)
 LOCAL_CFLAGS += -DENABLE_WEBGL
+endif
+
+ifeq ($(ENABLE_WEB_SOCKETS),true)
+LOCAL_CFLAGS += -DENABLE_WEB_SOCKETS=1
 endif
 
 # LOCAL_LDLIBS is used in simulator builds only and simulator builds are only
@@ -361,6 +366,10 @@ LOCAL_SHARED_LIBRARIES := \
 	libui \
 	libz
 
+ifeq ($(ENABLE_WEBAUDIO),true)
+LOCAL_SHARED_LIBRARIES += libstagefright
+endif
+
 # We have to fake out some headers when using stlport.
 LOCAL_C_INCLUDES += \
 	external/chromium/android
@@ -388,6 +397,14 @@ ifeq ($(ENABLE_WEBGL),true)
 LOCAL_STATIC_LIBRARIES += libpng
 endif
 
+# WebAudio
+ifeq ($(ENABLE_WEBAUDIO),true)
+    LOCAL_STATIC_LIBRARIES += libkissfft
+    ifeq ($(ARCH_ARM_HAVE_NEON),true)
+        LOCAL_STATIC_LIBRARIES += libvmathneon
+    endif
+endif
+
 ifeq ($(ENABLE_AUTOFILL),true)
 LOCAL_SHARED_LIBRARIES += libexpat
 endif
@@ -403,6 +420,11 @@ WEBKIT_GENERATED_SOURCES := $(LOCAL_GENERATED_SOURCES)
 WEBKIT_LDLIBS := $(LOCAL_LDLIBS)
 WEBKIT_SHARED_LIBRARIES := $(LOCAL_SHARED_LIBRARIES)
 WEBKIT_STATIC_LIBRARIES := $(LOCAL_STATIC_LIBRARIES)
+
+ifneq ($(strip $(WITH_ADDRESS_SANITIZER)),)
+    LOCAL_MODULE_PATH := $(TARGET_OUT_STATIC_LIBRARIES)/asan
+    LOCAL_ADDRESS_SANITIZER := true
+endif
 
 # Build the library all at once
 include $(BUILD_STATIC_LIBRARY)
@@ -464,10 +486,27 @@ endif
 # We make all of our object files depend on those files so that they are built
 # before we try to compile the file.
 LOCAL_ADDITIONAL_DEPENDENCIES := $(filter %.h, $(WEBKIT_GENERATED_SOURCES))
+
+ifneq ($(strip $(WITH_ADDRESS_SANITIZER)),)
+    LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/asan
+    LOCAL_ADDRESS_SANITIZER := true
+endif
+
 include $(BUILD_SHARED_LIBRARY)
 
 # Build the wds client
 include $(WEBKIT_PATH)/android/wds/client/Android.mk
 
+ifeq ($(ENABLE_WEBAUDIO),true)
+ifeq ($(ARCH_ARM_HAVE_NEON),true)
+# Build the VectorMath NEON routines
+include $(WEBKIT_PATH)/android/neon/Android.mk
+endif
+endif
+
 # Build the webkit merge tool.
 include $(BASE_PATH)/Tools/android/webkitmerge/Android.mk
+
+ifeq ($(ENABLE_WEBAUDIO),true)
+include $(BASE_PATH)/Source/WebCore/platform/audio/resources/webaudiores/Android.mk
+endif

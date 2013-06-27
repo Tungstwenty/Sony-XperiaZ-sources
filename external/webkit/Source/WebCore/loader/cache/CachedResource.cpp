@@ -177,18 +177,29 @@ void CachedResource::finish()
 {
     m_status = Cached;
     if (m_statHubHash) {
-        UrlProperty urlProperty;
-        urlProperty.bf.cacheable = canUseCacheValidator();
-        urlProperty.bf.mime_type = (unsigned int) type();
-        StatHubCmd(INPUT_CMD_WK_RES_LOAD_FINISHED, (void*)m_statHubHash, 0,
-                   (void*) urlProperty.value, 0);
+        StatHubCmd* cmd = StatHubCmdCreate(SH_CMD_WK_RESOURCE, SH_ACTION_DID_FINISH_LOAD);
+        if (NULL!=cmd) {
+            StatHubCmdAddParamAsUint32(cmd, m_statHubHash);
+            StatHubCmdAddParamAsBool(cmd, canUseCacheValidator());
+            StatHubCmdAddParamAsUint32(cmd, (unsigned int) type());
+            StatHubCmdCommit(cmd);
+        }
     }
 }
 
 void CachedResource::setInCache(bool inCache) {
     m_inCache = inCache;
     if (m_statHubHash) {
-        StatHubCmd(INPUT_CMD_WK_RES_MMC_STATUS, (void*)m_statHubHash, 0, (void*)m_inCache, 0);
+        StatHubCmd* cmd = StatHubCmdCreate(SH_CMD_WK_MEMORY_CACHE, SH_ACTION_STATUS);
+        if (NULL!=cmd) {
+            StatHubCmdAddParamAsUint32(cmd, m_statHubHash);
+            StatHubCmdAddParamAsBool(cmd, m_inCache);
+            if (StatHubIsPerfEnabled()) {
+                StatHubCmdAddParamAsUint32(cmd, memoryCache()->getDeadSize());
+                StatHubCmdAddParamAsUint32(cmd, memoryCache()->getLiveSize());
+            }
+            StatHubCmdCommit(cmd);
+        }
     }
 }
 

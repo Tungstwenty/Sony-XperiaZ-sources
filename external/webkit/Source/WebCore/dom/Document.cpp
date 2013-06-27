@@ -7,10 +7,10 @@
  * Copyright (C) 2008, 2009 Torch Mobile Inc. All rights reserved. (http://www.torchmobile.com/)
  * Copyright (C) 2008, 2009 Google Inc. All rights reserved.
  * Copyright (C) 2010 Nokia Corporation and/or its subsidiary(-ies)
- * Copyright (c) 2011, 2012 The Linux Foundation. All rights reserved
+ * Copyright (c) 2011, 2012 The Linux Foundation All rights reserved
  * Copyright (C) 2011, 2012 Sony Ericsson Mobile Communications AB
- * Copyright (C) 2012 Sony Mobile Communications AB.
-
+ * Copyright (C) 2012 Sony Mobile Communcations AB
+ *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
  * License as published by the Free Software Foundation; either
@@ -110,6 +110,7 @@
 #include "NestingLevelIncrementer.h"
 #include "NodeFilter.h"
 #include "NodeIterator.h"
+#include "NodeRareData.h"
 #include "NodeWithIndex.h"
 #include "OverflowEvent.h"
 #include "Page.h"
@@ -225,6 +226,11 @@
 #if ENABLE(REQUEST_ANIMATION_FRAME)
 #include "RequestAnimationFrameCallback.h"
 #include "ScriptedAnimationController.h"
+#endif
+
+#if ENABLE(WEB_AUDIO)
+#include "AudioProcessingEvent.h"
+#include "OfflineAudioCompletionEvent.h"
 #endif
 
 using namespace std;
@@ -394,9 +400,6 @@ Document::Document(Frame* frame, const KURL& url, bool isXHTML, bool isHTML)
     , m_compatibilityMode(NoQuirksMode)
     , m_compatibilityModeLocked(false)
     , m_domTreeVersion(++s_globalTreeVersion)
-#ifdef ANDROID_STYLE_VERSION
-    , m_styleVersion(0)
-#endif
     , m_styleSheets(StyleSheetList::create(this))
     , m_readyState(Complete)
     , m_styleRecalcTimer(this, &Document::styleRecalcTimerFired)
@@ -431,6 +434,7 @@ Document::Document(Frame* frame, const KURL& url, bool isXHTML, bool isHTML)
     , m_sawElementsInKnownNamespaces(false)
     , m_usingGeolocation(false)
     , m_eventQueue(EventQueue::create(this))
+    , m_documentRareData(0)
 #if ENABLE(WML)
     , m_containsWMLContent(false)
 #endif
@@ -589,6 +593,13 @@ Document::~Document()
 
     if (m_implementation)
         m_implementation->ownerDocumentDestroyed();
+
+    if (hasRareData()) {
+        ASSERT(m_documentRareData);
+        delete m_documentRareData;
+        m_documentRareData = 0;
+        clearFlag(HasRareDataFlag);
+    }
     m_externalJs = 0;
 }
 
@@ -2344,7 +2355,11 @@ static void updateDocumentUrl(const KURL& url) {
     unsigned short main_url_len = url.string().length();
 
     if (main_url_len && url.protocolInHTTPFamily()) {
-        StatHubUpdateMainUrl(url.string().latin1().data());
+        StatHubCmd* cmd = StatHubCmdCreate(SH_CMD_WK_MAIN_URL, SH_ACTION_WILL_START);
+        if (NULL!=cmd) {
+            StatHubCmdAddParamAsString(cmd, url.string().latin1().data());
+            StatHubCmdCommit(cmd);
+        }
     }
 }
 
@@ -3627,6 +3642,12 @@ PassRefPtr<Event> Document::createEvent(const String& eventType, ExceptionCode& 
         event = WebKitTransitionEvent::create();
     else if (eventType == "WheelEvent")
         event = WheelEvent::create();
+#if ENABLE(WEB_AUDIO)
+    else if (eventType == "AudioProcessingEvent")
+        event = AudioProcessingEvent::create();
+    else if (eventType == "OfflineAudioCompletionEvent")
+        event = OfflineAudioCompletionEvent::create();
+#endif
 #if ENABLE(SVG)
     else if (eventType == "SVGEvents")
         event = Event::create();
@@ -4915,11 +4936,6 @@ void Document::webkitCancelFullScreen()
         return;
     
     page()->chrome()->client()->exitFullScreenForElement(m_fullScreenElement.get());
-#if PLATFORM(ANDROID)
-    // The next time we try to enter full screen, we need this change to know
-    // we are not in full screen any more.
-    m_fullScreenElement = 0;
-#endif
 }
     
 void Document::webkitWillEnterFullScreenForElement(Element* element)
