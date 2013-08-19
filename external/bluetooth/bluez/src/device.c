@@ -4,7 +4,7 @@
  *
  *  Copyright (C) 2006-2010  Nokia Corporation
  *  Copyright (C) 2004-2010  Marcel Holtmann <marcel@holtmann.org>
- *  Copyright (C) 2011-2012  The Linux Foundation. All rights reserved.
+ *  Copyright (C) 2011-2013  The Linux Foundation. All rights reserved.
  *
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -3234,8 +3234,8 @@ int device_request_authentication(struct btd_device *device, auth_type_t type,
 	auth->type = type;
 	device->authr = auth;
 	if (device->paired) {
+		device_set_paired(device, FALSE);
 		device_remove_linkkey(device);
-		device->paired = FALSE;
 	}
 
 	switch (type) {

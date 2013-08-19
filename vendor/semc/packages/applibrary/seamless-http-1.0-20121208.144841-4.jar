@@ -1,0 +1,488 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<meta name="robots" content="noindex,nofollow" />
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta name="generator" content="0.11.1 (2b48ae40ea1b)" />
+<meta http-equiv="X-UA-Compatible" content="IE=8" />
+<link rel="icon" href="/jellybean/default/img/icon.png" type="image/png" />
+<link rel="stylesheet" type="text/css" media="all"
+    title="Default" href="/jellybean/default/style.css" />
+<link rel="alternate stylesheet" type="text/css" media="all"
+    title="Paper White" href="/jellybean/default/print.css" />
+<link rel="stylesheet" type="text/css" href="/jellybean/default/print.css" media="print" />
+<link rel="stylesheet" type="text/css" href="/jellybean/default/jquery.tooltip.css" />
+
+<link rel="search" href="/jellybean/opensearch"
+    type="application/opensearchdescription+xml"
+    title="OpenGrok Search for current project(s)" />
+<script type="text/javascript" src="/jellybean/jquery-1.4.4.min.js"></script>
+<script type="text/javascript" src="/jellybean/jquery.tooltip-1.3.pack.js"></script>
+
+<script type="text/javascript" src="/jellybean/utils.js"></script>
+<title>Cross Reference: /jb-mr1-rhine/vendor/semc/packages/apps/mirrorlink/server/libs/seamless-http-1.0-20121208.144841-4.jar</title>
+</head><body>
+<script type="text/javascript">/* <![CDATA[ */
+    document.hash = 'null';document.rev = '';document.link = '/jellybean/xref/jb-mr1-rhine/vendor/semc/packages/apps/mirrorlink/server/libs/seamless-http-1.0-20121208.144841-4.jar';document.annotate = false;
+    document.domReady.push(function() {domReadyMast();});
+    document.pageReady.push(function() { pageReadyMast();});
+/* ]]> */</script>
+<div id="page">
+    <div id="whole_header">
+        <form action="/jellybean/search">
+<div id="header">
+<a href="/jellybean/"><span id="MastheadLogo"></span></a>
+
+<div id=submenu>
+
+
+<BR>
+
+<a href="/archived">[archived]</a>
+<a href="/eDream3">[eDream3]</a>
+<a href="/eDream4">[eDream4]</a>
+<a href="/eDream6">[eDream6]</a>
+<a href="/gingerbread">[gingerbread]</a>
+<a href="/ics">[ics]</a>
+<a href="/jellybean">[jellybean]</a>
+<a href="/AMSS">[AMSS]</a>
+<a href="/decoupled">[decoupled]</a>
+<a href="/Ramdump">[Ramdump]</a>
+<a href="/IA-Apps">[IA-Apps]</a>
+<a href="/indus">[indus]</a>
+<a href="/semctools">[semctools]</a>
+<a href="/JDM-BRANCHES">[JDM-BRANCHES]</a>
+<a href="/JDM-SRC">[JDM-SRC]</a>
+<a href="/JDM-NANHU">[JDM-NANHU]</a>
+<a href="/review-jdm">[review-jdm]</a>
+
+
+
+
+</div>
+
+
+
+
+    <div id="pagetitle"><span id="filename"
+                    >Cross Reference: seamless-http-1.0-20121208.144841-4.jar</span></div>
+</div>
+<div id="Masthead">
+    <tt><a href="/jellybean/xref/">xref</a>: /<a href="/jellybean/xref/jb-mr1-rhine/">jb-mr1-rhine</a>/<a href="/jellybean/xref/jb-mr1-rhine/vendor/">vendor</a>/<a href="/jellybean/xref/jb-mr1-rhine/vendor/semc/">semc</a>/<a href="/jellybean/xref/jb-mr1-rhine/vendor/semc/packages/">packages</a>/<a href="/jellybean/xref/jb-mr1-rhine/vendor/semc/packages/apps/">apps</a>/<a href="/jellybean/xref/jb-mr1-rhine/vendor/semc/packages/apps/mirrorlink/">mirrorlink</a>/<a href="/jellybean/xref/jb-mr1-rhine/vendor/semc/packages/apps/mirrorlink/server/">server</a>/<a href="/jellybean/xref/jb-mr1-rhine/vendor/semc/packages/apps/mirrorlink/server/libs/">libs</a>/<a href="/jellybean/xref/jb-mr1-rhine/vendor/semc/packages/apps/mirrorlink/server/libs/seamless-http-1.0-20121208.144841-4.jar">seamless-http-1.0-20121208.144841-4.jar</a></tt>
+</div>
+<div id="bar">
+    <ul>
+        <li><a href="/jellybean/"><span id="home"></span>Home</a></li><li><a href="/jellybean/history/jb-mr1-rhine/vendor/semc/packages/apps/mirrorlink/server/libs/seamless-http-1.0-20121208.144841-4.jar"><span id="history"></span>History</a></li><li><a href="#" onclick="javascript:get_annotations(); return false;"
+            ><span class="annotate"></span>Annotate</a></li><li><a href="#" onclick="javascript:lntoggle();return false;"
+            title="Show or hide line numbers (might be slower if file has more than 10 000 lines)."><span id="line"></span>Line#</a></li><li><a
+            href="#" onclick="javascript:lsttoggle();return false;"
+            title="Show or hide symbol list."><span id="defbox"></span>Navigate</a></li><li><a href="/jellybean/raw/jb-mr1-rhine/vendor/semc/packages/apps/mirrorlink/server/libs/seamless-http-1.0-20121208.144841-4.jar"><span id="download"></span>Download</a></li><li><input type="text" id="search" name="q" class="q" />
+            <input type="submit" value="Search" class="submit" /></li><li><input type="checkbox" name="path" value="/jb-mr1-rhine/vendor/semc/packages/apps/mirrorlink/server/libs/" /> only in <b>seamless-http-1.0-20121208.144841-4.jar</b></li>
+        
+    </ul>
+    <input type="hidden" name="project" value="jb-mr1-rhine" />
+</div>
+        </form>
+    </div>
+<div id="content">
+<script type="text/javascript">/* <![CDATA[ */
+document.pageReady.push(function() { pageReadyList();});
+/* ]]> */</script>
+
+<div id="src">
+    <pre><br/><b>META-INF/</b><br/><b>META-INF/MANIFEST.MF</b><br/><b>org/</b><br/><b>org/seamless/</b><br/><b>org/seamless/http/</b><br/><b>org/seamless/http/CacheControl.class</b><pre><a href="/jellybean/s?path=CacheControl.java">CacheControl.java</a>
+package <a href="/jellybean/s?defs=org.seamless.http">org.seamless.http</a>
+public <a class="d" name="org.seamless.http.CacheControl" href="/jellybean/s?defs=org.seamless.http.CacheControl">org.seamless.http.CacheControl</a> extends <a href="/jellybean/s?defs=java.lang.Object">java.lang.Object</a> {
+	private int <a class="d" name="maxAge" href="/jellybean/s?defs=maxAge">maxAge</a>
+	private int <a class="d" name="sharedMaxAge" href="/jellybean/s?defs=sharedMaxAge">sharedMaxAge</a>
+	private boolean <a class="d" name="noCache" href="/jellybean/s?defs=noCache">noCache</a>
+	private java.util.List <a class="d" name="noCacheFields" href="/jellybean/s?defs=noCacheFields">noCacheFields</a>
+	private boolean <a class="d" name="privateFlag" href="/jellybean/s?defs=privateFlag">privateFlag</a>
+	private java.util.List <a class="d" name="privateFields" href="/jellybean/s?defs=privateFields">privateFields</a>
+	private boolean <a class="d" name="noStore" href="/jellybean/s?defs=noStore">noStore</a>
+	private boolean <a class="d" name="noTransform" href="/jellybean/s?defs=noTransform">noTransform</a>
+	private boolean <a class="d" name="mustRevalidate" href="/jellybean/s?defs=mustRevalidate">mustRevalidate</a>
+	private boolean <a class="d" name="proxyRevalidate" href="/jellybean/s?defs=proxyRevalidate">proxyRevalidate</a>
+	private java.util.Map <a class="d" name="cacheExtensions" href="/jellybean/s?defs=cacheExtensions">cacheExtensions</a>
+	public void <a class="d" name="<init>" href="/jellybean/s?defs=<init>"><init></a> () 
+	public int <a class="d" name="getMaxAge" href="/jellybean/s?defs=getMaxAge">getMaxAge</a> () 
+	public void <a class="d" name="setMaxAge" href="/jellybean/s?defs=setMaxAge">setMaxAge</a> (int) 
+		int maxAge
+	public int <a class="d" name="getSharedMaxAge" href="/jellybean/s?defs=getSharedMaxAge">getSharedMaxAge</a> () 
+	public void <a class="d" name="setSharedMaxAge" href="/jellybean/s?defs=setSharedMaxAge">setSharedMaxAge</a> (int) 
+		int sharedMaxAge
+	public boolean <a class="d" name="isNoCache" href="/jellybean/s?defs=isNoCache">isNoCache</a> () 
+	public void <a class="d" name="setNoCache" href="/jellybean/s?defs=setNoCache">setNoCache</a> (boolean) 
+		boolean noCache
+	public java.util.List <a class="d" name="getNoCacheFields" href="/jellybean/s?defs=getNoCacheFields">getNoCacheFields</a> () 
+	public void <a class="d" name="setNoCacheFields" href="/jellybean/s?defs=setNoCacheFields">setNoCacheFields</a> (java.util.List) 
+		java.util.List noCacheFields
+	public boolean <a class="d" name="isPrivateFlag" href="/jellybean/s?defs=isPrivateFlag">isPrivateFlag</a> () 
+	public void <a class="d" name="setPrivateFlag" href="/jellybean/s?defs=setPrivateFlag">setPrivateFlag</a> (boolean) 
+		boolean privateFlag
+	public java.util.List <a class="d" name="getPrivateFields" href="/jellybean/s?defs=getPrivateFields">getPrivateFields</a> () 
+	public void <a class="d" name="setPrivateFields" href="/jellybean/s?defs=setPrivateFields">setPrivateFields</a> (java.util.List) 
+		java.util.List privateFields
+	public boolean <a class="d" name="isNoStore" href="/jellybean/s?defs=isNoStore">isNoStore</a> () 
+	public void <a class="d" name="setNoStore" href="/jellybean/s?defs=setNoStore">setNoStore</a> (boolean) 
+		boolean noStore
+	public boolean <a class="d" name="isNoTransform" href="/jellybean/s?defs=isNoTransform">isNoTransform</a> () 
+	public void <a class="d" name="setNoTransform" href="/jellybean/s?defs=setNoTransform">setNoTransform</a> (boolean) 
+		boolean noTransform
+	public boolean <a class="d" name="isMustRevalidate" href="/jellybean/s?defs=isMustRevalidate">isMustRevalidate</a> () 
+	public void <a class="d" name="setMustRevalidate" href="/jellybean/s?defs=setMustRevalidate">setMustRevalidate</a> (boolean) 
+		boolean mustRevalidate
+	public boolean <a class="d" name="isProxyRevalidate" href="/jellybean/s?defs=isProxyRevalidate">isProxyRevalidate</a> () 
+	public void <a class="d" name="setProxyRevalidate" href="/jellybean/s?defs=setProxyRevalidate">setProxyRevalidate</a> (boolean) 
+		boolean proxyRevalidate
+	public java.util.Map <a class="d" name="getCacheExtensions" href="/jellybean/s?defs=getCacheExtensions">getCacheExtensions</a> () 
+	public void <a class="d" name="setCacheExtensions" href="/jellybean/s?defs=setCacheExtensions">setCacheExtensions</a> (java.util.Map) 
+		java.util.Map cacheExtensions
+	public static org.seamless.http.CacheControl <a class="d" name="valueOf" href="/jellybean/s?defs=valueOf">valueOf</a> (java.lang.String)  throws <a href="/jellybean/s?defs=java.lang.IllegalArgumentException">java.lang.IllegalArgumentException</a> 
+		String[] nameValue
+		String name
+		String value
+		String lowercase
+		String directive
+		String[] arr$
+		int len$
+		int i$
+		String s
+		org.seamless.http.CacheControl result
+		String[] directives
+	public java.lang.String <a class="d" name="toString" href="/jellybean/s?defs=toString">toString</a> () 
+		String field
+		java.util.Iterator i$
+		java.util.List fields
+		String field
+		java.util.Iterator i$
+		java.util.List fields
+		String val
+		String key
+		java.util.Iterator i$
+		StringBuilder sb
+	private java.lang.StringBuilder <a class="d" name="append" href="/jellybean/s?defs=append">append</a> (java.lang.String, java.lang.StringBuilder) 
+		String s
+		StringBuilder sb
+	public boolean <a class="d" name="equals" href="/jellybean/s?defs=equals">equals</a> (java.lang.Object) 
+		Object o
+		org.seamless.http.CacheControl that
+	public int <a class="d" name="hashCode" href="/jellybean/s?defs=hashCode">hashCode</a> () 
+		int result
+}
+</pre><br/><b>org/seamless/http/Headers.class</b><pre><a href="/jellybean/s?path=Headers.java">Headers.java</a>
+package <a href="/jellybean/s?defs=org.seamless.http">org.seamless.http</a>
+public <a class="d" name="org.seamless.http.Headers" href="/jellybean/s?defs=org.seamless.http.Headers">org.seamless.http.Headers</a> extends <a href="/jellybean/s?defs=java.lang.Object">java.lang.Object</a> implements <a href="/jellybean/s?defs=java.util.Map">java.util.Map</a>  {
+	static final byte <a class="d" name="CR" href="/jellybean/s?defs=CR">CR</a>
+	static final byte <a class="d" name="LF" href="/jellybean/s?defs=LF">LF</a>
+	final java.util.Map <a class="d" name="map" href="/jellybean/s?defs=map">map</a>
+	public void <a class="d" name="<init>" href="/jellybean/s?defs=<init>"><init></a> () 
+	public void <a class="d" name="<init>" href="/jellybean/s?defs=<init>"><init></a> (java.util.Map) 
+		java.util.Map map
+	public void <a class="d" name="<init>" href="/jellybean/s?defs=<init>"><init></a> (java.io.ByteArrayInputStream) 
+		java.util.List current
+		int lastPos
+		String newString
+		String[] header
+		char firstChar
+		java.io.ByteArrayInputStream inputStream
+		org.seamless.http.Headers headers
+		String line
+		String lastHeader
+	public int <a class="d" name="size" href="/jellybean/s?defs=size">size</a> () 
+	public boolean <a class="d" name="isEmpty" href="/jellybean/s?defs=isEmpty">isEmpty</a> () 
+	public boolean <a class="d" name="containsKey" href="/jellybean/s?defs=containsKey">containsKey</a> (java.lang.Object) 
+		Object key
+	public boolean <a class="d" name="containsValue" href="/jellybean/s?defs=containsValue">containsValue</a> (java.lang.Object) 
+		Object value
+	public java.util.List <a class="d" name="get" href="/jellybean/s?defs=get">get</a> (java.lang.Object) 
+		Object key
+	public java.util.List <a class="d" name="put" href="/jellybean/s?defs=put">put</a> (java.lang.String, java.util.List) 
+		String key
+		java.util.List value
+	public java.util.List <a class="d" name="remove" href="/jellybean/s?defs=remove">remove</a> (java.lang.Object) 
+		Object key
+	public void <a class="d" name="putAll" href="/jellybean/s?defs=putAll">putAll</a> (java.util.Map) 
+		java.util.Map$Entry entry
+		java.util.Iterator i$
+		java.util.Map t
+	public void <a class="d" name="clear" href="/jellybean/s?defs=clear">clear</a> () 
+	public java.util.Set <a class="d" name="keySet" href="/jellybean/s?defs=keySet">keySet</a> () 
+	public java.util.Collection <a class="d" name="values" href="/jellybean/s?defs=values">values</a> () 
+	public java.util.Set <a class="d" name="entrySet" href="/jellybean/s?defs=entrySet">entrySet</a> () 
+	public boolean <a class="d" name="equals" href="/jellybean/s?defs=equals">equals</a> (java.lang.Object) 
+		Object o
+	public int <a class="d" name="hashCode" href="/jellybean/s?defs=hashCode">hashCode</a> () 
+	public java.lang.String <a class="d" name="getFirstHeader" href="/jellybean/s?defs=getFirstHeader">getFirstHeader</a> (java.lang.String) 
+		String key
+		java.util.List l
+	public void <a class="d" name="add" href="/jellybean/s?defs=add">add</a> (java.lang.String, java.lang.String) 
+		String key
+		String value
+		String k
+		java.util.List l
+	public void <a class="d" name="set" href="/jellybean/s?defs=set">set</a> (java.lang.String, java.lang.String) 
+		String key
+		String value
+		java.util.LinkedList l
+	private java.lang.String <a class="d" name="normalize" href="/jellybean/s?defs=normalize">normalize</a> (java.lang.String) 
+		int i
+		String key
+		char[] b
+	public static java.lang.String <a class="d" name="readLine" href="/jellybean/s?defs=readLine">readLine</a> (java.io.ByteArrayInputStream) 
+		char nextChar
+		java.io.ByteArrayInputStream is
+		StringBuilder sb
+		int nextByte
+	protected java.lang.String[] <a class="d" name="splitHeader" href="/jellybean/s?defs=splitHeader">splitHeader</a> (java.lang.String) 
+		char ch
+		String sb
+		int nameStart
+		int nameEnd
+		int colonEnd
+		int valueStart
+		int valueEnd
+	protected int <a class="d" name="findNonWhitespace" href="/jellybean/s?defs=findNonWhitespace">findNonWhitespace</a> (java.lang.String, int) 
+		String sb
+		int offset
+		int result
+	protected int <a class="d" name="findEndOfString" href="/jellybean/s?defs=findEndOfString">findEndOfString</a> (java.lang.String) 
+		String sb
+		int result
+	public java.lang.String <a class="d" name="toString" href="/jellybean/s?defs=toString">toString</a> () 
+		String v
+		java.util.Iterator i$
+		StringBuilder headerLine
+		java.util.Map$Entry headerEntry
+		java.util.Iterator i$
+		StringBuilder headerString
+	public volatile synthetic java.lang.Object <a class="d" name="remove" href="/jellybean/s?defs=remove">remove</a> (java.lang.Object) 
+		Object x0
+	public volatile synthetic java.lang.Object <a class="d" name="put" href="/jellybean/s?defs=put">put</a> (java.lang.Object, java.lang.Object) 
+		Object x0
+		Object x1
+	public volatile synthetic java.lang.Object <a class="d" name="get" href="/jellybean/s?defs=get">get</a> (java.lang.Object) 
+		Object x0
+}
+</pre><br/><b>org/seamless/http/HttpFetch$1.class</b><pre><a href="/jellybean/s?path=HttpFetch.java">HttpFetch.java</a>
+package <a href="/jellybean/s?defs=org.seamless.http">org.seamless.http</a>
+final <a class="d" name="org.seamless.http.HttpFetch$1" href="/jellybean/s?defs=org.seamless.http.HttpFetch$1">org.seamless.http.HttpFetch$1</a> extends <a href="/jellybean/s?defs=java.lang.Object">java.lang.Object</a> implements <a href="/jellybean/s?defs=org.seamless.http.HttpFetch$RepresentationFactory">org.seamless.http.HttpFetch$RepresentationFactory</a>  {
+	void <a class="d" name="<init>" href="/jellybean/s?defs=<init>"><init></a> () 
+	public org.seamless.http.Representation <a class="d" name="createRepresentation" href="/jellybean/s?defs=createRepresentation">createRepresentation</a> (java.net.URLConnection, java.io.InputStream)  throws <a href="/jellybean/s?defs=java.io.IOException">java.io.IOException</a> 
+		java.net.URLConnection urlConnection
+		java.io.InputStream is
+}
+</pre><br/><b>org/seamless/http/HttpFetch$2.class</b><pre><a href="/jellybean/s?path=HttpFetch.java">HttpFetch.java</a>
+package <a href="/jellybean/s?defs=org.seamless.http">org.seamless.http</a>
+final <a class="d" name="org.seamless.http.HttpFetch$2" href="/jellybean/s?defs=org.seamless.http.HttpFetch$2">org.seamless.http.HttpFetch$2</a> extends <a href="/jellybean/s?defs=java.lang.Object">java.lang.Object</a> implements <a href="/jellybean/s?defs=org.seamless.http.HttpFetch$RepresentationFactory">org.seamless.http.HttpFetch$RepresentationFactory</a>  {
+	void <a class="d" name="<init>" href="/jellybean/s?defs=<init>"><init></a> () 
+	public org.seamless.http.Representation <a class="d" name="createRepresentation" href="/jellybean/s?defs=createRepresentation">createRepresentation</a> (java.net.URLConnection, java.io.InputStream)  throws <a href="/jellybean/s?defs=java.io.IOException">java.io.IOException</a> 
+		java.net.URLConnection urlConnection
+		java.io.InputStream is
+}
+</pre><br/><b>org/seamless/http/HttpFetch$3.class</b><pre><a href="/jellybean/s?path=HttpFetch.java">HttpFetch.java</a>
+package <a href="/jellybean/s?defs=org.seamless.http">org.seamless.http</a>
+final <a class="d" name="org.seamless.http.HttpFetch$3" href="/jellybean/s?defs=org.seamless.http.HttpFetch$3">org.seamless.http.HttpFetch$3</a> extends <a href="/jellybean/s?defs=java.lang.Object">java.lang.Object</a> implements <a href="/jellybean/s?defs=org.seamless.http.HttpFetch$RepresentationFactory">org.seamless.http.HttpFetch$RepresentationFactory</a>  {
+	void <a class="d" name="<init>" href="/jellybean/s?defs=<init>"><init></a> () 
+	public org.seamless.http.Representation <a class="d" name="createRepresentation" href="/jellybean/s?defs=createRepresentation">createRepresentation</a> (java.net.URLConnection, java.io.InputStream)  throws <a href="/jellybean/s?defs=java.io.IOException">java.io.IOException</a> 
+		java.net.URLConnection urlConnection
+		java.io.InputStream is
+}
+</pre><br/><b>org/seamless/http/HttpFetch$RepresentationFactory.class</b><pre><a href="/jellybean/s?path=HttpFetch.java">HttpFetch.java</a>
+package <a href="/jellybean/s?defs=org.seamless.http">org.seamless.http</a>
+public abstract <a class="d" name="org.seamless.http.HttpFetch$RepresentationFactory" href="/jellybean/s?defs=org.seamless.http.HttpFetch$RepresentationFactory">org.seamless.http.HttpFetch$RepresentationFactory</a> extends <a href="/jellybean/s?defs=java.lang.Object">java.lang.Object</a> {
+	public abstract org.seamless.http.Representation <a class="d" name="createRepresentation" href="/jellybean/s?defs=createRepresentation">createRepresentation</a> (java.net.URLConnection, java.io.InputStream)  throws <a href="/jellybean/s?defs=java.io.IOException">java.io.IOException</a> 
+}
+</pre><br/><b>org/seamless/http/HttpFetch.class</b><pre><a href="/jellybean/s?path=HttpFetch.java">HttpFetch.java</a>
+package <a href="/jellybean/s?defs=org.seamless.http">org.seamless.http</a>
+public <a class="d" name="org.seamless.http.HttpFetch" href="/jellybean/s?defs=org.seamless.http.HttpFetch">org.seamless.http.HttpFetch</a> extends <a href="/jellybean/s?defs=java.lang.Object">java.lang.Object</a> {
+	public void <a class="d" name="<init>" href="/jellybean/s?defs=<init>"><init></a> () 
+	public static org.seamless.http.Representation <a class="d" name="fetchBinary" href="/jellybean/s?defs=fetchBinary">fetchBinary</a> (java.net.URL)  throws <a href="/jellybean/s?defs=java.io.IOException">java.io.IOException</a> 
+		java.net.URL url
+	public static org.seamless.http.Representation <a class="d" name="fetchBinary" href="/jellybean/s?defs=fetchBinary">fetchBinary</a> (java.net.URL, int, int)  throws <a href="/jellybean/s?defs=java.io.IOException">java.io.IOException</a> 
+		java.net.URL url
+		int connectTimeoutMillis
+		int readTimeoutMillis
+	public static org.seamless.http.Representation <a class="d" name="fetchString" href="/jellybean/s?defs=fetchString">fetchString</a> (java.net.URL, int, int)  throws <a href="/jellybean/s?defs=java.io.IOException">java.io.IOException</a> 
+		java.net.URL url
+		int connectTimeoutMillis
+		int readTimeoutMillis
+	public static org.seamless.http.Representation <a class="d" name="fetch" href="/jellybean/s?defs=fetch">fetch</a> (java.net.URL, int, int, org.seamless.http.HttpFetch$RepresentationFactory)  throws <a href="/jellybean/s?defs=java.io.IOException">java.io.IOException</a> 
+		java.net.URL url
+		int connectTimeoutMillis
+		int readTimeoutMillis
+		org.seamless.http.HttpFetch$RepresentationFactory factory
+	public static org.seamless.http.Representation <a class="d" name="fetch" href="/jellybean/s?defs=fetch">fetch</a> (java.net.URL, java.lang.String, int, int, org.seamless.http.HttpFetch$RepresentationFactory)  throws <a href="/jellybean/s?defs=java.io.IOException">java.io.IOException</a> 
+		int responseCode
+		java.io.IOException ex
+		java.net.URL url
+		String method
+		int connectTimeoutMillis
+		int readTimeoutMillis
+		org.seamless.http.HttpFetch$RepresentationFactory factory
+		java.net.HttpURLConnection urlConnection
+		java.io.InputStream is
+	public static void <a class="d" name="validate" href="/jellybean/s?defs=validate">validate</a> (java.net.URL)  throws <a href="/jellybean/s?defs=java.io.IOException">java.io.IOException</a> 
+		java.net.URL url
+}
+</pre><br/><b>org/seamless/http/Query.class</b><pre><a href="/jellybean/s?path=Query.java">Query.java</a>
+package <a href="/jellybean/s?defs=org.seamless.http">org.seamless.http</a>
+public <a class="d" name="org.seamless.http.Query" href="/jellybean/s?defs=org.seamless.http.Query">org.seamless.http.Query</a> extends <a href="/jellybean/s?defs=java.lang.Object">java.lang.Object</a> {
+	protected final java.util.Map <a class="d" name="parameters" href="/jellybean/s?defs=parameters">parameters</a>
+	public static org.seamless.http.Query <a class="d" name="newInstance" href="/jellybean/s?defs=newInstance">newInstance</a> (java.util.Map) 
+		java.util.Map parameters
+		org.seamless.http.Query query
+	public void <a class="d" name="<init>" href="/jellybean/s?defs=<init>"><init></a> () 
+	public void <a class="d" name="<init>" href="/jellybean/s?defs=<init>"><init></a> (java.util.Map) 
+		java.util.List list
+		java.util.Map$Entry entry
+		java.util.Iterator i$
+		java.util.Map parameters
+	public void <a class="d" name="<init>" href="/jellybean/s?defs=<init>"><init></a> (java.net.URL) 
+		java.net.URL url
+	public void <a class="d" name="<init>" href="/jellybean/s?defs=<init>"><init></a> (java.lang.String) 
+		String name
+		String value
+		java.io.UnsupportedEncodingException e
+		String name
+		String value
+		int pos
+		java.util.List list
+		String pair
+		String[] arr$
+		int len$
+		int i$
+		String qs
+		String[] pairs
+	public java.lang.String <a class="d" name="get" href="/jellybean/s?defs=get">get</a> (java.lang.String) 
+		String name
+		java.util.List values
+	public java.lang.String[] <a class="d" name="getValues" href="/jellybean/s?defs=getValues">getValues</a> (java.lang.String) 
+		String name
+		java.util.List values
+	public java.util.List <a class="d" name="getValuesAsList" href="/jellybean/s?defs=getValuesAsList">getValuesAsList</a> (java.lang.String) 
+		String name
+	public java.util.Enumeration <a class="d" name="getNames" href="/jellybean/s?defs=getNames">getNames</a> () 
+	public java.util.Map <a class="d" name="getMap" href="/jellybean/s?defs=getMap">getMap</a> () 
+		String[] values
+		java.util.List list
+		String[] values
+		java.util.Map$Entry entry
+		java.util.Iterator i$
+		java.util.Map map
+	public java.util.Map <a class="d" name="getMapWithLists" href="/jellybean/s?defs=getMapWithLists">getMapWithLists</a> () 
+	public boolean <a class="d" name="isEmpty" href="/jellybean/s?defs=isEmpty">isEmpty</a> () 
+	public transient org.seamless.http.Query <a class="d" name="cloneAndAdd" href="/jellybean/s?defs=cloneAndAdd">cloneAndAdd</a> (java.lang.String, java.lang.String[]) 
+		String name
+		String[] values
+		java.util.Map params
+		java.util.List existingValues
+	public java.lang.String <a class="d" name="toString" href="/jellybean/s?defs=toString">toString</a> () 
+		String v
+		java.util.Iterator i$
+		java.util.Map$Entry entry
+		java.util.Iterator i$
+		StringBuilder sb
+}
+</pre><br/><b>org/seamless/http/Representation.class</b><pre><a href="/jellybean/s?path=Representation.java">Representation.java</a>
+package <a href="/jellybean/s?defs=org.seamless.http">org.seamless.http</a>
+public <a class="d" name="org.seamless.http.Representation" href="/jellybean/s?defs=org.seamless.http.Representation">org.seamless.http.Representation</a> extends <a href="/jellybean/s?defs=java.lang.Object">java.lang.Object</a> implements <a href="/jellybean/s?defs=java.io.Serializable">java.io.Serializable</a>  {
+	private java.net.URL <a class="d" name="url" href="/jellybean/s?defs=url">url</a>
+	private org.seamless.http.CacheControl <a class="d" name="cacheControl" href="/jellybean/s?defs=cacheControl">cacheControl</a>
+	private Integer <a class="d" name="contentLength" href="/jellybean/s?defs=contentLength">contentLength</a>
+	private String <a class="d" name="contentType" href="/jellybean/s?defs=contentType">contentType</a>
+	private Long <a class="d" name="lastModified" href="/jellybean/s?defs=lastModified">lastModified</a>
+	private String <a class="d" name="entityTag" href="/jellybean/s?defs=entityTag">entityTag</a>
+	private Object <a class="d" name="entity" href="/jellybean/s?defs=entity">entity</a>
+	public void <a class="d" name="<init>" href="/jellybean/s?defs=<init>"><init></a> (org.seamless.http.CacheControl, java.lang.Integer, java.lang.String, java.lang.Long, java.lang.String, java.lang.Object) 
+		org.seamless.http.CacheControl cacheControl
+		Integer contentLength
+		String contentType
+		Long lastModified
+		String entityTag
+		Object entity
+	public void <a class="d" name="<init>" href="/jellybean/s?defs=<init>"><init></a> (java.net.URL, org.seamless.http.CacheControl, java.lang.Integer, java.lang.String, java.lang.Long, java.lang.String, java.lang.Object) 
+		java.net.URL url
+		org.seamless.http.CacheControl cacheControl
+		Integer contentLength
+		String contentType
+		Long lastModified
+		String entityTag
+		Object entity
+	public void <a class="d" name="<init>" href="/jellybean/s?defs=<init>"><init></a> (java.net.URLConnection, java.lang.Object) 
+		java.net.URLConnection urlConnection
+		Object entity
+	public java.net.URL <a class="d" name="getUrl" href="/jellybean/s?defs=getUrl">getUrl</a> () 
+	public org.seamless.http.CacheControl <a class="d" name="getCacheControl" href="/jellybean/s?defs=getCacheControl">getCacheControl</a> () 
+	public java.lang.Integer <a class="d" name="getContentLength" href="/jellybean/s?defs=getContentLength">getContentLength</a> () 
+	public java.lang.String <a class="d" name="getContentType" href="/jellybean/s?defs=getContentType">getContentType</a> () 
+	public java.lang.Long <a class="d" name="getLastModified" href="/jellybean/s?defs=getLastModified">getLastModified</a> () 
+	public java.lang.String <a class="d" name="getEntityTag" href="/jellybean/s?defs=getEntityTag">getEntityTag</a> () 
+	public java.lang.Object <a class="d" name="getEntity" href="/jellybean/s?defs=getEntity">getEntity</a> () 
+	public java.lang.Long <a class="d" name="getMaxAgeOrNull" href="/jellybean/s?defs=getMaxAgeOrNull">getMaxAgeOrNull</a> () 
+	public boolean <a class="d" name="isExpired" href="/jellybean/s?defs=isExpired">isExpired</a> (long, long) 
+		long storedOn
+		long maxAge
+	public boolean <a class="d" name="isExpired" href="/jellybean/s?defs=isExpired">isExpired</a> (long) 
+		long storedOn
+	public boolean <a class="d" name="isNoStore" href="/jellybean/s?defs=isNoStore">isNoStore</a> () 
+	public boolean <a class="d" name="isNoCache" href="/jellybean/s?defs=isNoCache">isNoCache</a> () 
+	public boolean <a class="d" name="mustRevalidate" href="/jellybean/s?defs=mustRevalidate">mustRevalidate</a> () 
+	public boolean <a class="d" name="hasEntityTagChanged" href="/jellybean/s?defs=hasEntityTagChanged">hasEntityTagChanged</a> (java.lang.String) 
+		String currentEtag
+	public boolean <a class="d" name="hasBeenModified" href="/jellybean/s?defs=hasBeenModified">hasBeenModified</a> (long) 
+		long currentModificationTime
+	public java.lang.String <a class="d" name="toString" href="/jellybean/s?defs=toString">toString</a> () 
+}
+</pre><br/><b>org/seamless/http/RequestInfo.class</b><pre><a href="/jellybean/s?path=RequestInfo.java">RequestInfo.java</a>
+package <a href="/jellybean/s?defs=org.seamless.http">org.seamless.http</a>
+public <a class="d" name="org.seamless.http.RequestInfo" href="/jellybean/s?defs=org.seamless.http.RequestInfo">org.seamless.http.RequestInfo</a> extends <a href="/jellybean/s?defs=java.lang.Object">java.lang.Object</a> {
+	public void <a class="d" name="<init>" href="/jellybean/s?defs=<init>"><init></a> () 
+	public static void <a class="d" name="reportRequest" href="/jellybean/s?defs=reportRequest">reportRequest</a> (java.lang.StringBuilder, javax.servlet.http.HttpServletRequest) 
+		StringBuilder builder
+		javax.servlet.http.HttpServletRequest req
+		String queryString
+		String sessionId
+	public static void <a class="d" name="reportParameters" href="/jellybean/s?defs=reportParameters">reportParameters</a> (java.lang.StringBuilder, javax.servlet.http.HttpServletRequest) 
+		String value
+		String[] arr$
+		int len$
+		int i$
+		String name
+		String[] values
+		StringBuilder builder
+		javax.servlet.http.HttpServletRequest req
+		java.util.Enumeration names
+	public static void <a class="d" name="reportHeaders" href="/jellybean/s?defs=reportHeaders">reportHeaders</a> (java.lang.StringBuilder, javax.servlet.http.HttpServletRequest) 
+		String name
+		String value
+		StringBuilder builder
+		javax.servlet.http.HttpServletRequest req
+		java.util.Enumeration names
+	public static void <a class="d" name="reportCookies" href="/jellybean/s?defs=reportCookies">reportCookies</a> (java.lang.StringBuilder, javax.servlet.http.HttpServletRequest) 
+		javax.servlet.http.Cookie cookie
+		int i
+		StringBuilder builder
+		javax.servlet.http.HttpServletRequest req
+		javax.servlet.http.Cookie[] cookies
+		int l
+	public static void <a class="d" name="reportClient" href="/jellybean/s?defs=reportClient">reportClient</a> (java.lang.StringBuilder, javax.servlet.http.HttpServletRequest) 
+		StringBuilder builder
+		javax.servlet.http.HttpServletRequest req
+}
+</pre><br/><b>META-INF/maven/</b><br/><b>META-INF/maven/org.seamless/</b><br/><b>META-INF/maven/org.seamless/seamless-http/</b><br/><b>META-INF/maven/org.seamless/seamless-http/pom.xml</b><br/><b>META-INF/maven/org.seamless/seamless-http/pom.properties</b></pre>
+</div>
+    <div id="footer">
+<p><a href="http://opengrok.sonyericsson.net/"
+ title="Served by OpenGrok"><span id="fti"></span></a></p>
+<p><h3>Indexes created Wed Jul 31 06:00:25 JST 2013</h3></p>
+    
+    </div>
+    </div>
+</div>
+</body>
+</html>
+
+

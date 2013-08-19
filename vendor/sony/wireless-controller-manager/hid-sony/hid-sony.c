@@ -7,8 +7,6 @@
  *  Copyright (c) 2007 Paul Walmsley
  *  Copyright (c) 2008 Jiri Slaby
  *  Copyright (c) 2006-2008 Jiri Kosina
- *  Copyright 2011,2012 Sony Corporation
- *  Copyright (c) 2012 Sony Mobile Communications AB.
  */
 
 /*

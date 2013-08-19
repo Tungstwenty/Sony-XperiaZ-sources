@@ -1,6 +1,7 @@
 /**
  * Copyright (C) 2006, 2007 Apple Inc. All rights reserved.
  *           (C) 2008 Torch Mobile Inc. All rights reserved. (http://www.torchmobile.com/)  
+ * Copyright (C) 2012 Sony Mobile Communications AB
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -17,6 +18,8 @@
  * the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
  * Boston, MA 02110-1301, USA.
  *
+ * NOTE: This file has been modified by Sony Mobile Communications AB.
+ * Modifications are licensed under the License.
  */
 
 #include "config.h"
@@ -549,7 +552,7 @@ bool RenderTextControl::hasValidAvgCharWidth(AtomicString family)
 float RenderTextControl::getAvgCharWidth(AtomicString family)
 {
     if (hasValidAvgCharWidth(family))
-        return roundf(style()->font().primaryFont()->avgCharWidth());
+        return style()->font().primaryFont()->avgCharWidth();
 
     const UChar ch = '0'; 
     return style()->font().width(TextRun(&ch, 1, false, 0, 0, TextRun::AllowTrailingExpansion, false));

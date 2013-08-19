@@ -591,11 +591,6 @@ public:
         if (!m_glue->m_javaProxy)
             return;
 
-        // Cheat and set ready state to HaveMetadata so that the HTMLMediaElement
-        // displays the media controls properly even if audio is not really loaded
-        m_readyState = MediaPlayer::HaveMetadata;
-        m_player->readyStateChanged();
-
         jstring jUrl = wtfStringToJstring(env, m_url);
         // start loading the data asynchronously
         env->CallVoidMethod(m_glue->m_javaProxy, m_glue->m_setDataSource, jUrl);
