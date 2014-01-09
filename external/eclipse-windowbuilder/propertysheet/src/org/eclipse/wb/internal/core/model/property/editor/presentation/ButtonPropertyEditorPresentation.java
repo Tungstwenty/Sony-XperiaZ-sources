@@ -111,4 +111,15 @@ public abstract class ButtonPropertyEditorPresentation extends PropertyEditorPre
    * Handles click on {@link Button}.
    */
   protected abstract void onClick(PropertyTable propertyTable, Property property) throws Exception;
+
+  // Temporary workaround for https://bugs.eclipse.org/bugs/show_bug.cgi?id=388574
+  public static boolean isInWorkaround;
+  public void click(PropertyTable propertyTable, Property property) throws Exception {
+    try {
+      isInWorkaround = true;
+      onClick(propertyTable, property);
+    } finally {
+        isInWorkaround = false;
+    }
+  }
 }

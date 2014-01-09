@@ -80,6 +80,9 @@ Am Wolfsmantel 33
 
 www.iis.fraunhofer.de/amm
 amm-info@iis.fraunhofer.de
+
+Changes made in the code.
+2012-12-27 - Added CAacDecoder_ClearHistory function.
 ----------------------------------------------------------------------------------------------------------- */
 
 /*****************************  MPEG-4 AAC Decoder  **************************
@@ -309,5 +312,7 @@ LINKSPEC_H void CAacDecoder_Close ( HANDLE_AACDECODER self );
 /* get streaminfo handle from decoder */
 LINKSPEC_H CStreamInfo* CAacDecoder_GetStreamInfo ( HANDLE_AACDECODER self );
 
+/* Clear all the concealment and overlap-add buffers */
+void CAacDecoder_ClearHistory(HANDLE_AACDECODER self);
 
 #endif /* #ifndef AACDECODER_H */

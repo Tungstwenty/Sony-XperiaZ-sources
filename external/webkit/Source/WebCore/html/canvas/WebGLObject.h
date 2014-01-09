@@ -46,7 +46,12 @@ public:
     // FIXME: revisit this when resource sharing between contexts are implemented.
     void deleteObject();
 
-    void detachContext();
+    void detachContext()
+    {
+        m_attachmentCount = 0; // Make sure OpenGL resource is deleted.
+        deleteObject();
+        m_context = 0;
+    }
 
     WebGLRenderingContext* context() const { return m_context; }
 

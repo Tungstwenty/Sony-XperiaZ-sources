@@ -24,9 +24,6 @@
  * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * NOTE: This file has been modified by Sony Mobile Communications AB.
- * Modifications are licensed under the License.
  */
 
 #define LOG_TAG "webcoreglue"
@@ -458,7 +455,6 @@ WebViewCore::WebViewCore(JNIEnv* env, jobject javaWebViewCore, WebCore::Frame* m
     , m_textWrapWidth(320)
     , m_scale(1.0f)
     , m_groupForVisitedLinks(0)
-    , m_isContentDrawPaused(false)
     , m_cacheMode(0)
     , m_fullscreenVideoMode(false)
     , m_matchCount(0)
@@ -585,7 +581,7 @@ WebViewCore::~WebViewCore()
     WebViewCore::removeInstance(this);
 
     // Release the focused view
-    Release(m_popupReply);
+    ::Release(m_popupReply);
 
     if (m_javaGlue->m_obj) {
         JNIEnv* env = JSC::Bindings::getJNIEnv();
@@ -999,7 +995,7 @@ void WebViewCore::contentInvalidate(const WebCore::IntRect &r)
     IntRect dirty = r;
     dirty.move(-origin.x(), -origin.y());
     m_content.invalidate(dirty);
-    if (!m_skipContentDraw && !m_isContentDrawPaused)
+    if (!m_skipContentDraw)
         contentDraw();
 }
 
@@ -3570,7 +3566,7 @@ void WebViewCore::popupReply(int index)
 {
     if (m_popupReply) {
         m_popupReply->replyInt(index);
-        Release(m_popupReply);
+        ::Release(m_popupReply);
         m_popupReply = 0;
     }
 }
@@ -3579,7 +3575,7 @@ void WebViewCore::popupReply(const int* array, int count)
 {
     if (m_popupReply) {
         m_popupReply->replyIntArray(array, count);
-        Release(m_popupReply);
+        ::Release(m_popupReply);
         m_popupReply = 0;
     }
 }
@@ -4310,6 +4306,14 @@ Vector<VisibleSelection> WebViewCore::getTextRanges(
     VisiblePosition endSelect =  visiblePositionForContentPoint(endX, endY);
     Position start = startSelect.deepEquivalent();
     Position end = endSelect.deepEquivalent();
+    if (isLtr(end)) {
+        // The end caret could be just to the right of the text.
+        endSelect =  visiblePositionForContentPoint(endX - 1, endY);
+        Position newEnd = endSelect.deepEquivalent();
+        if (!newEnd.isNull()) {
+            end = newEnd;
+        }
+    }
     Vector<VisibleSelection> ranges;
     if (!start.isNull() && !end.isNull()) {
         if (comparePositions(start, end) > 0) {
@@ -4586,6 +4590,7 @@ static void SetSize(JNIEnv* env, jobject obj, jint nativeClass, jint width,
     ALOG_ASSERT(viewImpl, "viewImpl not set in nativeSetSize");
     viewImpl->setSizeScreenWidthAndScale(width, height, textWrapWidth, scale,
             screenWidth, screenHeight, anchorX, anchorY, ignoreHeight);
+    viewImpl->updateTextSelection();
 }
 
 static void SetScrollOffset(JNIEnv* env, jobject obj, jint nativeClass,
@@ -4937,13 +4942,6 @@ static void RegisterURLSchemeAsLocal(JNIEnv* env, jobject obj, jint nativeClass,
     WebCore::SchemeRegistry::registerURLSchemeAsLocal(jstringToWtfString(env, scheme));
 }
 
-void WebViewCore::setIsContentDrawPaused(bool isPaused) {
-    m_isContentDrawPaused = isPaused;
-
-    if (!m_skipContentDraw && !m_isContentDrawPaused)
-        contentDraw();
-}
-
 static void Pause(JNIEnv* env, jobject obj, jint nativeClass)
 {
     // This is called for the foreground tab when the browser is put to the
@@ -4979,7 +4977,6 @@ static void Pause(JNIEnv* env, jobject obj, jint nativeClass)
 #endif
 
     viewImpl->setIsPaused(true);
-    viewImpl->setIsContentDrawPaused(true);
 }
 
 static void Resume(JNIEnv* env, jobject obj, jint nativeClass)
@@ -5010,7 +5007,6 @@ static void Resume(JNIEnv* env, jobject obj, jint nativeClass)
 #endif
 
     viewImpl->setIsPaused(false);
-    viewImpl->setIsContentDrawPaused(false);
 }
 
 static void FreeMemory(JNIEnv* env, jobject obj, jint nativeClass)

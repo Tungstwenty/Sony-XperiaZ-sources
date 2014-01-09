@@ -151,6 +151,13 @@ static struct policydb_compat_info policydb_compat[] = {
 	 .target_platform = SEPOL_TARGET_SELINUX,
 	},
 	{
+	 .type = POLICY_KERN,
+	 .version = POLICYDB_VERSION_NEW_OBJECT_DEFAULTS,
+	 .sym_num = SYM_NUM,
+	 .ocon_num = OCON_NODE6 + 1,
+	 .target_platform = SEPOL_TARGET_SELINUX,
+	},
+	{
 	 .type = POLICY_BASE,
 	 .version = MOD_POLICYDB_VERSION_BASE,
 	 .sym_num = SYM_NUM,
@@ -228,6 +235,13 @@ static struct policydb_compat_info policydb_compat[] = {
 	 .target_platform = SEPOL_TARGET_SELINUX,
 	},
 	{
+	 .type = POLICY_BASE,
+	 .version = MOD_POLICYDB_VERSION_NEW_OBJECT_DEFAULTS,
+	 .sym_num = SYM_NUM,
+	 .ocon_num = OCON_NODE6 + 1,
+	 .target_platform = SEPOL_TARGET_SELINUX,
+	},
+	{
 	 .type = POLICY_MOD,
 	 .version = MOD_POLICYDB_VERSION_BASE,
 	 .sym_num = SYM_NUM,
@@ -300,6 +314,13 @@ static struct policydb_compat_info policydb_compat[] = {
 	{
 	 .type = POLICY_MOD,
 	 .version = MOD_POLICYDB_VERSION_TUNABLE_SEP,
+	 .sym_num = SYM_NUM,
+	 .ocon_num = 0,
+	 .target_platform = SEPOL_TARGET_SELINUX,
+	},
+	{
+	 .type = POLICY_MOD,
+	 .version = MOD_POLICYDB_VERSION_NEW_OBJECT_DEFAULTS,
 	 .sym_num = SYM_NUM,
 	 .ocon_num = 0,
 	 .target_platform = SEPOL_TARGET_SELINUX,
@@ -2064,6 +2085,18 @@ static int class_read(policydb_t * p, hashtab_t h, struct policy_file *fp)
 			goto bad;
 	}
 
+	if ((p->policy_type == POLICY_KERN &&
+	     p->policyvers >= POLICYDB_VERSION_NEW_OBJECT_DEFAULTS) ||
+	    (p->policy_type == POLICY_BASE &&
+	     p->policyvers >= MOD_POLICYDB_VERSION_NEW_OBJECT_DEFAULTS)) {
+		rc = next_entry(buf, fp, sizeof(uint32_t) * 3);
+		if (rc < 0)
+			goto bad;
+		cladatum->default_user = le32_to_cpu(buf[0]);
+		cladatum->default_role = le32_to_cpu(buf[1]);
+		cladatum->default_range = le32_to_cpu(buf[2]);
+	}
+
 	if (hashtab_insert(h, key, cladatum))
 		goto bad;
 
@@ -2347,7 +2380,7 @@ int filename_trans_read(filename_trans_t **t, struct policy_file *fp)
 			return -1;
 		len = le32_to_cpu(buf[0]);
 
-		name = calloc(len, sizeof(*name));
+		name = calloc(len + 1, sizeof(*name));
 		if (!name)
 			return -1;
 
@@ -3414,7 +3447,7 @@ static int avrule_block_read(policydb_t * p,
 			 * decl chain in its correct order */
 			if (curblock->branch_list == NULL) {
 				curblock->branch_list = curdecl;
-			} else {
+			} else if (last_decl != NULL) {
 				last_decl->next = curdecl;
 			}
 			last_decl = curdecl;
@@ -3423,7 +3456,7 @@ static int avrule_block_read(policydb_t * p,
 
 		if (*block == NULL) {
 			*block = curblock;
-		} else {
+		} else if (last_block != NULL) {
 			last_block->next = curblock;
 		}
 		last_block = curblock;

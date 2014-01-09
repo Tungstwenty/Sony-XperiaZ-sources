@@ -82,7 +82,15 @@ www.iis.fraunhofer.de/amm
 amm-info@iis.fraunhofer.de
 
 Changes made in the code.
+
+2012-12-27 - Added call to CAacDecoder_ClearHistory function when AAC_TPDEC_CLEAR_BUFFER is
+             requested this will clear all concealment and overlap-add buffers to clear
+             all history.
+
+2013-01-08 - Added call to setParam of sbr decoder to force Init of SBR elements.
+
 2013-03-21 - Added CStreamInfo->numAuBitsRemaining to enable decoding down to last bit of the buffers.
+
 ----------------------------------------------------------------------------------------------------------- */
 
 /*****************************  MPEG-4 AAC Decoder  **************************
@@ -536,6 +544,13 @@ aacDecoder_SetParam ( const HANDLE_AACDECODER  self,   /*!< Handle of the decode
     self->streamInfo.numBadBytes = 0;
     self->streamInfo.numTotalBytes = 0;
     self->streamInfo.numAuBitsRemaining = 0;
+
+    CAacDecoder_ClearHistory(self);
+
+    if (SBRDEC_OK != sbrDecoder_SetParam(self->hSbrDecoder, SBR_SET_RESET_FLAG, 1)) {
+      errorStatus = AAC_DEC_UNKNOWN;
+    }
+
     /* aacDecoder_SignalInterruption(self); */
     break;
 

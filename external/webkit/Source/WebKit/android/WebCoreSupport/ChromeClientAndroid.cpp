@@ -1,5 +1,6 @@
 /*
  * Copyright 2007, The Android Open Source Project
+ * Copyright 2012-2013 Sony Mobile Communications AB
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -592,11 +593,6 @@ void ChromeClientAndroid::enterFullscreenForNode(Node* node)
 
       MediaPlayer* player = videoElement->player();
       if (player) {
-          // We need to use the same document object as the
-          // MediaPlayerPrivateAndroid::onStopFullscreen().
-          Document* doc = player->mediaPlayerClient()->mediaPlayerOwningDocument();
-          if (doc)
-              doc->webkitWillEnterFullScreenForElement(videoElement);
           // Now the player is responsible to trigger to the java side for
           // entering full screen mode.
           player->enterFullscreenMode();

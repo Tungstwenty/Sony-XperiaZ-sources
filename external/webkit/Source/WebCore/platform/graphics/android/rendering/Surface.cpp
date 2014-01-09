@@ -418,7 +418,6 @@ bool Surface::blitFromContents(Tile* tile)
 {
     if (!singleLayer() || !tile || !getFirstLayer() || !getFirstLayer()->content())
         return false;
-
     LayerContent* content = getFirstLayer()->content();
     // Extract the dirty rect from the region. Note that this is *NOT* constrained
     // to this tile

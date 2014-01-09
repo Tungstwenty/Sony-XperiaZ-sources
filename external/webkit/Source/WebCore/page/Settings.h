@@ -491,6 +491,7 @@ namespace WebCore {
         bool useHixie76WebSocketProtocol() { return m_useHixie76WebSocketProtocol; }
 #endif
 
+
     private:
         Page* m_page;
 

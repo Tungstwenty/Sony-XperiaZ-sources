@@ -1,3 +1,15 @@
+2.1.11 2012-09-13
+	* fd leak reading policy
+	* check return code on ebitmap_set_bit
+
+2.1.10 2012-06-28
+	* sepolgen: We need to support files that have a + in them
+	* Android/MacOS X build support
+
+2.1.9 2012-03-28
+	* implement new default labeling behaviors for usr, role, range
+	* Fix dead links to www.nsa.gov/selinux
+
 2.1.8 2011-12-21
 	* add new helper to translate class sets into bitmaps
 

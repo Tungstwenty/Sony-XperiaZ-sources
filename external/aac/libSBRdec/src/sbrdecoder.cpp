@@ -4,7 +4,7 @@ Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC 
 
 © Copyright  1995 - 2012 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
-  Copyright (C) 2012 Sony Mobile Communications AB.
+  Copyright (C) 2012 - 2013 Sony Mobile Communications AB.
 
  1.    INTRODUCTION
 The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
@@ -80,6 +80,10 @@ Am Wolfsmantel 33
 
 www.iis.fraunhofer.de/amm
 amm-info@iis.fraunhofer.de
+
+2013-01-08 - Added code to force Init of SBR elements.
+             The sbr header should be initialized when seek is performed
+             because using a sbr setting from different frame may cause noise.
 ----------------------------------------------------------------------------------------------------------- */
 
 /*!
@@ -364,6 +368,8 @@ SBR_ERROR sbrDecoder_Open ( HANDLE_SBRDECODER  * pSelf )
   self->codecFrameSize = 0;
   */
 
+  self->isResetNeeded = 0;
+
   self->numDelayFrames = (1);  /* set to the max value by default */
 
   *pSelf = self;
@@ -445,6 +451,7 @@ SBR_ERROR sbrDecoder_InitElement (
      && self->coreCodec == coreCodec
      && self->pSbrElement[elementIndex] != NULL
      && self->pSbrElement[elementIndex]->elementID == elementID
+     && !self->isResetNeeded
      )
   {
      /* Nothing to do */
@@ -543,6 +550,8 @@ SBR_ERROR sbrDecoder_InitElement (
           elementIndex,
           (coreCodec == AOT_ER_AAC_ELD) ? 0 : (6)
           );
+
+  self->isResetNeeded = 0;
 
 
 
@@ -746,6 +755,13 @@ SBR_ERROR sbrDecoder_SetParam (HANDLE_SBRDECODER   self,
         hSbrHeader->syncState = UPSAMPLING;
         hSbrHeader->status   |= SBRDEC_HDR_STAT_UPDATE;
       }
+    }
+    break;
+  case SBR_SET_RESET_FLAG:
+    if (self == NULL) {
+      errorStatus = SBRDEC_NOT_INITIALIZED;
+    } else {
+      self->isResetNeeded = 1;
     }
     break;
   default:

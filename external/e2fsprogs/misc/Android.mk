@@ -51,7 +51,7 @@ mke2fs_shared_libraries := \
 	libext2_com_err \
 	libext2_e2p
 
-mke2fs_static_libraries := \
+mke2fs_shared_static_libraries := \
 	libext2fs_static \
 	libext2_blkid_static \
 	libext2_uuid_static \
@@ -89,7 +89,7 @@ LOCAL_MODULE_TAGS := optional
 include $(BUILD_HOST_EXECUTABLE)
 
 #
-# mke2fs for rootfs (static version)
+# mke2fs for kernel (static version)
 #
 
 include $(CLEAR_VARS)
@@ -97,7 +97,7 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES := $(mke2fs_src_files)
 LOCAL_C_INCLUDES := $(mke2fs_c_includes)
 LOCAL_CFLAGS := $(mke2fs_cflags) $(mke2fs_cflags_linux)
-LOCAL_STATIC_LIBRARIES := $(mke2fs_static_libraries) libc
+LOCAL_STATIC_LIBRARIES := $(mke2fs_shared_static_libraries) libc
 LOCAL_MODULE := fota-mke2fs
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_PATH := $(PRODUCT_OUT)/root/sbin
@@ -155,6 +155,13 @@ tune2fs_shared_libraries := \
 	libext2_uuid \
 	libext2_e2p
 
+tune2fs_static_libraries := \
+	libext2fs_static \
+	libext2_com_err_static \
+	libext2_blkid_static \
+	libext2_uuid_static \
+	libext2_e2p_static
+
 tune2fs_system_shared_libraries := libc
 
 include $(CLEAR_VARS)
@@ -180,6 +187,23 @@ LOCAL_MODULE_STEM := tune2fs
 LOCAL_MODULE_TAGS := optional
 
 include $(BUILD_HOST_EXECUTABLE)
+
+
+# tune2fs for fota (static version)
+include $(CLEAR_VARS)
+
+LOCAL_SRC_FILES := $(tune2fs_src_files)
+LOCAL_C_INCLUDES := $(tune2fs_c_includes)
+LOCAL_CFLAGS := $(tune2fs_cflags)
+LOCAL_STATIC_LIBRARIES := $(tune2fs_static_libraries) libc
+LOCAL_MODULE := tune2fs_static
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_PATH := $(PRODUCT_OUT)/root/sbin
+LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_UNSTRIPPED)
+LOCAL_FORCE_STATIC_EXECUTABLE := true
+
+include $(BUILD_EXECUTABLE)
+
 
 #########################################################################
 # Build badblocks

@@ -3,6 +3,7 @@
  *           (C) 2008 Torch Mobile Inc. All rights reserved. (http://www.torchmobile.com/) 
  * Copyright (C) 2010 Google Inc. All rights reserved.
  * Copyright (C) 2010 Nokia Corporation and/or its subsidiary(-ies).
+ * Copyright (C) 2013 Sony Mobile Communications AB
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -18,6 +19,9 @@
  * along with this library; see the file COPYING.LIB.  If not, write to
  * the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
  * Boston, MA 02110-1301, USA.
+ *
+ * NOTE: This file has been modified by Sony Mobile Communications AB.
+ * Modifications are licensed under the License.
  *
  */
 
@@ -346,7 +350,8 @@ bool RenderTextControlSingleLine::nodeAtPoint(const HitTestRequest& request, Hit
     // If we hit a node inside the inner text element, say that we hit that element,
     // and if we hit our node (e.g. we're over the border or padding), also say that we hit the
     // inner text element so that it gains focus.
-    if (result.innerNode()->isDescendantOf(innerTextElement()) || result.innerNode() == node())
+    if (result.innerNode()->isDescendantOf(innerTextElement()) || result.innerNode() == node()
+            || result.innerNode() == innerTextElement())
         hitInnerTextElement(result, xPos, yPos, tx, ty);
 
     // If we found a spin button, we're done.

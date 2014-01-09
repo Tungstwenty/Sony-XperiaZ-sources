@@ -1,5 +1,6 @@
 /*
  * Copyright 2009, The Android Open Source Project
+ * Copyright 2013 Sony Mobile Communications AB
  * Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,6 +30,7 @@
 
 #if ENABLE(VIDEO)
 
+#include "HTMLMediaElement.h"
 #include "BaseLayerAndroid.h"
 #include "GraphicsContext.h"
 #include "Settings.h"
@@ -42,13 +44,13 @@
 #include <JNIHelp.h>
 #include <JNIUtility.h>
 #include <SkBitmap.h>
+#include <gui/GLConsumer.h>
 #include "SkBitmapRef.h"
-#include <gui/SurfaceTexture.h>
 
 using namespace android;
 // Forward decl
 namespace android {
-sp<SurfaceTexture> SurfaceTexture_getSurfaceTexture(JNIEnv* env, jobject thiz);
+sp<GLConsumer> SurfaceTexture_getSurfaceTexture(JNIEnv* env, jobject thiz);
 };
 
 namespace WebCore {
@@ -247,16 +249,12 @@ void MediaPlayerPrivate::onTimeupdate(int position)
 void MediaPlayerPrivate::onStopFullscreen(bool stillPlaying)
 {
     if (m_player && m_player->mediaPlayerClient()) {
-        Document* doc = m_player->mediaPlayerClient()->mediaPlayerOwningDocument();
-        if (doc) {
-            HTMLMediaElement* element =
-                static_cast<HTMLMediaElement*>(doc->webkitCurrentFullScreenElement());
-            element->exitFullscreen();
-            doc->webkitDidExitFullScreenForElement(element);
+        HTMLMediaElement* mediaElement =
+            static_cast<HTMLMediaElement*> (m_player->mediaPlayerClient());
+        mediaElement->exitFullscreen();
 
-            if (stillPlaying)
-                element->play(true);
-        }
+        if (stillPlaying)
+            mediaElement->play(true);
     }
 }
 
@@ -591,6 +589,11 @@ public:
         if (!m_glue->m_javaProxy)
             return;
 
+        // Cheat and set ready state to HaveMetadata so that the HTMLMediaElement
+        // displays the media controls properly even if audio is not really loaded
+        m_readyState = MediaPlayer::HaveMetadata;
+        m_player->readyStateChanged();
+
         jstring jUrl = wtfStringToJstring(env, m_url);
         // start loading the data asynchronously
         env->CallVoidMethod(m_glue->m_javaProxy, m_glue->m_setDataSource, jUrl);
@@ -854,7 +857,7 @@ static bool SendSurfaceTexture(JNIEnv* env, jobject obj, jobject surfTex,
     if (!surfTex)
         return false;
 
-    sp<SurfaceTexture> texture = android::SurfaceTexture_getSurfaceTexture(env, surfTex);
+    sp<GLConsumer> texture = android::SurfaceTexture_getSurfaceTexture(env, surfTex);
     if (!texture.get())
         return false;
 
@@ -867,7 +870,7 @@ static bool SendSurfaceTexture(JNIEnv* env, jobject obj, jobject surfTex,
     if (!videoLayer)
         return false;
 
-    // Set the SurfaceTexture to the layer we found
+    // Set the GLConsumer to the layer we found
     videoLayer->setSurfaceTexture(texture, textureName);
     if (player) {
         videoLayer->registerVideoLayerObserver(player->getVideoLayerObserver());

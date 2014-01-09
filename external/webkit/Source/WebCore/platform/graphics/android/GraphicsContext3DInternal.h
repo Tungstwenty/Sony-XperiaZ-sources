@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2011, 2012, Sony Ericsson Mobile Communications AB
- * Copyright (C) 2012-2013, Sony Mobile Communications AB
+ * Copyright (C) 2012, Sony Mobile Communications AB
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -184,7 +184,6 @@ private:
     thread_state_t   m_threadState;
     WTF::Mutex           m_threadMutex;
     WTF::ThreadCondition m_threadCondition;
-    WTF::ThreadCondition m_bufferCondition;
 
     void syncTimerFired(Timer<GraphicsContext3DInternal>*);
     FBO* dequeueBuffer();

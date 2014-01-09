@@ -2,7 +2,6 @@
  * Copyright 2006, The Android Open Source Project
  * Copyright (c) 2012 The Linux Foundation. All rights reserved
  * 2012 Sony Ericsson Mobile Communications AB.
- * All Rights Reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -166,9 +165,8 @@ class WebFrame : public WebCoreRefObject {
     bool mBlockNetworkLoads;
     WebCore::RenderSkinAndroid* m_renderSkins;
     bool mPageLoadStarted;
-    bool mCloseUnusedSocketsEnabled;
     WTF::String mUserAgentProfile;
-
+    bool mCloseUnusedSocketsEnabled;
 };
 
 }   // namespace android

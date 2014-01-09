@@ -1,7 +1,6 @@
 /*
  * Copyright 2006, The Android Open Source Project
  * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
- * Copyright (C) 2012 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -23,9 +22,6 @@
  * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * NOTE: This file has been modified by Sony Ericsson Mobile Communications AB /
- * Sony Mobile Communications AB. Modifications are licensed under the License.
  */
 
 #ifndef WebViewCore_h
@@ -562,7 +558,6 @@ namespace android {
                 size_t count, const int enabled[], size_t enabledCount,
                 bool multiple, const int selected[], size_t selectedCountOrSelection);
         void setIsPaused(bool isPaused) { m_isPaused = isPaused; }
-        void setIsContentDrawPaused(bool isPaused);
         bool drawIsPaused() const;
         // The actual content (without title bar) size in doc coordinate
         int  screenWidth() const { return m_screenWidth; }
@@ -797,7 +792,6 @@ namespace android {
         float m_scale;
         WebCore::PageGroup* m_groupForVisitedLinks;
         bool m_isPaused;
-        bool m_isContentDrawPaused;
         int m_cacheMode;
         bool m_fullscreenVideoMode;
 

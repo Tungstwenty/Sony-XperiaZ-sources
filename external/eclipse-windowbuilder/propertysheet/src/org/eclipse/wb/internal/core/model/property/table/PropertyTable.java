@@ -38,12 +38,14 @@ import org.eclipse.swt.widgets.ScrollBar;
 import org.eclipse.wb.draw2d.IColorConstants;
 import org.eclipse.wb.draw2d.ICursorConstants;
 import org.eclipse.wb.internal.core.DesignerPlugin;
+import org.eclipse.wb.internal.core.EnvironmentUtils;
 import org.eclipse.wb.internal.core.model.property.Property;
 import org.eclipse.wb.internal.core.model.property.category.PropertyCategory;
 import org.eclipse.wb.internal.core.model.property.category.PropertyCategoryProvider;
 import org.eclipse.wb.internal.core.model.property.category.PropertyCategoryProviders;
 import org.eclipse.wb.internal.core.model.property.editor.PropertyEditor;
 import org.eclipse.wb.internal.core.model.property.editor.complex.IComplexPropertyEditor;
+import org.eclipse.wb.internal.core.model.property.editor.presentation.ButtonPropertyEditorPresentation;
 import org.eclipse.wb.internal.core.model.property.editor.presentation.PropertyEditorPresentation;
 import org.eclipse.wb.internal.core.utils.check.Assert;
 import org.eclipse.wb.internal.core.utils.ui.DrawUtils;
@@ -558,6 +560,24 @@ public class PropertyTable extends Canvas implements ISelectionProvider {
       }
       // set bounds
       setActiveEditorBounds();
+    } catch (NullPointerException e) {
+        if (EnvironmentUtils.IS_MAC) {
+            // Workaround for https://bugs.eclipse.org/bugs/show_bug.cgi?id=388574
+            PropertyEditor editor = property.getEditor();
+            PropertyEditorPresentation presentation = editor.getPresentation();
+            if (presentation instanceof ButtonPropertyEditorPresentation) {
+                ButtonPropertyEditorPresentation button =
+                        (ButtonPropertyEditorPresentation) presentation;
+                try {
+                    button.click(this, property);
+                } catch (Exception ex) {
+                    deactivateEditor(false);
+                    handleException(e);
+                }
+                return;
+            }
+        }
+        DesignerPlugin.log(e);
     } catch (Throwable e) {
       DesignerPlugin.log(e);
     }

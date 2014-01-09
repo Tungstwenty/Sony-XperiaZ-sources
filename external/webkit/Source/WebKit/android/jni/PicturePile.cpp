@@ -1,5 +1,6 @@
 /*
  * Copyright 2012, The Android Open Source Project
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -84,8 +85,7 @@ void PicturePile::draw(SkCanvas* canvas)
      * the rect bounds of the SkRegion for the clip, so this still can't be
      * used for translucent surfaces
      */
-    if (canvas->quickReject(SkRect::MakeWH(m_size.width(), m_size.height()),
-            SkCanvas::kBW_EdgeType))
+    if (canvas->quickReject(SkRect::MakeWH(m_size.width(), m_size.height())))
         return;
     drawWithClipRecursive(canvas, m_pile.size() - 1);
 }
@@ -102,7 +102,7 @@ void PicturePile::drawWithClipRecursive(SkCanvas* canvas, int index)
     if (index < 0)
         return;
     PictureContainer& pc = m_pile[index];
-    if (pc.picture && !canvas->quickReject(pc.area, SkCanvas::kBW_EdgeType)) {
+    if (pc.picture && !canvas->quickReject(pc.area)) {
         int saved = canvas->save(SkCanvas::kClip_SaveFlag);
         if (canvas->clipRect(pc.area, SkRegion::kDifference_Op))
             drawWithClipRecursive(canvas, index - 1);
@@ -143,15 +143,12 @@ void PicturePile::setSize(const IntSize& size)
         return;
     IntSize oldSize = m_size;
     m_size = size;
-    if (size.width() <= oldSize.width() && size.height() <= oldSize.height()) {
-        // We are shrinking - huzzah, nothing to do!
-        // TODO: Loop through and throw out Pictures that are now clipped out
-    } else if (oldSize.width() == size.width()) {
+    if (oldSize.width() == size.width() && size.height() > oldSize.height()) {
         // Only changing vertically
         IntRect rect(0, std::min(oldSize.height(), size.height()),
                      size.width(), std::abs(oldSize.height() - size.height()));
         invalidate(rect);
-    } else if (oldSize.height() == size.height()) {
+    } else if (oldSize.height() == size.height() && size.width() > oldSize.width()) {
         // Only changing horizontally
         IntRect rect(std::min(oldSize.width(), size.width()), 0,
                      std::abs(oldSize.width() - size.width()), size.height());

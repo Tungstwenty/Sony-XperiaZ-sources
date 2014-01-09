@@ -1,16 +1,3 @@
-2012-04-06  Zhenyao Mo  <zmo@google.com>
-
-        bindAttribLocation should check webgl reserved prefix
-        https://bugs.webkit.org/show_bug.cgi?id=83409
-
-        Reviewed by Kenneth Russell.
-
-        * html/canvas/WebGLRenderingContext.cpp: Check for invalid parameters for a few functions.
-        (WebCore):
-        (WebCore::WebGLRenderingContext::bindAttribLocation):
-        (WebCore::WebGLRenderingContext::getAttribLocation):
-        (WebCore::WebGLRenderingContext::getUniformLocation):
-
 2012-03-16  Kentaro Hara  <haraken@chromium.org>
 
         [Performance] Optimize innerHTML and outerHTML

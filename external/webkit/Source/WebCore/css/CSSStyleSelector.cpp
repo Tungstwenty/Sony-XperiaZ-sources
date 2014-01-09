@@ -7,6 +7,7 @@
  * Copyright (C) 2007, 2008 Eric Seidel <eric@webkit.org>
  * Copyright (C) 2008, 2009 Torch Mobile Inc. All rights reserved. (http://www.torchmobile.com/)
  * Copyright (c) 2011, The Linux Foundation All rights reserved.
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -22,6 +23,9 @@
  * along with this library; see the file COPYING.LIB.  If not, write to
  * the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
  * Boston, MA 02110-1301, USA.
+ *
+ * NOTE: This file has been modified by Sony Mobile Communications AB.
+ * Modifications are licensed under the License.
  */
 
 #include "config.h"
@@ -760,6 +764,9 @@ void CSSStyleSelector::matchRulesForList(const Vector<RuleData>* rules, int& fir
         if (canUseFastReject && fastRejectSelector(ruleData))
             continue;
         if (checkSelector(ruleData)) {
+            // Ignore the rule for media controls if the rule does not explicitly reach into shadow DOM
+            if (m_element->isMediaControlElement() && !m_checker.m_hasUnknownPseudoElements)
+                continue;
             // If the rule has no properties to apply, then ignore it in the non-debug mode.
             CSSStyleRule* rule = ruleData.rule();
             CSSMutableStyleDeclaration* decl = rule->declaration();
@@ -881,6 +888,7 @@ CSSStyleSelector::SelectorChecker::SelectorChecker(Document* document, bool stri
     , m_sameOriginOnly(false)
     , m_pseudoStyle(NOPSEUDO)
     , m_documentIsHTML(document->isHTMLDocument())
+    , m_hasUnknownPseudoElements(false)
     , m_matchVisitedPseudoClass(false)
 {
 }
@@ -2045,6 +2053,7 @@ PassRefPtr<CSSRuleList> CSSStyleSelector::pseudoStyleRulesForElement(Element* e,
 inline bool CSSStyleSelector::checkSelector(const RuleData& ruleData)
 {
     m_dynamicPseudo = NOPSEUDO;
+    m_checker.m_hasUnknownPseudoElements = false;
 
     // Let the slow path handle SVG as it has some additional rules regarding shadow trees.
     if (ruleData.hasFastCheckableSelector() && !m_element->isSVGElement()) {
@@ -2942,6 +2951,9 @@ bool CSSStyleSelector::SelectorChecker::checkOneSelector(CSSSelector* sel, Eleme
     if (sel->m_match == CSSSelector::PseudoElement) {
         if (!elementStyle && !m_collectRulesOnly)
             return false;
+
+        if (sel->isUnknownPseudoElement())
+            m_hasUnknownPseudoElements = true;
 
         PseudoId pseudoId = CSSSelector::pseudoId(sel->pseudoType());
         if (pseudoId == FIRST_LETTER) {

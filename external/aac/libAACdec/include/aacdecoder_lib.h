@@ -82,8 +82,8 @@ www.iis.fraunhofer.de/amm
 amm-info@iis.fraunhofer.de
 
 Changes made in the code.
-2012-11-22 - Clarified supported parameters to AAC_PCM_OUTPUT_CHANNELS and their result in documentation.
 2013-03-21 - Added CStreamInfo->numAuBitsRemaining to enable decoding down to last bit of the buffers.
+2012-11-22 - Clarified supported parameters to AAC_PCM_OUTPUT_CHANNELS and their result in documentation.
 ----------------------------------------------------------------------------------------------------------- */
 
 /*****************************  MPEG-4 AAC Decoder  **************************

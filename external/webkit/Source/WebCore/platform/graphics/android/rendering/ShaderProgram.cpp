@@ -739,6 +739,7 @@ void ShaderProgram::drawQuadInternal(ShaderType type, const GLfloat* matrix,
         glVertexAttribPointer(m_handleArray[type].positionHandle,
                               2, GL_FLOAT, GL_FALSE, 0, 0);
         m_cachedProgramType = type;
+        m_cachedFillPortion = FloatRect();
         m_cachedOpacity = -1; // reset cache for variable shared by multiple programs
     }
     glUniformMatrix4fv(m_handleArray[type].projMtxHandle, 1, GL_FALSE, matrix);
@@ -853,6 +854,7 @@ void ShaderProgram::drawQuad(const DrawQuadData* data)
     } else {
         textureId = data->textureId();
         textureFilter = data->textureFilter();
+        textureFilter = GL_LINEAR;
         textureTarget = data->textureTarget();
         shaderType = getTextureShaderType(textureTarget, data->hasRepeatScale());
     }

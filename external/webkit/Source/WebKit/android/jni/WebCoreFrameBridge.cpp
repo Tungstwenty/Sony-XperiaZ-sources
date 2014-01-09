@@ -1,6 +1,7 @@
 /*
  * Copyright 2006, The Android Open Source Project
  * Copyright (c) 2012 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013 Sony Mobile Communications AB. All rights reserved.
  *
  * Portions created by Sony Ericsson are Copyright (C) 2011,
  * 2012 Sony Ericsson Mobile Communications AB.
@@ -29,6 +30,7 @@
  */
 /*
  * This file has been modified by Sony Ericsson on 2011-04-05, 2012-02-04.
+ * This file has been modified by Sony Mobile on 2013-10-03.
  */
 
 #define LOG_TAG "webcoreglue"
@@ -335,7 +337,7 @@ WebFrame::WebFrame(JNIEnv* env, jobject obj, jobject historyList, WebCore::Page*
     mUserAgent = WTF::String();
     mBlockNetworkLoads = false;
     m_renderSkins = 0;
-
+    mUserAgentProfile = WTF::String();
     mPageLoadStarted = false;
     mCloseUnusedSocketsEnabled = false;
     char netCloseUnusedSocketsSystemProperty[PROPERTY_VALUE_MAX];
@@ -343,8 +345,6 @@ WebFrame::WebFrame(JNIEnv* env, jobject obj, jobject historyList, WebCore::Page*
                     netCloseUnusedSocketsSystemProperty, "1")) {
         mCloseUnusedSocketsEnabled = (bool)atoi(netCloseUnusedSocketsSystemProperty);
     }
-
-    mUserAgentProfile = WTF::String();
 }
 
 WebFrame::~WebFrame()
@@ -1141,6 +1141,7 @@ static void CallPolicyFunction(JNIEnv* env, jobject obj, jint func, jint decisio
         pFrame->loader()->resetMultipleFormSubmissionProtection();
 
     (pFrame->loader()->policyChecker()->*(pFunc->func))((WebCore::PolicyAction)decision);
+    delete pFunc;
 }
 
 static void CreateFrame(JNIEnv* env, jobject obj, jobject javaview, jobject jAssetManager, jobject historyList)
@@ -1963,7 +1964,7 @@ static void SslClientCertPKCS8(JNIEnv *env, jobject obj, int handle, jbyteArray 
     client->sslClientCert(privateKey.release(), certificate);
 }
 
-static void SslClientCertCtx(JNIEnv *env, jobject obj, int handle, jint ctx, jobjectArray chain)
+static void SslClientCertCtx(JNIEnv *env, jobject obj, int handle, jlong ctx, jobjectArray chain)
 {
     WebUrlLoaderClient* client = reinterpret_cast<WebUrlLoaderClient*>(handle);
     EVP_PKEY* pkey = reinterpret_cast<EVP_PKEY*>(static_cast<uintptr_t>(ctx));
@@ -2038,7 +2039,7 @@ static JNINativeMethod gBrowserFrameNativeMethods[] = {
         (void*) SslCertErrorProceed },
     { "nativeSslCertErrorCancel", "(II)V",
         (void*) SslCertErrorCancel },
-    { "nativeSslClientCert", "(II[[B)V",
+    { "nativeSslClientCert", "(IJ[[B)V",
         (void*) SslClientCertCtx },
     { "nativeSslClientCert", "(I[B[[B)V",
         (void*) SslClientCertPKCS8 },

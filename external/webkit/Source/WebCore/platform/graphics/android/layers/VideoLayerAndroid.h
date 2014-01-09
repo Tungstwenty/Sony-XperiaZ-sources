@@ -35,7 +35,7 @@
 #include <jni.h>
 
 namespace android {
-class SurfaceTexture;
+class GLConsumer;
 }
 
 namespace WebCore {
@@ -69,7 +69,7 @@ public:
 
     // The following functions are called in UI thread only.
     virtual bool drawGL(bool layerTilesDisabled);
-    void setSurfaceTexture(sp<SurfaceTexture> texture, int textureName);
+    void setSurfaceTexture(sp<GLConsumer> texture, int textureName);
     virtual bool needsIsolatedSurface() { return true; }
     void registerVideoLayerObserver(VideoLayerObserverInterface* observer);
     bool copyToBitmap(SkBitmapRef*& bitmapRef);
@@ -79,7 +79,7 @@ private:
     void serviceFrameCapture();
     // Surface texture for showing the video is actually allocated in Java side
     // and passed into this native code.
-    sp<android::SurfaceTexture> m_surfaceTexture;
+    sp<android::GLConsumer> m_surfaceTexture;
 
     static double m_rotateDegree;
 

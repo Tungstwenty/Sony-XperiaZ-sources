@@ -251,6 +251,7 @@ static int common_copy_callback(hashtab_key_t key, hashtab_datum_t datum,
 	new_id = strdup(id);
 	if (!new_id) {
 		ERR(state->handle, "Out of memory!");
+		symtab_destroy(&new_common->permissions);
 		free(new_common);
 		return -1;
 	}
@@ -263,6 +264,7 @@ static int common_copy_callback(hashtab_key_t key, hashtab_datum_t datum,
 			   (hashtab_datum_t *) new_common);
 	if (ret) {
 		ERR(state->handle, "hashtab overflow");
+		symtab_destroy(&new_common->permissions);
 		free(new_common);
 		free(new_id);
 		return -1;
@@ -358,6 +360,35 @@ static int constraint_node_clone(constraint_node_t ** dst,
 	return -1;
 }
 
+static int class_copy_default_new_object(expand_state_t *state,
+					 class_datum_t *olddatum,
+					 class_datum_t *newdatum)
+{
+	if (olddatum->default_user) {
+		if (newdatum->default_user && olddatum->default_user != newdatum->default_user) {
+			ERR(state->handle, "Found conflicting default user definitions");
+			return SEPOL_ENOTSUP;
+		}
+		newdatum->default_user = olddatum->default_user;
+
+	}
+	if (olddatum->default_role) {
+		if (newdatum->default_role && olddatum->default_role != newdatum->default_role) {
+			ERR(state->handle, "Found conflicting default role definitions");
+			return SEPOL_ENOTSUP;
+		}
+		newdatum->default_role = olddatum->default_role;
+	}
+	if (olddatum->default_range) {
+		if (newdatum->default_range && olddatum->default_range != newdatum->default_range) {
+			ERR(state->handle, "Found conflicting default range definitions");
+			return SEPOL_ENOTSUP;
+		}
+		newdatum->default_range = olddatum->default_range;
+	}
+	return 0;
+}
+
 static int class_copy_callback(hashtab_key_t key, hashtab_datum_t datum,
 			       void *data)
 {
@@ -393,6 +424,12 @@ static int class_copy_callback(hashtab_key_t key, hashtab_datum_t datum,
 	new_class->s.value = class->s.value;
 	state->out->p_classes.nprim++;
 
+	ret = class_copy_default_new_object(state, class, new_class);
+	if (ret) {
+		free(new_class);
+		return ret;
+	}
+	
 	new_id = strdup(id);
 	if (!new_id) {
 		ERR(state->handle, "Out of memory!");
@@ -688,6 +725,11 @@ static int role_fix_callback(hashtab_key_t key, hashtab_datum_t datum,
 		return 0;
 	}
 
+	if (!is_id_enabled(id, state->base, SYM_ROLES)) {
+		/* identifier's scope is not enabled */
+		return 0;
+	}
+
 	if (role->flavor != ROLE_ATTRIB)
 		return 0;
 
@@ -772,6 +814,7 @@ static int role_copy_callback(hashtab_key_t key, hashtab_datum_t datum,
 		new_id = strdup(id);
 		if (!new_id) {
 			ERR(state->handle, "Out of memory!");
+			free(new_role);
 			return -1;
 		}
 
@@ -923,6 +966,7 @@ static int user_copy_callback(hashtab_key_t key, hashtab_datum_t datum,
 		new_id = strdup(id);
 		if (!new_id) {
 			ERR(state->handle, "Out of memory!");
+			free(new_user);
 			return -1;
 		}
 		ret = hashtab_insert(state->out->p_users.table,
@@ -1317,15 +1361,10 @@ static int copy_role_trans(expand_state_t * state, role_trans_rule_t * rules)
 static int expand_filename_trans(expand_state_t *state, filename_trans_rule_t *rules)
 {
 	unsigned int i, j;
-	filename_trans_t *new_trans, *tail, *cur_trans;
+	filename_trans_t *new_trans, *cur_trans;
 	filename_trans_rule_t *cur_rule;
 	ebitmap_t stypes, ttypes;
 	ebitmap_node_t *snode, *tnode;
-
-	/* start at the end of the list */
-	tail = state->out->filename_trans;
-	while (tail && tail->next)
-		tail = tail->next;
 
 	cur_rule = rules;
 	while (cur_rule) {
@@ -1387,11 +1426,8 @@ static int expand_filename_trans(expand_state_t *state, filename_trans_rule_t *r
 					return -1;
 				}
 				memset(new_trans, 0, sizeof(*new_trans));
-				if (tail)
-					tail->next = new_trans;
-				else
-					state->out->filename_trans = new_trans;
-				tail = new_trans;
+				new_trans->next = state->out->filename_trans;
+				state->out->filename_trans = new_trans;
 
 				new_trans->name = strdup(cur_rule->name);
 				if (!new_trans->name) {
@@ -1791,58 +1827,36 @@ static int expand_rule_helper(sepol_handle_t * handle,
 			continue;
 		if (source_rule->flags & RULE_SELF) {
 			if (source_rule->specified & AVRULE_AV) {
-				if ((retval =
-				     expand_avrule_helper(handle,
-							  source_rule->
-							  specified, cond, i, i,
-							  source_rule->perms,
-							  dest_avtab,
-							  enabled)) !=
-				    EXPAND_RULE_SUCCESS) {
+				retval = expand_avrule_helper(handle, source_rule->specified,
+							      cond, i, i, source_rule->perms,
+							      dest_avtab, enabled);
+				if (retval != EXPAND_RULE_SUCCESS)
 					return retval;
-				}
 			} else {
-				if ((retval =
-				     expand_terule_helper(handle, p,
-							  typemap,
-							  source_rule->
-							  specified, cond,
-							  other, i, i,
-							  source_rule->perms,
-							  dest_avtab,
-							  enabled)) !=
-				    EXPAND_RULE_SUCCESS) {
+				retval = expand_terule_helper(handle, p, typemap,
+							      source_rule->specified, cond,
+							      other, i, i, source_rule->perms,
+							      dest_avtab, enabled);
+				if (retval != EXPAND_RULE_SUCCESS)
 					return retval;
-				}
 			}
 		}
 		ebitmap_for_each_bit(ttypes, tnode, j) {
 			if (!ebitmap_node_get_bit(tnode, j))
 				continue;
 			if (source_rule->specified & AVRULE_AV) {
-				if ((retval =
-				     expand_avrule_helper(handle,
-							  source_rule->
-							  specified, cond, i, j,
-							  source_rule->perms,
-							  dest_avtab,
-							  enabled)) !=
-				    EXPAND_RULE_SUCCESS) {
+				retval = expand_avrule_helper(handle, source_rule->specified,
+							      cond, i, j, source_rule->perms,
+							      dest_avtab, enabled);
+				if (retval != EXPAND_RULE_SUCCESS)
 					return retval;
-				}
 			} else {
-				if ((retval =
-				     expand_terule_helper(handle, p,
-							  typemap,
-							  source_rule->
-							  specified, cond,
-							  other, i, j,
-							  source_rule->perms,
-							  dest_avtab,
-							  enabled)) !=
-				    EXPAND_RULE_SUCCESS) {
+				retval = expand_terule_helper(handle, p, typemap,
+							      source_rule->specified, cond,
+							      other, i, j, source_rule->perms,
+							      dest_avtab, enabled);
+				if (retval != EXPAND_RULE_SUCCESS)
 					return retval;
-				}
 			}
 		}
 	}
@@ -1972,6 +1986,7 @@ static int cond_node_copy(expand_state_t * state, cond_node_t * cn)
 
 	if (cond_node_map_bools(state, tmp)) {
 		ERR(state->handle, "Error mapping booleans");
+		free(tmp);
 		return -1;
 	}
 
@@ -2027,13 +2042,14 @@ static int ocontext_copy_xen(expand_state_t *state)
 			else
 				state->out->ocontexts[i] = n;
 			l = n;
-			if (context_copy(&n->context[0], &c->context[0],
-				state)) {
-				ERR(state->handle, "Out of memory!");
-				return -1;
-			}
 			switch (i) {
 			case OCON_XEN_ISID:
+				if (c->context[0].user == 0) {
+					ERR(state->handle,
+					    "Missing context for %s initial sid",
+					    c->u.name);
+					return -1;
+				}
 				n->sid[0] = c->sid[0];
 				break;
 			case OCON_XEN_PIRQ:
@@ -2054,6 +2070,11 @@ static int ocontext_copy_xen(expand_state_t *state)
 			default:
 				/* shouldn't get here */
 				ERR(state->handle, "Unknown ocontext");
+				return -1;
+			}
+			if (context_copy(&n->context[0], &c->context[0],
+				state)) {
+				ERR(state->handle, "Out of memory!");
 				return -1;
 			}
 		}
@@ -2080,12 +2101,14 @@ static int ocontext_copy_selinux(expand_state_t *state)
 			else
 				state->out->ocontexts[i] = n;
 			l = n;
-			if (context_copy(&n->context[0], &c->context[0], state)) {
-				ERR(state->handle, "Out of memory!");
-				return -1;
-			}
 			switch (i) {
 			case OCON_ISID:
+				if (c->context[0].user == 0) {
+					ERR(state->handle,
+					    "Missing context for %s initial sid",
+					    c->u.name);
+					return -1;
+				}
 				n->sid[0] = c->sid[0];
 				break;
 			case OCON_FS:	/* FALLTHROUGH */
@@ -2129,6 +2152,10 @@ static int ocontext_copy_selinux(expand_state_t *state)
 				ERR(state->handle, "Unknown ocontext");
 				return -1;
 			}
+			if (context_copy(&n->context[0], &c->context[0], state)) {
+				ERR(state->handle, "Out of memory!");
+				return -1;
+			}
 		}
 	}
 	return 0;
@@ -2167,6 +2194,7 @@ static int genfs_copy(expand_state_t * state)
 		newgenfs->fstype = strdup(genfs->fstype);
 		if (!newgenfs->fstype) {
 			ERR(state->handle, "Out of memory!");
+			free(newgenfs);
 			return -1;
 		}
 
@@ -2175,12 +2203,17 @@ static int genfs_copy(expand_state_t * state)
 			newc = malloc(sizeof(ocontext_t));
 			if (!newc) {
 				ERR(state->handle, "Out of memory!");
+				free(newgenfs->fstype);
+				free(newgenfs);
 				return -1;
 			}
 			memset(newc, 0, sizeof(ocontext_t));
 			newc->u.name = strdup(c->u.name);
 			if (!newc->u.name) {
 				ERR(state->handle, "Out of memory!");
+				free(newc);
+				free(newgenfs->fstype);
+				free(newgenfs);
 				return -1;
 			}
 			newc->v.sclass = c->v.sclass;
@@ -3101,12 +3134,12 @@ static int expand_avtab_node(avtab_key_t * k, avtab_datum_t * d, void *args)
 	newkey.target_class = k->target_class;
 	newkey.specified = k->specified;
 
-	if (stype && ttype) {
+	if (stype->flavor != TYPE_ATTRIB && ttype->flavor != TYPE_ATTRIB) {
 		/* Both are individual types, no expansion required. */
 		return expand_avtab_insert(expa, k, d);
 	}
 
-	if (stype) {
+	if (stype->flavor != TYPE_ATTRIB) {
 		/* Source is an individual type, target is an attribute. */
 		newkey.source_type = k->source_type;
 		ebitmap_for_each_bit(tattr, tnode, j) {
@@ -3120,7 +3153,7 @@ static int expand_avtab_node(avtab_key_t * k, avtab_datum_t * d, void *args)
 		return 0;
 	}
 
-	if (ttype) {
+	if (ttype->flavor != TYPE_ATTRIB) {
 		/* Target is an individual type, source is an attribute. */
 		newkey.target_type = k->target_type;
 		ebitmap_for_each_bit(sattr, snode, i) {
@@ -3231,12 +3264,12 @@ int expand_cond_av_node(policydb_t * p,
 	newkey.target_class = k->target_class;
 	newkey.specified = k->specified;
 
-	if (stype && ttype) {
+	if (stype->flavor != TYPE_ATTRIB && ttype->flavor != TYPE_ATTRIB) {
 		/* Both are individual types, no expansion required. */
 		return expand_cond_insert(newl, expa, k, d);
 	}
 
-	if (stype) {
+	if (stype->flavor != TYPE_ATTRIB) {
 		/* Source is an individual type, target is an attribute. */
 		newkey.source_type = k->source_type;
 		ebitmap_for_each_bit(tattr, tnode, j) {
@@ -3250,7 +3283,7 @@ int expand_cond_av_node(policydb_t * p,
 		return 0;
 	}
 
-	if (ttype) {
+	if (ttype->flavor != TYPE_ATTRIB) {
 		/* Target is an individual type, source is an attribute. */
 		newkey.target_type = k->target_type;
 		ebitmap_for_each_bit(sattr, snode, i) {

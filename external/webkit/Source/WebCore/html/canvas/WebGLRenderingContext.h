@@ -329,6 +329,10 @@ public:
 
     void addObject(WebGLObject*);
     void detachAndRemoveAllObjects();
+    WebGLTexture* findTexture(Platform3DObject);
+    WebGLRenderbuffer* findRenderbuffer(Platform3DObject);
+    WebGLBuffer* findBuffer(Platform3DObject);
+    WebGLShader* findShader(Platform3DObject);
 
     void markContextChanged();
     void cleanupAfterGraphicsCall(bool changed)
@@ -384,7 +388,7 @@ public:
 
     bool m_needsUpdate;
     bool m_markedCanvasDirty;
-    HashSet<WebGLObject*> m_canvasObjects;
+    HashSet<RefPtr<WebGLObject> > m_canvasObjects;
 
     // List of bound VBO's. Used to maintain info about sizes for ARRAY_BUFFER and stored values for ELEMENT_ARRAY_BUFFER
     RefPtr<WebGLBuffer> m_boundArrayBuffer;

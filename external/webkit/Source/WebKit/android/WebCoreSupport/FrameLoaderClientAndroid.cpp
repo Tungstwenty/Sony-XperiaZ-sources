@@ -806,9 +806,8 @@ bool FrameLoaderClientAndroid::canShowMIMEType(const String& mimeType) const {
     // shown "internally" (i.e. inside the browser) regardless of whether
     // or not the browser is doing the rendering, e.g. a full page plugin.
 
-    //always download OMA-DL mimeTypes and not try to load them even if they end with +xml
-    //this change is made because of the addition of DOMImplementation::isXMLMIMEType
-    //in the condition below
+    // Porting from ics, add some exception, we need Clients to handle these types:
+    // oma download
     if (mimeType == "application/vnd.oma.dd+xml")
         return false;
 

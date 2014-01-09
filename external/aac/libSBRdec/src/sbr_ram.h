@@ -4,7 +4,7 @@ Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC 
 
 © Copyright  1995 - 2012 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
-  Copyright (C) 2012 Sony Mobile Communications AB.
+  Copyright (C) 2012 - 2013 Sony Mobile Communications AB.
 
  1.    INTRODUCTION
 The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
@@ -80,6 +80,9 @@ Am Wolfsmantel 33
 
 www.iis.fraunhofer.de/amm
 amm-info@iis.fraunhofer.de
+
+Changes made in the code.
+2013-01-08 - Added flag for triggering the initialization of the sbr header.
 ----------------------------------------------------------------------------------------------------------- */
 
 /*!
@@ -138,6 +141,8 @@ struct SBR_DECODER_INSTANCE
   UCHAR numDelayFrames;        /* The current number of additional delay frames used for processing. */
 
   UINT flags;
+
+  UCHAR isResetNeeded;
 
 };
 

@@ -1,5 +1,6 @@
 /*
  * Copyright 2010, The Android Open Source Project
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -21,6 +22,9 @@
  * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+/*
+ * This file has been modified by Sony Mobile on 2013-04-05.
  */
 
 #define LOG_TAG "WebUrlLoaderClient"
@@ -285,28 +289,36 @@ void WebUrlLoaderClient::pauseLoad(bool pause)
 
 void WebUrlLoaderClient::setAuth(const std::string& username, const std::string& password)
 {
-    if (!isActive())
+    if (!isActive()) {
+        this->Release();
         return;
+    }
 
     base::Thread* thread = ioThread();
     if (!thread) {
+        this->Release();
         return;
     }
     string16 username16 = ASCIIToUTF16(username);
     string16 password16 = ASCIIToUTF16(password);
     thread->message_loop()->PostTask(FROM_HERE, NewRunnableMethod(m_request.get(), &WebRequest::setAuth, username16, password16));
+    this->Release();
 }
 
 void WebUrlLoaderClient::cancelAuth()
 {
-    if (!isActive())
+    if (!isActive()) {
+        this->Release();
         return;
+    }
 
     base::Thread* thread = ioThread();
     if (!thread) {
+        this->Release();
         return;
     }
     thread->message_loop()->PostTask(FROM_HERE, NewRunnableMethod(m_request.get(), &WebRequest::cancelAuth));
+    this->Release();
 }
 
 void WebUrlLoaderClient::proceedSslCertError()
@@ -469,6 +481,7 @@ void WebUrlLoaderClient::authRequired(scoped_refptr<net::AuthChallengeInfo> auth
     std::string host = base::SysWideToUTF8(authChallengeInfo->host_and_port);
     std::string realm = base::SysWideToUTF8(authChallengeInfo->realm);
 
+    this->AddRef();
     m_webFrame->didReceiveAuthenticationChallenge(this, host, realm, firstTime, suppressDialog);
 }
 

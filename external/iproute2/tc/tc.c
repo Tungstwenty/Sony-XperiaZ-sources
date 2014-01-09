@@ -44,7 +44,6 @@ static void *BODY = NULL;	/* cached handle dlopen(NULL) */
 static struct qdisc_util * qdisc_list;
 static struct filter_util * filter_list;
 
-
 #ifdef ANDROID
 extern struct qdisc_util cbq_qdisc_util;
 extern struct qdisc_util htb_qdisc_util;

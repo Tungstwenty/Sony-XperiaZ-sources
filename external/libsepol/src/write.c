@@ -976,6 +976,18 @@ static int class_write(hashtab_key_t key, hashtab_datum_t datum, void *ptr)
 			return POLICYDB_ERROR;
 	}
 
+	if ((p->policy_type == POLICY_KERN &&
+	     p->policyvers >= POLICYDB_VERSION_NEW_OBJECT_DEFAULTS) ||
+	    (p->policy_type == POLICY_BASE &&
+	     p->policyvers >= MOD_POLICYDB_VERSION_NEW_OBJECT_DEFAULTS)) {
+		buf[0] = cpu_to_le32(cladatum->default_user);
+		buf[1] = cpu_to_le32(cladatum->default_role);
+		buf[2] = cpu_to_le32(cladatum->default_range);
+		items = put_entry(buf, sizeof(uint32_t), 3, fp);
+		if (items != 3)
+			return POLICYDB_ERROR;
+	}
+
 	return POLICYDB_SUCCESS;
 }
 
@@ -1798,6 +1810,7 @@ static int scope_write(hashtab_key_t key, hashtab_datum_t datum, void *ptr)
 	buf[0] = cpu_to_le32(key_len);
 	if (put_entry(buf, sizeof(*buf), 1, fp) != 1 ||
 	    put_entry(key, 1, key_len, fp) != key_len) {
+		free(dyn_buf);
 		return POLICYDB_ERROR;
 	}
 	buf[0] = cpu_to_le32(scope->scope);

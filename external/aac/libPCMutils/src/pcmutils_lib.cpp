@@ -1244,7 +1244,7 @@ PCMDMX_ERROR pcmDmx_ApplyFrame (
         FIXP_SGL clev = ATTENUATION_FACTOR_1;
         for (UINT sample = 0; sample < frameSize; sample++) {
           *pInC = (INT_PCM)SATURATE_RIGHT_SHIFT(fMult((FIXP_PCM)*pInC, clev),
-              DFRACT_BITS-SAMPLE_BITS-1, SAMPLE_BITS);
+              DFRACT_BITS-SAMPLE_BITS, SAMPLE_BITS);
           pInC += inStride;
         }
       }
@@ -1254,7 +1254,7 @@ PCMDMX_ERROR pcmDmx_ApplyFrame (
         FIXP_SGL clev = ATTENUATION_FACTOR_1;
         for (UINT sample = 0; sample < frameSize; sample++) {
           *pInC = (INT_PCM)SATURATE_RIGHT_SHIFT(fMult((FIXP_PCM)*pInC, clev),
-              DFRACT_BITS-SAMPLE_BITS-1, SAMPLE_BITS);
+              DFRACT_BITS-SAMPLE_BITS, SAMPLE_BITS);
           pInC += inStride;
         }
       }

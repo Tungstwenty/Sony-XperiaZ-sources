@@ -462,6 +462,7 @@ FBO::FBO(EGLDisplay dpy)
     , m_texture(0)
     , m_fbo(0)
     , m_depthBuffer(0)
+    , m_stencilBuffer(0)
     , m_image(0)
     , m_sync(0)
     , m_grBuffer(0)
@@ -650,11 +651,8 @@ void GraphicsContext3DInternal::stopSyncThread()
     MutexLocker lock(m_threadMutex);
     if (m_syncThread) {
         m_threadState = THREAD_STATE_STOP;
-        {
-            MutexLocker lock(m_fboMutex);
-            // Signal thread to wake up
-            m_bufferCondition.broadcast();
-        }
+        // Signal thread to wake up
+        m_threadCondition.broadcast();
         // Wait for thread to stop
         while (m_threadState != THREAD_STATE_STOPPED) {
             m_threadCondition.wait(m_threadMutex);
@@ -676,41 +674,27 @@ void GraphicsContext3DInternal::runSyncThread()
 {
     LOGWEBGL("SyncThread: starting");
     FBO* fbo = 0;
-    {
-        MutexLocker lock(m_threadMutex);
-        m_threadState = THREAD_STATE_RUN;
-        // Signal to creator that we are up and running
-        m_threadCondition.broadcast();
-    }
 
-    for(;;) {
+    MutexLocker lock(m_threadMutex);
+    m_threadState = THREAD_STATE_RUN;
+    // Signal to creator that we are up and running
+    m_threadCondition.broadcast();
 
-        {
-            MutexLocker lock(m_threadMutex);
-            if (m_threadState != THREAD_STATE_RUN)
-                break;
-        }
-        for (;;) {
-            {
-                MutexLocker lock(m_threadMutex);
-                if (m_threadState != THREAD_STATE_RUN)
-                     break;
-            }
+    while (m_threadState == THREAD_STATE_RUN) {
+        while (m_threadState == THREAD_STATE_RUN) {
             {
                 MutexLocker lock(m_fboMutex);
                 if (!m_queuedBuffers.isEmpty()) {
                     fbo = m_queuedBuffers.takeFirst();
                     break;
                 }
-                m_bufferCondition.wait(m_fboMutex);
             }
+            m_threadCondition.wait(m_threadMutex);
         }
         LOGWEBGL("SyncThread: woke after waiting for FBO, fbo = %p", fbo);
-        {
-            MutexLocker lock(m_threadMutex);
-            if (m_threadState != THREAD_STATE_RUN)
-                break;
-        }
+        if (m_threadState != THREAD_STATE_RUN)
+            break;
+
         if (fbo->sync() != EGL_NO_SYNC_KHR) {
             EGLint result = eglClientWaitSyncKHR(m_dpy, fbo->sync(), 0, EGL_FOREVER_KHR);
             if(result == EGL_FALSE || result == EGL_TIMEOUT_EXPIRED_KHR)
@@ -741,11 +725,8 @@ void GraphicsContext3DInternal::runSyncThread()
     }
 
     // Signal to calling thread that we have stopped
-    {
-        MutexLocker lock(m_threadMutex);
-        m_threadState = THREAD_STATE_STOPPED;
-        m_threadCondition.broadcast();
-    }
+    m_threadState = THREAD_STATE_STOPPED;
+    m_threadCondition.broadcast();
     LOGWEBGL("SyncThread: terminating");
 }
 
@@ -876,7 +857,7 @@ void GraphicsContext3DInternal::swapBuffers()
     fbo->setSync(eglCreateSyncKHR(m_dpy, EGL_SYNC_FENCE_KHR, 0));
     glFlush();
     m_queuedBuffers.append(fbo);
-    m_bufferCondition.broadcast();
+    m_threadCondition.broadcast();
 
     // Dequeue a new buffer
     fbo = dequeueBuffer();

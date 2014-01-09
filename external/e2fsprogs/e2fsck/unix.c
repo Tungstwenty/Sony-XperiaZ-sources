@@ -2,6 +2,7 @@
  * unix.c - The unix-specific code for e2fsck
  *
  * Copyright (C) 1993, 1994, 1995, 1996, 1997 Theodore Ts'o.
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * %Begin-Header%
  * This file may be redistributed under the terms of the GNU Public
@@ -966,8 +967,11 @@ static errcode_t try_open_fs(e2fsck_t ctx, int flags, io_manager io_ptr,
 
 static const char *my_ver_string = E2FSPROGS_VERSION;
 static const char *my_ver_date = E2FSPROGS_DATE;
-
+#ifdef MULTICALL
+int e2fsck_main (int argc, char *argv[])
+#else
 int main (int argc, char *argv[])
+#endif
 {
 	errcode_t	retval = 0, retval2 = 0, orig_retval = 0;
 	int		exit_value = FSCK_OK;

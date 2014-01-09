@@ -6,6 +6,7 @@
  *                                 Universite Pierre et Marie Curie (Paris VI)
  *
  * Copyright 1995, 1996, 1997, 1998, 1999, 2000 by Theodore Ts'o.
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * %Begin-Header%
  * This file may be redistributed under the terms of the GNU Public
@@ -59,7 +60,11 @@ extern int optind;
 #include "../version.h"
 #include "nls-enable.h"
 
+#ifdef MULTICALL
+extern const char * program_name;
+#else
 const char *program_name = "tune2fs";
+#endif
 char *device_name;
 char *new_label, *new_last_mounted, *new_UUID;
 char *io_options;
@@ -1581,7 +1586,11 @@ static int tune2fs_setup_tdb(const char *name, io_manager *io_ptr)
 	return retval;
 }
 
+#ifdef MULTICALL
+int tune2fs_main(int argc, char **argv)
+#else
 int main(int argc, char **argv)
+#endif
 {
 	errcode_t retval;
 	ext2_filsys fs;

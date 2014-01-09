@@ -82,7 +82,15 @@ www.iis.fraunhofer.de/amm
 amm-info@iis.fraunhofer.de
 
 Changes made in the code.
+
+2012-12-11 - Modified code in order to correctly handle PCE with <SCE><SCE><TERM> data
+             which has only 2 front channels.
+
+2012-12-27 - Added CAacDecoder_ClearHistory function to clear all concealment and overlap-add
+             buffers to clear all history.
+
 2013-03-21 - Added CStreamInfo->numAuBitsRemaining to enable decoding down to last bit of the buffers.
+
 ----------------------------------------------------------------------------------------------------------- */
 
 /*****************************  MPEG-4 AAC Decoder  **************************
@@ -206,6 +214,26 @@ void CAacDecoder_SyncQmfMode(HANDLE_AACDECODER self)
 
 void CAacDecoder_SignalInterruption(HANDLE_AACDECODER self)
 {
+}
+
+void CAacDecoder_ClearHistory(HANDLE_AACDECODER self)
+{
+  int ch;
+  /* Clear history */
+  for (ch = 0; ch < self->aacChannels; ch++) {
+    /* Reset concealment */
+    CConcealment_InitChannelData(&self->pAacDecoderStaticChannelInfo[ch]->concealmentInfo,
+                                 &self->concealCommonData,
+                                 self->streamInfo.aacSamplesPerFrame );
+    /* Clear concealment buffers to get rid of the complete history */
+    FDKmemclear(self->pAacDecoderStaticChannelInfo[ch]->concealmentInfo.spectralCoefficient,
+                1024 * sizeof(FIXP_CNCL));
+    FDKmemclear(self->pAacDecoderStaticChannelInfo[ch]->concealmentInfo.specScale,
+                8 * sizeof(SHORT));
+    /* Clear overlap-add buffers to avoid clicks. */
+    FDKmemclear(self->pAacDecoderStaticChannelInfo[ch]->IMdct.overlap.freq,
+                OverlapBufferSize*sizeof(FIXP_DBL));
+  }
 }
 
 /*!
@@ -424,16 +452,26 @@ static AAC_DECODER_ERROR CProgramConfigElement_Read (
 
   transportDec_CrcEndReg(pTp, crcReg);
 
-  if (  CProgramConfig_IsValid(tmpPce)
-    && ( (channelConfig == 6 && (tmpPce->NumChannels == 6))
-      || (channelConfig == 5 && (tmpPce->NumChannels == 5))
-      || (channelConfig == 0 && (tmpPce->NumChannels == pce->NumChannels)) )
-    && (tmpPce->NumFrontChannelElements == 2)
-    && (tmpPce->NumSideChannelElements  == 0)
-    && (tmpPce->NumBackChannelElements  == 1)
-    && (tmpPce->Profile == 1) )
-  { /* Copy the complete PCE including metadata. */
-    FDKmemcpy(pce, tmpPce, sizeof(CProgramConfig));
+  if (CProgramConfig_IsValid(tmpPce))
+  {
+    if ( ( (channelConfig == 6 && (tmpPce->NumChannels == 6))
+        || (channelConfig == 5 && (tmpPce->NumChannels == 5))
+        || (channelConfig == 0 && (tmpPce->NumChannels == pce->NumChannels)) )
+      && (tmpPce->NumFrontChannelElements == 2)
+      && (tmpPce->NumSideChannelElements  == 0)
+      && (tmpPce->NumBackChannelElements  == 1)
+      && (tmpPce->Profile == 1) )
+    { /* Copy the complete PCE including metadata. */
+      FDKmemcpy(pce, tmpPce, sizeof(CProgramConfig));
+    }
+    else if ( (channelConfig == 0 && (tmpPce->NumChannels == pce->NumChannels))
+      && (tmpPce->NumFrontChannelElements == 2)
+      && (tmpPce->NumSideChannelElements  == 0)
+      && (tmpPce->NumBackChannelElements  == 0)
+      && (tmpPce->Profile == 1) )
+    { /* Copy the complete PCE including metadata. */
+      FDKmemcpy(pce, tmpPce, sizeof(CProgramConfig));
+    }
   }
 
   C_ALLOC_SCRATCH_END(tmpPce, CProgramConfig, 1);

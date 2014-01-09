@@ -3,6 +3,7 @@
  *
  * Copyright (C) 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
  * 	2003, 2004, 2005 by Theodore Ts'o.
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * %Begin-Header%
  * This file may be redistributed under the terms of the GNU Public
@@ -76,7 +77,11 @@ extern int optind;
 extern int isatty(int);
 extern FILE *fpopen(const char *cmd, const char *mode);
 
+#ifdef MULTICALL
+extern const char * program_name;
+#else
 const char * program_name = "mke2fs";
+#endif
 const char * device_name /* = NULL */;
 
 /* Command line options */
@@ -2075,7 +2080,11 @@ static int mke2fs_discard_zeroes_data(ext2_filsys fs)
 #define mke2fs_discard_zeroes_data(fs)	0
 #endif
 
+#ifdef MULTICALL
+int mke2fs_main (int argc, char *argv[])
+#else
 int main (int argc, char *argv[])
+#endif
 {
 	errcode_t	retval = 0;
 	ext2_filsys	fs;

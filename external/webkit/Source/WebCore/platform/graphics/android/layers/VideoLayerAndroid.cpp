@@ -35,7 +35,7 @@
 #include "ShaderProgram.h"
 #include "TilesManager.h"
 #include <GLES2/gl2.h>
-#include <gui/SurfaceTexture.h>
+#include <gui/GLConsumer.h>
 #include "SkBitmapRef.h"
 #include "SkCanvas.h"
 
@@ -77,7 +77,7 @@ VideoLayerAndroid::~VideoLayerAndroid()
 }
 
 // We can use this function to set the Layer to point to surface texture.
-void VideoLayerAndroid::setSurfaceTexture(sp<SurfaceTexture> texture,
+void VideoLayerAndroid::setSurfaceTexture(sp<GLConsumer> texture,
                                           int textureName)
 {
     m_surfaceTexture = texture;

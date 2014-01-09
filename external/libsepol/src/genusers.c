@@ -91,13 +91,20 @@ static int load_users(struct policydb *policydb, const char *path)
 			ebitmap_init(&usrdatum->roles.roles);
 		} else {
 			char *id = strdup(q);
+			if (!id) {
+				ERR(NULL, "out of memory");
+				free(buffer);
+				fclose(fp);
+				return -1;
+			}
 
 			/* Adding a new user definition. */
 			usrdatum =
 			    (user_datum_t *) malloc(sizeof(user_datum_t));
-			if (!id || !usrdatum) {
+			if (!usrdatum) {
 				ERR(NULL, "out of memory");
 				free(buffer);
+				free(id);
 				fclose(fp);
 				return -1;
 			}
@@ -108,6 +115,8 @@ static int load_users(struct policydb *policydb, const char *path)
 					   id, (hashtab_datum_t) usrdatum)) {
 				ERR(NULL, "out of memory");
 				free(buffer);
+				free(id);
+				free(usrdatum);
 				fclose(fp);
 				return -1;
 			}
