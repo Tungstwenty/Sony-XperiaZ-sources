@@ -66,7 +66,7 @@ bool RenderSkinNinePatch::decodeAsset(AssetManager* am, const char* filename, Ni
     SkAutoTDelete<SkImageDecoder> add(decoder);
 
     decoder->setPeeker(&peeker);
-    if (!decoder->decode(&stream, &ninepatch->m_bitmap, prefConfig, mode, true)) {
+    if (!decoder->decode(&stream, &ninepatch->m_bitmap, prefConfig, mode)) {
         asset->close();
         ALOGE("RenderSkinNinePatch::Failed to decode nine patch asset");
         return false;

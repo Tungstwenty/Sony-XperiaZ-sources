@@ -580,12 +580,15 @@ bool V8DOMWindow::indexedSecurityCheck(v8::Local<v8::Object> host, uint32_t inde
     Frame* target = targetWindow->frame();
     if (!target)
         return false;
-
+    Frame* childFrame =  target->tree()->child(index);
     // Notice that we can't call HasRealNamedProperty for ACCESS_HAS
     // because that would generate infinite recursion.
-    if (type == v8::ACCESS_HAS && target->tree()->child(index))
+    if (type == v8::ACCESS_HAS && childFrame)
         return true;
-    if (type == v8::ACCESS_GET && target->tree()->child(index) && !host->HasRealIndexedProperty(index))
+    if (type == v8::ACCESS_GET
+        && childFrame
+        && !host->HasRealIndexedProperty(index)
+        && !window->HasRealIndexedProperty(index))
         return true;
 
     return V8BindingSecurity::canAccessFrame(V8BindingState::Only(), target, false);

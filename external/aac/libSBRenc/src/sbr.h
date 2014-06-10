@@ -2,7 +2,7 @@
 /* -----------------------------------------------------------------------------------------------------------
 Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android
 
-© Copyright  1995 - 2012 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
+© Copyright  1995 - 2013 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
   Copyright (C) 2012 Sony Mobile Communications AB.
 
@@ -106,7 +106,8 @@ amm-info@iis.fraunhofer.de
 /* SBR bitstream delay */
   #define DELAY_FRAMES 2
 
-typedef struct {
+
+typedef struct SBR_CHANNEL {
     struct ENV_CHANNEL        hEnvChannel;
     //INT_PCM                  *pDSOutBuffer;            /**< Pointer to downsampled audio output of SBR encoder */
     DOWNSAMPLER               downSampler;
@@ -114,7 +115,7 @@ typedef struct {
 } SBR_CHANNEL;
 typedef SBR_CHANNEL* HANDLE_SBR_CHANNEL;
 
-typedef struct {
+typedef struct SBR_ELEMENT {
     HANDLE_SBR_CHANNEL        sbrChannel[2];
     QMF_FILTER_BANK          *hQmfAnalysis[2];
     SBR_CONFIG_DATA           sbrConfigData;
@@ -127,14 +128,13 @@ typedef struct {
     UCHAR                     payloadDelayLine[1+DELAY_FRAMES][MAX_PAYLOAD_SIZE];
     UINT                      payloadDelayLineSize[1+DELAY_FRAMES];                 /* Sizes in bits */
 
-} SBR_ELEMENT;
-typedef SBR_ELEMENT* HANDLE_SBR_ELEMENT;
+} SBR_ELEMENT, *HANDLE_SBR_ELEMENT;
 
-struct SBR_ENCODER
+typedef struct SBR_ENCODER
 {
-  HANDLE_SBR_ELEMENT   sbrElement[(6)];
-  HANDLE_SBR_CHANNEL   pSbrChannel[(6)];
-  QMF_FILTER_BANK      QmfAnalysis[(6)];
+  HANDLE_SBR_ELEMENT   sbrElement[(8)];
+  HANDLE_SBR_CHANNEL   pSbrChannel[(8)];
+  QMF_FILTER_BANK      QmfAnalysis[(8)];
   DOWNSAMPLER          lfeDownSampler;
   int                  lfeChIdx;                 /* -1 default for no lfe, else assign channel index */
   int                  noElements;               /* Number of elements */
@@ -143,6 +143,7 @@ struct SBR_ENCODER
   int                  bufferOffset;             /* Offset for SBR parameter extraction in time domain input buffer. */
   int                  downsampledOffset;        /* Offset of downsampled/mixed output for core encoder. */
   int                  downmixSize;              /* Size in samples of downsampled/mixed output for core encoder. */
+  INT                  downSampleFactor;         /* Sampling rate relation between the SBR and the core encoder. */
   int                  fTimeDomainDownsampling;  /* Flag signalling time domain downsampling instead of QMF downsampling. */
   int                  nBitstrDelay;             /* Amount of SBR frames to be delayed in bitstream domain. */
   INT                  estimateBitrate;          /* estimate bitrate of SBR encoder */
@@ -159,7 +160,8 @@ struct SBR_ENCODER
   INT                  maxChannels;
   INT                  supportPS;
 
-} ;
+
+} SBR_ENCODER;
 
 
 #endif /* __SBR_H */

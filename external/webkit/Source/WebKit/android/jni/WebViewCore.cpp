@@ -1,8 +1,8 @@
 /*
  * Copyright 2006, The Android Open Source Project
- * Copyright (C) 2011-2013 The Linux Foundation All rights reserved.
+ * Copyright (C) 2011, 2012 The Linux Foundation All rights reserved.
  * Copyright (C) 2012 Sony Ericsson Mobile Communications AB.
- * Copyright (C) 2012-2013 Sony Mobile Communications AB.
+ * Copyright (C) 2012-2013 Sony Mobile Communications AB
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -144,9 +144,10 @@
 #include "unicode/uloc.h"
 #include "visible_units.h"
 
+#include <cutils/log.h>
 #include <JNIHelp.h>
 #include <JNIUtility.h>
-#include <androidfw/KeycodeLabels.h>
+#include <input/KeycodeLabels.h>
 #include <cutils/properties.h>
 #include <v8.h>
 #include <wtf/CurrentTime.h>
@@ -293,29 +294,15 @@ jobject WebViewCore::getApplicationContext() {
 
 struct WebViewCoreStaticMethods {
     jmethodID    m_isSupportedMediaMimeType;
-    jmethodID    m_isPlayListMimeType;
 } gWebViewCoreStaticMethods;
 
 // Check whether a media mimeType is supported in Android media framework.
 bool WebViewCore::isSupportedMediaMimeType(const WTF::String& mimeType) {
     JNIEnv* env = JSC::Bindings::getJNIEnv();
     jstring jMimeType = wtfStringToJstring(env, mimeType);
-    jclass webViewCore = env->FindClass("android/webkit/WebViewCore");
+    jclass webViewCore = env->FindClass("com/sonymobile/webkit/WebViewCore");
     bool val = env->CallStaticBooleanMethod(webViewCore,
           gWebViewCoreStaticMethods.m_isSupportedMediaMimeType, jMimeType);
-    checkException(env);
-    env->DeleteLocalRef(webViewCore);
-    env->DeleteLocalRef(jMimeType);
-
-    return val;
-}
-
-bool WebViewCore::isPlayListMimeType(const WTF::String& mimeType) {
-    JNIEnv* env = JSC::Bindings::getJNIEnv();
-    jstring jMimeType = wtfStringToJstring(env, mimeType);
-    jclass webViewCore = env->FindClass("android/webkit/WebViewCore");
-    bool val = env->CallStaticBooleanMethod(webViewCore,
-          gWebViewCoreStaticMethods.m_isPlayListMimeType, jMimeType);
     checkException(env);
     env->DeleteLocalRef(webViewCore);
     env->DeleteLocalRef(jMimeType);
@@ -485,7 +472,7 @@ WebViewCore::WebViewCore(JNIEnv* env, jobject javaWebViewCore, WebCore::Frame* m
     m_javaGlue->m_jsPrompt = GetJMethod(env, clazz, "jsPrompt", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
     m_javaGlue->m_jsUnload = GetJMethod(env, clazz, "jsUnload", "(Ljava/lang/String;Ljava/lang/String;)Z");
     m_javaGlue->m_jsInterrupt = GetJMethod(env, clazz, "jsInterrupt", "()Z");
-    m_javaGlue->m_getWebView = GetJMethod(env, clazz, "getWebView", "()Landroid/webkit/WebView;");
+    m_javaGlue->m_getWebView = GetJMethod(env, clazz, "getWebView", "()Lcom/sonymobile/webkit/WebView;");
     m_javaGlue->m_didFirstLayout = GetJMethod(env, clazz, "didFirstLayout", "(Z)V");
     m_javaGlue->m_updateViewport = GetJMethod(env, clazz, "updateViewport", "()V");
     m_javaGlue->m_sendNotifyProgressFinished = GetJMethod(env, clazz, "sendNotifyProgressFinished", "()V");
@@ -502,17 +489,17 @@ WebViewCore::WebViewCore(JNIEnv* env, jobject javaWebViewCore, WebCore::Frame* m
     m_javaGlue->m_populateVisitedLinks = GetJMethod(env, clazz, "populateVisitedLinks", "()V");
     m_javaGlue->m_geolocationPermissionsShowPrompt = GetJMethod(env, clazz, "geolocationPermissionsShowPrompt", "(Ljava/lang/String;)V");
     m_javaGlue->m_geolocationPermissionsHidePrompt = GetJMethod(env, clazz, "geolocationPermissionsHidePrompt", "()V");
-    m_javaGlue->m_getDeviceMotionService = GetJMethod(env, clazz, "getDeviceMotionService", "()Landroid/webkit/DeviceMotionService;");
-    m_javaGlue->m_getDeviceOrientationService = GetJMethod(env, clazz, "getDeviceOrientationService", "()Landroid/webkit/DeviceOrientationService;");
+    m_javaGlue->m_getDeviceMotionService = GetJMethod(env, clazz, "getDeviceMotionService", "()Lcom/sonymobile/webkit/DeviceMotionService;");
+    m_javaGlue->m_getDeviceOrientationService = GetJMethod(env, clazz, "getDeviceOrientationService", "()Lcom/sonymobile/webkit/DeviceOrientationService;");
     m_javaGlue->m_addMessageToConsole = GetJMethod(env, clazz, "addMessageToConsole", "(Ljava/lang/String;ILjava/lang/String;I)V");
-    m_javaGlue->m_focusNodeChanged = GetJMethod(env, clazz, "focusNodeChanged", "(ILandroid/webkit/WebViewCore$WebKitHitTest;)V");
+    m_javaGlue->m_focusNodeChanged = GetJMethod(env, clazz, "focusNodeChanged", "(ILcom/sonymobile/webkit/WebViewCore$WebKitHitTest;)V");
     m_javaGlue->m_getPluginClass = GetJMethod(env, clazz, "getPluginClass", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/Class;");
-    m_javaGlue->m_showFullScreenPlugin = GetJMethod(env, clazz, "showFullScreenPlugin", "(Landroid/webkit/ViewManager$ChildView;II)V");
+    m_javaGlue->m_showFullScreenPlugin = GetJMethod(env, clazz, "showFullScreenPlugin", "(Lcom/sonymobile/webkit/ViewManager$ChildView;II)V");
     m_javaGlue->m_hideFullScreenPlugin = GetJMethod(env, clazz, "hideFullScreenPlugin", "()V");
-    m_javaGlue->m_createSurface = GetJMethod(env, clazz, "createSurface", "(Landroid/view/View;)Landroid/webkit/ViewManager$ChildView;");
-    m_javaGlue->m_addSurface = GetJMethod(env, clazz, "addSurface", "(Landroid/view/View;IIII)Landroid/webkit/ViewManager$ChildView;");
-    m_javaGlue->m_updateSurface = GetJMethod(env, clazz, "updateSurface", "(Landroid/webkit/ViewManager$ChildView;IIII)V");
-    m_javaGlue->m_destroySurface = GetJMethod(env, clazz, "destroySurface", "(Landroid/webkit/ViewManager$ChildView;)V");
+    m_javaGlue->m_createSurface = GetJMethod(env, clazz, "createSurface", "(Landroid/view/View;)Lcom/sonymobile/webkit/ViewManager$ChildView;");
+    m_javaGlue->m_addSurface = GetJMethod(env, clazz, "addSurface", "(Landroid/view/View;IIII)Lcom/sonymobile/webkit/ViewManager$ChildView;");
+    m_javaGlue->m_updateSurface = GetJMethod(env, clazz, "updateSurface", "(Lcom/sonymobile/webkit/ViewManager$ChildView;IIII)V");
+    m_javaGlue->m_destroySurface = GetJMethod(env, clazz, "destroySurface", "(Lcom/sonymobile/webkit/ViewManager$ChildView;)V");
     m_javaGlue->m_getContext = GetJMethod(env, clazz, "getContext", "()Landroid/content/Context;");
     m_javaGlue->m_keepScreenOn = GetJMethod(env, clazz, "keepScreenOn", "(Z)V");
     m_javaGlue->m_showRect = GetJMethod(env, clazz, "showRect", "(IIIIIIFFFF)V");
@@ -523,14 +510,14 @@ WebViewCore::WebViewCore(JNIEnv* env, jobject javaWebViewCore, WebCore::Frame* m
 #endif
     m_javaGlue->m_setWebTextViewAutoFillable = GetJMethod(env, clazz, "setWebTextViewAutoFillable", "(ILjava/lang/String;)V");
     m_javaGlue->m_selectAt = GetJMethod(env, clazz, "selectAt", "(II)V");
-    m_javaGlue->m_initEditField = GetJMethod(env, clazz, "initEditField", "(IIILandroid/webkit/WebViewCore$TextFieldInitData;)V");
+    m_javaGlue->m_initEditField = GetJMethod(env, clazz, "initEditField", "(IIILcom/sonymobile/webkit/WebViewCore$TextFieldInitData;)V");
     m_javaGlue->m_chromeCanTakeFocus = GetJMethod(env, clazz, "chromeCanTakeFocus", "(I)Z");
     m_javaGlue->m_chromeTakeFocus = GetJMethod(env, clazz, "chromeTakeFocus", "(I)V");
     env->DeleteLocalRef(clazz);
 
     env->SetIntField(javaWebViewCore, gWebViewCoreFields.m_nativeClass, (jint)this);
 
-    jclass tfidClazz = env->FindClass("android/webkit/WebViewCore$TextFieldInitData");
+    jclass tfidClazz = env->FindClass("com/sonymobile/webkit/WebViewCore$TextFieldInitData");
     m_textFieldInitDataGlue->m_fieldPointer = env->GetFieldID(tfidClazz, "mFieldPointer", "I");
     m_textFieldInitDataGlue->m_text = env->GetFieldID(tfidClazz, "mText", "Ljava/lang/String;");
     m_textFieldInitDataGlue->m_type = env->GetFieldID(tfidClazz, "mType", "I");
@@ -3500,7 +3487,7 @@ jobject WebViewCore::createTextFieldInitData(Node* node)
     JNIEnv* env = JSC::Bindings::getJNIEnv();
     TextFieldInitDataGlue* classDef = m_textFieldInitDataGlue;
     ScopedLocalRef<jclass> clazz(env,
-            env->FindClass("android/webkit/WebViewCore$TextFieldInitData"));
+            env->FindClass("com/sonymobile/webkit/WebViewCore$TextFieldInitData"));
     jobject initData = env->NewObject(clazz.get(), classDef->m_constructor);
     env->SetIntField(initData, classDef->m_fieldPointer,
             reinterpret_cast<int>(node));
@@ -5248,7 +5235,7 @@ static JNINativeMethod gJavaWebViewCoreMethods[] = {
         (void*) FullScreenPluginHidden },
     { "nativePluginSurfaceReady", "(I)V",
         (void*) PluginSurfaceReady },
-    { "nativeHitTest", "(IIIIZ)Landroid/webkit/WebViewCore$WebKitHitTest;",
+    { "nativeHitTest", "(IIIIZ)Lcom/sonymobile/webkit/WebViewCore$WebKitHitTest;",
         (void*) HitTest },
     { "nativeAutoFillForm", "(II)V",
         (void*) AutoFillForm },
@@ -5281,45 +5268,45 @@ static JNINativeMethod gJavaWebViewCoreMethods[] = {
 
 int registerWebViewCore(JNIEnv* env)
 {
-    jclass widget = env->FindClass("android/webkit/WebViewCore");
+    jclass widget = env->FindClass("com/sonymobile/webkit/WebViewCore");
     ALOG_ASSERT(widget,
-            "Unable to find class android/webkit/WebViewCore");
+            "Unable to find class com/sonymobile/webkit/WebViewCore");
     gWebViewCoreFields.m_nativeClass = env->GetFieldID(widget, "mNativeClass",
             "I");
     ALOG_ASSERT(gWebViewCoreFields.m_nativeClass,
-            "Unable to find android/webkit/WebViewCore.mNativeClass");
+            "Unable to find com/sonymobile/webkit/WebViewCore.mNativeClass");
     gWebViewCoreFields.m_viewportWidth = env->GetFieldID(widget,
             "mViewportWidth", "I");
     ALOG_ASSERT(gWebViewCoreFields.m_viewportWidth,
-            "Unable to find android/webkit/WebViewCore.mViewportWidth");
+            "Unable to find com/sonymobile/webkit/WebViewCore.mViewportWidth");
     gWebViewCoreFields.m_viewportHeight = env->GetFieldID(widget,
             "mViewportHeight", "I");
     ALOG_ASSERT(gWebViewCoreFields.m_viewportHeight,
-            "Unable to find android/webkit/WebViewCore.mViewportHeight");
+            "Unable to find com/sonymobile/webkit/WebViewCore.mViewportHeight");
     gWebViewCoreFields.m_viewportInitialScale = env->GetFieldID(widget,
             "mViewportInitialScale", "I");
     ALOG_ASSERT(gWebViewCoreFields.m_viewportInitialScale,
-            "Unable to find android/webkit/WebViewCore.mViewportInitialScale");
+            "Unable to find com/sonymobile/webkit/WebViewCore.mViewportInitialScale");
     gWebViewCoreFields.m_viewportMinimumScale = env->GetFieldID(widget,
             "mViewportMinimumScale", "I");
     ALOG_ASSERT(gWebViewCoreFields.m_viewportMinimumScale,
-            "Unable to find android/webkit/WebViewCore.mViewportMinimumScale");
+            "Unable to find com/sonymobile/webkit/WebViewCore.mViewportMinimumScale");
     gWebViewCoreFields.m_viewportMaximumScale = env->GetFieldID(widget,
             "mViewportMaximumScale", "I");
     ALOG_ASSERT(gWebViewCoreFields.m_viewportMaximumScale,
-            "Unable to find android/webkit/WebViewCore.mViewportMaximumScale");
+            "Unable to find com/sonymobile/webkit/WebViewCore.mViewportMaximumScale");
     gWebViewCoreFields.m_viewportUserScalable = env->GetFieldID(widget,
             "mViewportUserScalable", "Z");
     ALOG_ASSERT(gWebViewCoreFields.m_viewportUserScalable,
-            "Unable to find android/webkit/WebViewCore.mViewportUserScalable");
+            "Unable to find com/sonymobile/webkit/WebViewCore.mViewportUserScalable");
     gWebViewCoreFields.m_viewportDensityDpi = env->GetFieldID(widget,
             "mViewportDensityDpi", "I");
     ALOG_ASSERT(gWebViewCoreFields.m_viewportDensityDpi,
-            "Unable to find android/webkit/WebViewCore.mViewportDensityDpi");
+            "Unable to find com/sonymobile/webkit/WebViewCore.mViewportDensityDpi");
     gWebViewCoreFields.m_drawIsPaused = env->GetFieldID(widget,
             "mDrawIsPaused", "Z");
     ALOG_ASSERT(gWebViewCoreFields.m_drawIsPaused,
-            "Unable to find android/webkit/WebViewCore.mDrawIsPaused");
+            "Unable to find com/sonymobile/webkit/WebViewCore.mDrawIsPaused");
     gWebViewCoreFields.m_lowMemoryUsageMb = env->GetFieldID(widget, "mLowMemoryUsageThresholdMb", "I");
     gWebViewCoreFields.m_highMemoryUsageMb = env->GetFieldID(widget, "mHighMemoryUsageThresholdMb", "I");
     gWebViewCoreFields.m_highUsageDeltaMb = env->GetFieldID(widget, "mHighUsageDeltaMb", "I");
@@ -5329,14 +5316,9 @@ int registerWebViewCore(JNIEnv* env)
     LOG_FATAL_IF(!gWebViewCoreStaticMethods.m_isSupportedMediaMimeType,
         "Could not find static method isSupportedMediaMimeType from WebViewCore");
 
-    gWebViewCoreStaticMethods.m_isPlayListMimeType =
-        env->GetStaticMethodID(widget, "isPlayListMimeType", "(Ljava/lang/String;)Z");
-    LOG_FATAL_IF(!gWebViewCoreStaticMethods.m_isPlayListMimeType,
-        "Could not find static method isPlayListMimeType from WebViewCore");
-
     env->DeleteLocalRef(widget);
 
-    return jniRegisterNativeMethods(env, "android/webkit/WebViewCore",
+    return jniRegisterNativeMethods(env, "com/sonymobile/webkit/WebViewCore",
             gJavaWebViewCoreMethods, NELEM(gJavaWebViewCoreMethods));
 }
 

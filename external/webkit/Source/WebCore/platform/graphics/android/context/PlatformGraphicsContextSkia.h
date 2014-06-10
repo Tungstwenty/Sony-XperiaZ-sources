@@ -33,8 +33,6 @@ namespace WebCore {
 class PlatformGraphicsContextSkia : public PlatformGraphicsContext {
 public:
     PlatformGraphicsContextSkia(SkCanvas* canvas, bool takeCanvasOwnership = false);
-    // Create a recording canvas
-    PlatformGraphicsContextSkia(int width, int height, PlatformGraphicsContext* existing);
     virtual ~PlatformGraphicsContextSkia();
     virtual bool isPaintingDisabled();
     SkCanvas* canvas() { return mCanvas; }
@@ -46,7 +44,7 @@ public:
     // FIXME: This is used by ImageBufferAndroid, which should really be
     //        managing the canvas lifecycle itself
 
-    virtual bool deleteUs() const { return (m_deleteCanvas || (m_picture != NULL)); }
+    virtual bool deleteUs() const { return m_deleteCanvas; }
 
     // State management
     virtual void beginTransparencyLayer(float opacity);
@@ -107,32 +105,6 @@ public:
                                  bool translucent = false, bool drawBackground = true,
                                  const IntRect& thumb = IntRect());
 
-    virtual void convertToNonRecording();
-    virtual void clearRecording();
-    virtual SkPicture* getRecordingPicture() const { return m_picture; }
-
-    // When we detect animation we switch to the recording canvas for better
-    // performance. If JS tries to access the pixels of the canvas, the
-    // recording canvas becomes tainted and must be converted back to a bitmap
-    // backed canvas.
-    // CanvasState represents a directed acyclic graph:
-    // DEFAULT ----> ANIMATION_DETECTED ----> RECORDING ----> DIRTY
-    enum CanvasState {
-        DEFAULT, // SkBitmap backed
-        ANIMATION_DETECTED, // JavaScript clearRect of canvas is occuring at a high enough rate SkBitmap backed
-        RECORDING, // SkPicture backed
-        DIRTY // A pixel readback occured; convert to SkBitmap backed.
-    };
-
-    virtual bool isDefault() const { return m_canvasState == DEFAULT; }
-    virtual bool isAnimating() const { return m_canvasState == ANIMATION_DETECTED; }
-    virtual bool isRecording() const { return m_canvasState == RECORDING; }
-    virtual bool isDirty() const { return m_canvasState == DIRTY; }
-
-    virtual void setIsAnimating();
-    virtual State* getState()     {   return m_state; }
-    virtual WTF::Vector<State>& getStateStack() {   return m_stateStack;    }
-
 private:
 
     // shadowsIgnoreTransforms is only true for canvas's ImageBuffer, which will
@@ -143,9 +115,6 @@ private:
 
     SkCanvas* mCanvas;
     bool m_deleteCanvas;
-
-    enum CanvasState m_canvasState;
-    SkPicture* m_picture;
 };
 
 }

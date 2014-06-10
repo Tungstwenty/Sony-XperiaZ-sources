@@ -57,31 +57,6 @@ static const char* getFallbackFontName(const FontDescription& fontDescription)
     }
 }
 
-static bool isFallbackFamily(String family)
-{
-    return family.startsWith("-webkit-")
-        || equalIgnoringCase(family, "serif")
-        || equalIgnoringCase(family, "sans-serif")
-        || equalIgnoringCase(family, "sans")
-        || equalIgnoringCase(family, "monospace")
-        || equalIgnoringCase(family, "times")   // skia aliases for serif
-        || equalIgnoringCase(family, "times new roman")
-        || equalIgnoringCase(family, "palatino")
-        || equalIgnoringCase(family, "georgia")
-        || equalIgnoringCase(family, "baskerville")
-        || equalIgnoringCase(family, "goudy")
-        || equalIgnoringCase(family, "cursive")
-        || equalIgnoringCase(family, "fantasy")
-        || equalIgnoringCase(family, "ITC Stone Serif")
-        || equalIgnoringCase(family, "arial")   // skia aliases for sans-serif
-        || equalIgnoringCase(family, "helvetica")
-        || equalIgnoringCase(family, "tahoma")
-        || equalIgnoringCase(family, "verdana")
-        || equalIgnoringCase(family, "courier") // skia aliases for monospace
-        || equalIgnoringCase(family, "courier new")
-        || equalIgnoringCase(family, "monaco");
-}
-
 static char* AtomicStringToUTF8String(const AtomicString& utf16)
 {
     SkASSERT(sizeof(uint16_t) == sizeof(utf16.characters()[0]));
@@ -154,26 +129,9 @@ FontPlatformData* FontCache::createFontPlatformData(const FontDescription& fontD
     if (fontDescription.italic())
         style |= SkTypeface::kItalic;
 
-    // CreateFromName always returns a typeface, falling back to a default font
-    // if the one requested is not found. Calling Equal() with a null pointer
-    // serves to compare the returned font against the default, with the caveat
-    // that the default is always of normal style. If we detect the default, we
-    // ignore it and allow WebCore to give us the next font on the CSS fallback
-    // list. The only exception is if the family name is a commonly used generic
-    // family, as when called by getSimilarFontPlatformData() and
-    // getLastResortFallbackFont(). In this case, the default font is an
-    // acceptable result.
+    SkTypeface* tf = SkTypeface::CreateFromName(name, (SkTypeface::Style)style);
 
-    SkTypeface* tf = SkTypeface::CreateFromName(name, SkTypeface::kNormal);
-
-    if (!SkTypeface::Equal(tf, 0) || isFallbackFamily(family.string())) {
-        // We had to use normal styling to see if this was a default font. If
-        // we need bold or italic, replace with the corrected typeface.
-        if (style != SkTypeface::kNormal) {
-            tf->unref();
-            tf = SkTypeface::CreateFromName(name, (SkTypeface::Style)style);
-        }
-
+    if (tf) {
         result = new FontPlatformData(tf, fontDescription.computedSize(),
                             (style & SkTypeface::kBold),
                             (style & SkTypeface::kItalic) && !tf->isItalic(),
@@ -181,7 +139,7 @@ FontPlatformData* FontCache::createFontPlatformData(const FontDescription& fontD
                             fontDescription.textOrientation());
     }
 
-    tf->unref();
+    SkSafeUnref(tf);
     sk_free(storage);
     return result;
 }

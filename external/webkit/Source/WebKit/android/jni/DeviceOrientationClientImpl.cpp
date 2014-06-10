@@ -27,6 +27,7 @@
 #include "DeviceOrientationClientImpl.h"
 
 #include "WebViewCore.h"
+#include <cutils/log.h>
 #include <DeviceOrientationController.h>
 #include <Frame.h>
 #include <JNIHelp.h>

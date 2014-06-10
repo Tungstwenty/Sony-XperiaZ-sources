@@ -29,6 +29,7 @@
 #include "GeolocationClientImpl.h"
 #include "WebViewCore.h"
 
+#include <cutils/log.h>
 #include <Frame.h>
 #include <GeolocationError.h>
 #include <GeolocationPosition.h>

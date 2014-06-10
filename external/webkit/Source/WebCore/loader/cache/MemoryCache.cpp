@@ -3,7 +3,6 @@
     Copyright (C) 2001 Dirk Mueller (mueller@kde.org)
     Copyright (C) 2002 Waldo Bastian (bastian@kde.org)
     Copyright (C) 2004, 2005, 2006, 2007, 2008 Apple Inc. All rights reserved.
-    Copyright (c) 2011, 2012 The Linux Foundation. All rights reserved
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Library General Public
@@ -42,8 +41,6 @@
 #include <stdio.h>
 #include <wtf/CurrentTime.h>
 #include <wtf/text/CString.h>
-
-#include <StatHubCmdApi.h>
 
 using namespace std;
 
@@ -639,11 +636,6 @@ MemoryCache::Statistics MemoryCache::getStatistics()
 
 void MemoryCache::setDisabled(bool disabled)
 {
-    StatHubCmd* cmd = StatHubCmdCreate(SH_CMD_WK_MEMORY_CACHE, SH_ACTION_CLEAR);
-    if (NULL!=cmd) {
-        StatHubCmdCommit(cmd);
-    }
-
     m_disabled = disabled;
     if (!m_disabled)
         return;

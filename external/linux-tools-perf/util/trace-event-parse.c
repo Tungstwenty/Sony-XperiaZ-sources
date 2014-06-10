@@ -1425,11 +1425,6 @@ static long long arg_num_eval(struct print_arg *arg)
 				die("unknown op '%s'", arg->op.op);
 			}
 			break;
-		case '+':
-			left = arg_num_eval(arg->op.left);
-			right = arg_num_eval(arg->op.right);
-			val = left + right;
-			break;
 		default:
 			die("unknown op '%s'", arg->op.op);
 		}
@@ -1490,13 +1485,6 @@ process_fields(struct event *event, struct print_flag_sym **list, char **tok)
 
 		free_token(token);
 		type = process_arg(event, arg, &token);
-
-		if (type == EVENT_OP)
-			type = process_op(event, arg, &token);
-
-		if (type == EVENT_ERROR)
-			goto out_free;
-
 		if (test_type_token(type, token, EVENT_DELIM, ","))
 			goto out_free;
 
@@ -1549,8 +1537,6 @@ process_flags(struct event *event, struct print_arg *arg, char **tok)
 	field = malloc_or_die(sizeof(*field));
 
 	type = process_arg(event, field, &token);
-	while (type == EVENT_OP)
-		type = process_op(event, field, &token);
 	if (test_type_token(type, token, EVENT_DELIM, ","))
 		goto out_free;
 
@@ -1594,8 +1580,6 @@ process_symbols(struct event *event, struct print_arg *arg, char **tok)
 	field = malloc_or_die(sizeof(*field));
 
 	type = process_arg(event, field, &token);
-	while (type == EVENT_OP)
-		type = process_op(event, field, &token);
 	if (test_type_token(type, token, EVENT_DELIM, ","))
 		goto out_free;
 

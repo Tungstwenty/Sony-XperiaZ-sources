@@ -189,7 +189,7 @@ out_delete:
 	return NULL;
 }
 
-static void perf_session__delete_dead_threads(struct machine *self)
+static void perf_session__delete_dead_threads(struct perf_session *self)
 {
 	struct thread *n, *t;
 
@@ -199,7 +199,7 @@ static void perf_session__delete_dead_threads(struct machine *self)
 	}
 }
 
-static void perf_session__delete_threads(struct machine *self)
+static void perf_session__delete_threads(struct perf_session *self)
 {
 	struct rb_node *nd = rb_first(&self->threads);
 
@@ -215,8 +215,8 @@ static void perf_session__delete_threads(struct machine *self)
 void perf_session__delete(struct perf_session *self)
 {
 	perf_session__destroy_kernel_maps(self);
-	perf_session__delete_dead_threads(&self->host_machine);
-	perf_session__delete_threads(&self->host_machine);
+	perf_session__delete_dead_threads(self);
+	perf_session__delete_threads(self);
 	machine__exit(&self->host_machine);
 	close(self->fd);
 	free(self);

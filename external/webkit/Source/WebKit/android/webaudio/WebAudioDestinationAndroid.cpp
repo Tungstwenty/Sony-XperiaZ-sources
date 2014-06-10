@@ -118,7 +118,7 @@ void AudioDestinationAndroid::start()
 {
     WEBAUDIO_LOGD("AudioDestinationAndroid::start() m_started: %d, m_isPlaying: %d", m_started, m_isPlaying);
     status_t result;
-    if (!m_audioTrack) {
+    if (!m_audioTrack.get()) {
 
         int channelOut = (m_channels > 1) ? AUDIO_CHANNEL_OUT_STEREO : AUDIO_CHANNEL_OUT_MONO;
 
@@ -138,8 +138,7 @@ void AudioDestinationAndroid::start()
 
         if ((result = m_audioTrack->initCheck()) != OK) {
             WEBAUDIO_LOGD("AudioDestinationAndroid::start() invalid audio track status - result: %d", result);
-            delete m_audioTrack;
-            m_audioTrack = NULL;
+            m_audioTrack.clear();
             return;
         }
         m_latency = (int64_t)m_audioTrack->latency() * 1000;
@@ -158,15 +157,14 @@ void AudioDestinationAndroid::start()
 void AudioDestinationAndroid::stop()
 {
     WEBAUDIO_LOGD("AudioDestinationAndroid::stop() m_started: %d, m_isPlaying: %d", m_started, m_isPlaying);
-    if (m_audioTrack) {
+    if (m_audioTrack.get()) {
         android::AutoMutex lock(m_lock);
 
         if (m_core)
             m_core->removeAudioDestination(this);
 
         m_audioTrack->stop();
-        delete m_audioTrack;
-        m_audioTrack = NULL;
+        m_audioTrack.clear();
 
         m_started = false;
         m_isPlaying = false;
@@ -176,7 +174,7 @@ void AudioDestinationAndroid::stop()
 
 void AudioDestinationAndroid::pause()
 {
-    if (m_audioTrack && m_isPlaying) {
+    if (m_audioTrack.get() && m_isPlaying) {
         m_audioTrack->pause();
         m_isPlaying = false;
     }
@@ -184,7 +182,7 @@ void AudioDestinationAndroid::pause()
 
 void AudioDestinationAndroid::resume()
 {
-    if (m_audioTrack && !m_isPlaying) {
+    if (m_audioTrack.get() && !m_isPlaying) {
         m_audioTrack->start();
         m_isPlaying = true;
     }

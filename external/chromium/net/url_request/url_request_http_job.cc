@@ -1,7 +1,5 @@
 // Copyright (c) 2011 The Chromium Authors. All rights reserved.
-// Copyright (c) 2011-2013 The Linux Foundation. All rights reserved
 // Copyright (C) 2011, 2012 Sony Ericsson Mobile Communications AB.
-
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,7 +41,6 @@
 #include "net/url_request/url_request_redirect_job.h"
 #include "net/url_request/url_request_throttler_header_adapter.h"
 #include "net/url_request/url_request_throttler_manager.h"
-#include "net/disk_cache/stat_hub_api.h"
 
 static const char kAvailDictionaryHeader[] = "Avail-Dictionary";
 
@@ -289,11 +286,6 @@ void URLRequestHttpJob::NotifyHeadersComplete() {
 
 void URLRequestHttpJob::NotifyDone(const URLRequestStatus& status) {
   RecordCompressionHistograms();
-  StatHubCmd* cmd = StatHubCmdCreate(SH_CMD_CH_URL_REQUEST, SH_ACTION_DID_FINISH);
-  if (NULL!=cmd) {
-      StatHubCmdAddParamAsString(cmd, request_->url().spec().c_str());
-      StatHubCmdCommit(cmd);
-  }
   URLRequestJob::NotifyDone(status);
 }
 
@@ -303,17 +295,6 @@ void URLRequestHttpJob::DestroyTransaction() {
   transaction_.reset();
   response_info_ = NULL;
   context_ = NULL;
-}
-
-static void updateUrlRequest(URLRequest& request, net::HttpRequestInfo& request_info) {
-    StatHubCmd* cmd = StatHubCmdCreate(SH_CMD_CH_URL_REQUEST, SH_ACTION_WILL_START);
-    if (NULL!=cmd) {
-        StatHubCmdAddParamAsString(cmd, request_info.url.spec().c_str());
-        StatHubCmdAddParamAsString(cmd, request_info.extra_headers.ToString().c_str());
-        StatHubCmdAddParamAsBool(cmd, false);
-        StatHubCmdAddParamAsUint32(cmd, (uint32)request.context());
-        StatHubCmdCommit(cmd);
-    }
 }
 
 void URLRequestHttpJob::StartTransaction() {
@@ -332,15 +313,11 @@ void URLRequestHttpJob::StartTransaction() {
     DCHECK(request_->context());
     DCHECK(request_->context()->http_transaction_factory());
 
-    if (StatHubIsInDC(request_info_.url.spec().c_str())) {
-        request_info_.load_flags |=  net::LOAD_PREFERRING_CACHE;
-    }
     rv = request_->context()->http_transaction_factory()->CreateTransaction(
         &transaction_);
     if (rv == OK) {
       if (!URLRequestThrottlerManager::GetInstance()->enforce_throttling() ||
           !throttling_entry_->IsDuringExponentialBackoff()) {
-        updateUrlRequest(*request_, request_info_);
         rv = transaction_->Start(
             &request_info_, &start_callback_, request_->net_log());
       } else {

@@ -60,9 +60,8 @@ static ANPTypefaceStyle anp_getStyle(const ANPTypeface* tf) {
 
 static int32_t anp_getFontPath(const ANPTypeface* tf, char fileName[],
                                int32_t length, int32_t* index) {
-    size_t size = SkFontHost::GetFileName(SkTypeface::UniqueID(tf), fileName,
-                                          length, index);
-    return static_cast<int32_t>(size);
+    // SkTypeface no longer supports queries for the underlying font's location
+    return 0;
 }
 
 static const char* gFontDir;

@@ -1,5 +1,6 @@
 /*
  * Copyright 2009, The Android Open Source Project
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -125,12 +126,7 @@ String PlatformBridge::resolveFilePathForContentUri(const String& contentUri)
 
 int PlatformBridge::PlatformBridge::screenDepth()
 {
-    android::sp<android::IBinder> display(
-            android::SurfaceComposerClient::getBuiltInDisplay(
-            android::ISurfaceComposer::eDisplayIdMain));
-    android::DisplayInfo info;
-    android::SurfaceComposerClient::getDisplayInfo(display, &info);
-    return info.pixelFormatInfo.bitsPerPixel;
+    return 32;
 }
 
 FloatRect PlatformBridge::screenRect()
@@ -217,7 +213,7 @@ int PlatformBridge::actualMemoryUsageMB()
 bool PlatformBridge::canSatisfyMemoryAllocation(long bytes)
 {
     JNIEnv* env = JSC::Bindings::getJNIEnv();
-    jclass bridgeClass = env->FindClass("android/webkit/JniUtil");
+    jclass bridgeClass = env->FindClass("com/sonymobile/webkit/JniUtil");
     jmethodID method = env->GetStaticMethodID(bridgeClass, "canSatisfyMemoryAllocation", "(J)Z");
     jboolean canAllocate = env->CallStaticBooleanMethod(bridgeClass, method, static_cast<jlong>(bytes));
     env->DeleteLocalRef(bridgeClass);

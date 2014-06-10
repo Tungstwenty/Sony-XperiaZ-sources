@@ -59,7 +59,6 @@
 #include "WebCoreJni.h"
 #include "WebRequestContext.h"
 #include "WebViewCore.h"
-#include "HTMLCanvasElement.h"
 
 #ifdef GET_NATIVE_VIEW
 #undef GET_NATIVE_VIEW
@@ -67,10 +66,11 @@
 
 #define GET_NATIVE_VIEW(env, obj) ((WebView*)env->GetIntField(obj, gWebViewField))
 
+#include <cutils/log.h>
 #include <JNIUtility.h>
 #include <JNIHelp.h>
 #include <jni.h>
-#include <androidfw/KeycodeLabels.h>
+#include <input/KeycodeLabels.h>
 #include <wtf/text/AtomicString.h>
 #include <wtf/text/CString.h>
 
@@ -144,7 +144,7 @@ WebView(JNIEnv* env, jobject javaWebView, int viewImpl, WTF::String drawableDir,
     : m_isHighEndGfx(isHighEndGfx)
 {
     memset(m_extras, 0, DRAW_EXTRAS_SIZE * sizeof(DrawExtra*));
-    jclass clazz = env->FindClass("android/webkit/WebViewClassic");
+    jclass clazz = env->FindClass("com/sonymobile/webkit/WebViewClassic");
     m_javaGlue.m_obj = env->NewWeakGlobalRef(javaWebView);
     m_javaGlue.m_scrollBy = GetJMethod(env, clazz, "setContentScrollBy", "(IIZ)Z");
     m_javaGlue.m_getScaledMaxXScroll = GetJMethod(env, clazz, "getScaledMaxXScroll", "()I");
@@ -165,7 +165,7 @@ WebView(JNIEnv* env, jobject javaWebView, int viewImpl, WTF::String drawableDir,
     m_javaGlue.m_rectHeight = GetJMethod(env, rectClass, "height", "()I");
     env->DeleteLocalRef(rectClass);
 
-    jclass quadFClass = env->FindClass("android/webkit/QuadF");
+    jclass quadFClass = env->FindClass("com/sonymobile/webkit/QuadF");
     ALOG_ASSERT(quadFClass, "Could not find QuadF class");
     m_javaGlue.m_quadFP1 = env->GetFieldID(quadFClass, "p1", "Landroid/graphics/PointF;");
     m_javaGlue.m_quadFP2 = env->GetFieldID(quadFClass, "p2", "Landroid/graphics/PointF;");
@@ -1431,7 +1431,7 @@ static JNINativeMethod gJavaWebViewMethods[] = {
         (void*) nativeSetPauseDrawing },
     { "nativeSetTextSelection", "(II)V",
         (void*) nativeSetTextSelection },
-    { "nativeGetHandleLayerId", "(IILandroid/graphics/Point;Landroid/webkit/QuadF;)I",
+    { "nativeGetHandleLayerId", "(IILandroid/graphics/Point;Lcom/sonymobile/webkit/QuadF;)I",
         (void*) nativeGetHandleLayerId },
     { "nativeMapLayerRect", "(IILandroid/graphics/Rect;)V",
         (void*) nativeMapLayerRect },
@@ -1447,13 +1447,13 @@ static JNINativeMethod gJavaWebViewMethods[] = {
 
 int registerWebView(JNIEnv* env)
 {
-    jclass clazz = env->FindClass("android/webkit/WebViewClassic");
-    ALOG_ASSERT(clazz, "Unable to find class android/webkit/WebViewClassic");
+    jclass clazz = env->FindClass("com/sonymobile/webkit/WebViewClassic");
+    ALOG_ASSERT(clazz, "Unable to find class com/sonymobile/webkit/WebViewClassic");
     gWebViewField = env->GetFieldID(clazz, "mNativeClass", "I");
-    ALOG_ASSERT(gWebViewField, "Unable to find android/webkit/WebViewClassic.mNativeClass");
+    ALOG_ASSERT(gWebViewField, "Unable to find com/sonymobile/webkit/WebViewClassic.mNativeClass");
     env->DeleteLocalRef(clazz);
 
-    return jniRegisterNativeMethods(env, "android/webkit/WebViewClassic", gJavaWebViewMethods, NELEM(gJavaWebViewMethods));
+    return jniRegisterNativeMethods(env, "com/sonymobile/webkit/WebViewClassic", gJavaWebViewMethods, NELEM(gJavaWebViewMethods));
 }
 
 } // namespace android

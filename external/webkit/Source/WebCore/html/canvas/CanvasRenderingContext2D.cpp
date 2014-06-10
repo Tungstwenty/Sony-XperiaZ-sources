@@ -546,13 +546,6 @@ void CanvasRenderingContext2D::setGlobalCompositeOperation(const String& operati
     if (!c)
         return;
     c->setCompositeOperation(op);
-
-    if(op != CompositeSourceOver){
-        canvas()->setSupportedCompositing(false);
-        canvas()->disableGpuRendering();
-    }
-    else
-        canvas()->setSupportedCompositing(true);
 #if ENABLE(ACCELERATED_2D_CANVAS) && !ENABLE(SKIA_GPU)
     if (isAccelerated() && op != CompositeSourceOver) {
         c->setSharedGraphicsContext3D(0, 0, IntSize());
@@ -993,19 +986,12 @@ void CanvasRenderingContext2D::clearRect(float x, float y, float width, float he
 {
     if (!validateRectForCanvas(x, y, width, height))
         return;
-    FloatRect rect(x, y, width, height);
-#if PLATFORM(ANDROID)
-    canvas()->clearRecording(rect);
-#endif
     GraphicsContext* context = drawingContext();
     if (!context)
         return;
     if (!state().m_invertibleCTM)
         return;
-
-#if PLATFORM(ANDROID)
-    context->setCurrentTransform(state().m_transform);
-#endif
+    FloatRect rect(x, y, width, height);
 
     save();
     setAllAttributesToDefault();
@@ -1344,9 +1330,6 @@ void CanvasRenderingContext2D::drawImage(HTMLCanvasElement* sourceCanvas, const 
         return;
     }
 
-    canvas()->setSupportedCompositing(false);
-    canvas()->disableGpuRendering();
-
     FloatRect srcCanvasRect = FloatRect(FloatPoint(), sourceCanvas->size());
 
     if (!srcCanvasRect.width() || !srcCanvasRect.height()) {
@@ -1431,9 +1414,6 @@ void CanvasRenderingContext2D::drawImage(HTMLVideoElement* video, const FloatRec
         ec = TYPE_MISMATCH_ERR;
         return;
     }
-
-    canvas()->setSupportedCompositing(false);
-    canvas()->disableGpuRendering();
 
     ec = 0;
 

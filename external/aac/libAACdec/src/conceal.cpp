@@ -2,7 +2,7 @@
 /* -----------------------------------------------------------------------------------------------------------
 Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android
 
-© Copyright  1995 - 2012 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
+© Copyright  1995 - 2013 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
   Copyright (C) 2012 Sony Mobile Communications AB.
 
@@ -442,7 +442,7 @@ AAC_DECODER_ERROR
 
   /* set confort noise level which will be inserted while in state 'muting' */
   if (comfNoiseLevel != AACDEC_CONCEAL_PARAM_NOT_SPECIFIED) {
-    if ( (comfNoiseLevel < 0) 
+    if ( (comfNoiseLevel < -1)
       || (comfNoiseLevel > 127) ) {
       return AAC_DEC_SET_PARAM_FAIL;
     }
@@ -1528,8 +1528,13 @@ static void
       {
       case ConcealState_Ok:
         if (!frameOk) {
-          /* change to state SINGLE-FRAME-LOSS */
-          pConcealmentInfo->concealState   = ConcealState_Single;
+          if (pConcealCommonData->numFadeOutFrames > 0) {
+            /* change to state SINGLE-FRAME-LOSS */
+            pConcealmentInfo->concealState   = ConcealState_Single;
+          } else {
+            /* change to state MUTE */
+            pConcealmentInfo->concealState = ConcealState_Mute;
+          }
           pConcealmentInfo->cntFadeFrames  = 0;
           pConcealmentInfo->cntValidFrames = 0;
         }
@@ -1562,11 +1567,16 @@ static void
       case ConcealState_FadeOut:
         pConcealmentInfo->cntFadeFrames += 1;  /* used to address the fade-out factors */
         if (pConcealmentInfo->cntValidFrames > pConcealCommonData->numMuteReleaseFrames) {
-          /* change to state FADE-IN */
-          pConcealmentInfo->concealState  = ConcealState_FadeIn;
-          pConcealmentInfo->cntFadeFrames = findEquiFadeFrame( pConcealCommonData,
-                                                               pConcealmentInfo->cntFadeFrames-1,
-                                                               0 /* FadeOut -> FadeIn */);
+          if (pConcealCommonData->numFadeInFrames > 0) {
+            /* change to state FADE-IN */
+            pConcealmentInfo->concealState  = ConcealState_FadeIn;
+            pConcealmentInfo->cntFadeFrames = findEquiFadeFrame( pConcealCommonData,
+                                                                 pConcealmentInfo->cntFadeFrames-1,
+                                                                 0 /* FadeOut -> FadeIn */);
+          } else {
+            /* change to state OK */
+            pConcealmentInfo->concealState = ConcealState_Ok;
+          }
         } else {
           if (pConcealmentInfo->cntFadeFrames >= pConcealCommonData->numFadeOutFrames) {
             /* change to state MUTE */
@@ -1577,9 +1587,14 @@ static void
 
       case ConcealState_Mute:
         if (pConcealmentInfo->cntValidFrames > pConcealCommonData->numMuteReleaseFrames) {
-          /* change to state FADE-IN */
-          pConcealmentInfo->concealState = ConcealState_FadeIn;
-          pConcealmentInfo->cntFadeFrames = pConcealCommonData->numFadeInFrames - 1;
+          if (pConcealCommonData->numFadeInFrames > 0) {
+            /* change to state FADE-IN */
+            pConcealmentInfo->concealState = ConcealState_FadeIn;
+            pConcealmentInfo->cntFadeFrames = pConcealCommonData->numFadeInFrames - 1;
+          } else {
+            /* change to state OK */
+            pConcealmentInfo->concealState = ConcealState_Ok;
+          }
         }
         break;
 
@@ -1591,11 +1606,16 @@ static void
             pConcealmentInfo->concealState = ConcealState_Ok;
           }
         } else {
-          /* change to state FADE-OUT */
-          pConcealmentInfo->concealState  = ConcealState_FadeOut;
-          pConcealmentInfo->cntFadeFrames = findEquiFadeFrame( pConcealCommonData,
-                                                               pConcealmentInfo->cntFadeFrames+1,
-                                                               1 /* FadeIn -> FadeOut */);
+          if (pConcealCommonData->numFadeOutFrames > 0) {
+            /* change to state FADE-OUT */
+            pConcealmentInfo->concealState  = ConcealState_FadeOut;
+            pConcealmentInfo->cntFadeFrames = findEquiFadeFrame( pConcealCommonData,
+                                                                 pConcealmentInfo->cntFadeFrames+1,
+                                                                 1 /* FadeIn -> FadeOut */);
+          } else {
+            /* change to state MUTE */
+            pConcealmentInfo->concealState = ConcealState_Mute;
+          }
         }
         break;
 
@@ -1626,8 +1646,13 @@ static void
       case ConcealState_Ok:
         if (!(pConcealmentInfo->prevFrameOk[1] ||
              (pConcealmentInfo->prevFrameOk[0] && !pConcealmentInfo->prevFrameOk[1] && frameOk))) {
-          /* Fade out only if the energy interpolation algorithm can not be applied! */
-          pConcealmentInfo->concealState   = ConcealState_FadeOut;
+          if (pConcealCommonData->numFadeOutFrames > 0) {
+            /* Fade out only if the energy interpolation algorithm can not be applied! */
+            pConcealmentInfo->concealState   = ConcealState_FadeOut;
+          } else {
+            /* change to state MUTE */
+            pConcealmentInfo->concealState = ConcealState_Mute;
+          }
           pConcealmentInfo->cntFadeFrames  = 0;
           pConcealmentInfo->cntValidFrames = 0;
         }
@@ -1641,11 +1666,16 @@ static void
         pConcealmentInfo->cntFadeFrames += 1;
 
         if (pConcealmentInfo->cntValidFrames > pConcealCommonData->numMuteReleaseFrames) {
-          /* change to state FADE-IN */
-          pConcealmentInfo->concealState  = ConcealState_FadeIn;
-          pConcealmentInfo->cntFadeFrames = findEquiFadeFrame( pConcealCommonData,
-                                                               pConcealmentInfo->cntFadeFrames-1,
-                                                               0 /* FadeOut -> FadeIn */);
+          if (pConcealCommonData->numFadeInFrames > 0) {
+            /* change to state FADE-IN */
+            pConcealmentInfo->concealState  = ConcealState_FadeIn;
+            pConcealmentInfo->cntFadeFrames = findEquiFadeFrame( pConcealCommonData,
+                                                                 pConcealmentInfo->cntFadeFrames-1,
+                                                                 0 /* FadeOut -> FadeIn */);
+          } else {
+            /* change to state OK */
+            pConcealmentInfo->concealState = ConcealState_Ok;
+          }
         } else {
           if (pConcealmentInfo->cntFadeFrames >= pConcealCommonData->numFadeOutFrames) {
             /* change to state MUTE */
@@ -1656,9 +1686,14 @@ static void
 
       case ConcealState_Mute:
         if (pConcealmentInfo->cntValidFrames > pConcealCommonData->numMuteReleaseFrames) {
-          /* change to state FADE-IN */
-          pConcealmentInfo->concealState = ConcealState_FadeIn;
-          pConcealmentInfo->cntFadeFrames = pConcealCommonData->numFadeInFrames - 1;
+          if (pConcealCommonData->numFadeInFrames > 0) {
+            /* change to state FADE-IN */
+            pConcealmentInfo->concealState = ConcealState_FadeIn;
+            pConcealmentInfo->cntFadeFrames = pConcealCommonData->numFadeInFrames - 1;
+          } else {
+            /* change to state OK */
+            pConcealmentInfo->concealState = ConcealState_Ok;
+          }
         }
         break;
 
@@ -1671,11 +1706,16 @@ static void
             pConcealmentInfo->concealState = ConcealState_Ok;
           }
         } else {
-          /* change to state FADE-OUT */
-          pConcealmentInfo->concealState  = ConcealState_FadeOut;
-          pConcealmentInfo->cntFadeFrames = findEquiFadeFrame( pConcealCommonData,
-                                                               pConcealmentInfo->cntFadeFrames+1,
-                                                               1 /* FadeIn -> FadeOut */);
+          if (pConcealCommonData->numFadeOutFrames > 0) {
+            /* change to state FADE-OUT */
+            pConcealmentInfo->concealState  = ConcealState_FadeOut;
+            pConcealmentInfo->cntFadeFrames = findEquiFadeFrame( pConcealCommonData,
+                                                                 pConcealmentInfo->cntFadeFrames+1,
+                                                                 1 /* FadeIn -> FadeOut */);
+          } else {
+            /* change to state MUTE */
+            pConcealmentInfo->concealState = ConcealState_Mute;
+          }
         }
         break;
       } /* End switch(pConcealmentInfo->concealState) */

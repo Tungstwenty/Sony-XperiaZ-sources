@@ -1,5 +1,6 @@
 /*
  * Copyright 2006, The Android Open Source Project
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,6 +38,7 @@
 #include "KURL.h"
 #include "WebCoreJni.h"
 
+#include <cutils/log.h>
 #include <JNIHelp.h>
 #include <JNIUtility.h>
 #include <SharedBuffer.h>
@@ -74,7 +76,7 @@ jobject webcoreImageToJavaBitmap(JNIEnv* env, WebCore::Image* icon)
     SkBitmap* bm = webcoreImageToSkBitmap(icon);
     if (!bm)
         return 0;
-    return GraphicsJNI::createBitmap(env, bm, false, NULL);
+    return GraphicsJNI::createBitmap(env, bm, GraphicsJNI::kBitmapCreateFlag_Premultiplied, NULL);
 }
 
 static WebIconDatabase* gIconDatabaseClient = new WebIconDatabase();
@@ -268,12 +270,12 @@ static JNINativeMethod gWebIconDatabaseMethods[] = {
 int registerWebIconDatabase(JNIEnv* env)
 {
 #ifndef NDEBUG
-    jclass webIconDatabase = env->FindClass("android/webkit/WebIconDatabaseClassic");
+    jclass webIconDatabase = env->FindClass("com/sonymobile/webkit/WebIconDatabaseClassic");
     ALOG_ASSERT(webIconDatabase, "Unable to find class android.webkit.WebIconDatabaseClassic");
     env->DeleteLocalRef(webIconDatabase);
 #endif
 
-    return jniRegisterNativeMethods(env, "android/webkit/WebIconDatabaseClassic",
+    return jniRegisterNativeMethods(env, "com/sonymobile/webkit/WebIconDatabaseClassic",
             gWebIconDatabaseMethods, NELEM(gWebIconDatabaseMethods));
 }
 

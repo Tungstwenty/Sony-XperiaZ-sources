@@ -1,7 +1,10 @@
 
 // Copyright (c) 2010 The Chromium Authors. All rights reserved.
+// Copyright (C) 2013 Sony Mobile Communications AB.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+#ifndef jni_utils_h
+#define jni_utils_h
 
 #include <string>
 
@@ -13,7 +16,25 @@ namespace android {
 
 namespace jni { // To avoid name conflict with similar functions in webkit
 
+class JniUtilHelper {
+public:
+  JniUtilHelper();
+  ~JniUtilHelper();
+
+  // init has to be called on webkit's main tread or the UI thread
+  void init();
+
+  jclass m_jniUtilClass;
+  jmethodID m_getAutoFillQueryMethodID;
+  jmethodID m_contentUrlSizeMethodID;
+  jmethodID m_contentUrlStreamMethodID;
+private:
+  bool m_initialized;
+};
+
 void BASE_API SetJavaVM(JavaVM* vm);
+
+JniUtilHelper* getJniUtilHelper();
 
 // Get the JNI environment for the current thread.
 JNIEnv* GetJNIEnv();
@@ -32,4 +53,4 @@ void DetachFromVM();
 } // namespace jni
 
 } // namespace android
-
+#endif // jni_utils_h

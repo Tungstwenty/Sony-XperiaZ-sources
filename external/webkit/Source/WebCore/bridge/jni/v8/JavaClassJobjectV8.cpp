@@ -1,5 +1,6 @@
 /*
  * Copyright 2010, The Android Open Source Project
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,7 +35,7 @@
 using namespace JSC::Bindings;
 
 #if PLATFORM(ANDROID)
-const char kJavaScriptInterfaceAnnotation[] = "android/webkit/JavascriptInterface";
+const char kJavaScriptInterfaceAnnotation[] = "com/sonymobile/webkit/JavascriptInterface";
 const char kIsAnnotationPresent[] = "isAnnotationPresent";
 const char kGetMethods[] = "getMethods";
 

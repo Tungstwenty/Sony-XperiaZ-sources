@@ -1,5 +1,4 @@
 // Copyright (c) 2011 The Chromium Authors. All rights reserved.
-// Copyright (c) 2012 The Linux Foundation. All rights reserved.
 // Copyright (C) 2012 Sony Ericsson Mobile Communications AB.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
@@ -11,8 +10,6 @@
 #include "net/base/host_resolver.h"
 #include "net/ftp/ftp_transaction_factory.h"
 #include "net/http/http_transaction_factory.h"
-
-#include "net/disk_cache/stat_hub_api.h"
 
 namespace net {
 
@@ -33,9 +30,7 @@ URLRequestContext::URLRequestContext()
       , valid_uid_(false),
       calling_uid_(0)
 #endif
-      {
-          StatHubURLRequestContextCreated((unsigned int)this);
-}
+      {}
 
 void URLRequestContext::CopyFrom(URLRequestContext* other) {
   // Copy URLRequestContext parameters.
@@ -101,7 +96,6 @@ bool URLRequestContext::getUID(uid_t *uid) const {
 #endif
 
 URLRequestContext::~URLRequestContext() {
-    StatHubURLRequestContextDestroyed((unsigned int)this);
 }
 
 }  // namespace net

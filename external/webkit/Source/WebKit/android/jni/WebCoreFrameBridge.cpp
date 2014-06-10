@@ -1,6 +1,5 @@
 /*
  * Copyright 2006, The Android Open Source Project
- * Copyright (c) 2012 The Linux Foundation. All rights reserved.
  * Copyright (c) 2013 Sony Mobile Communications AB. All rights reserved.
  *
  * Portions created by Sony Ericsson are Copyright (C) 2011,
@@ -103,6 +102,7 @@
 #include "jni.h"
 #include "wds/DebugServer.h"
 
+#include <cutils/log.h>
 #include <JNIUtility.h>
 #include <JNIHelp.h>
 #include <ScopedPrimitiveArray.h>
@@ -118,15 +118,9 @@
 #include <wtf/text/CString.h>
 #include <wtf/text/StringBuilder.h>
 
-#include <cutils/properties.h>
-
-extern "C" void SetCloseUnUsedSocketsFlag();
-
 #if ENABLE(WEB_AUTOFILL)
 #include "autofill/WebAutofill.h"
 #endif
-
-#include <StatHubCmdApi.h>
 
 using namespace JSC::Bindings;
 
@@ -134,8 +128,6 @@ static String* gUploadFileLabel;
 static String* gResetLabel;
 static String* gSubmitLabel;
 static String* gNoFileChosenLabel;
-
-static int gPageLoadCounter = 0;
 
 String* WebCore::PlatformBridge::globalLocalizedName(
         WebCore::PlatformBridge::rawResId resId)
@@ -251,7 +243,7 @@ WebFrame::WebFrame(JNIEnv* env, jobject obj, jobject historyList, WebCore::Page*
             "([BLjava/lang/String;Ljava/lang/String;)V");
     mJavaFrame->mShouldInterceptRequest =
             env->GetMethodID(clazz, "shouldInterceptRequest",
-            "(Ljava/lang/String;)Landroid/webkit/WebResourceResponse;");
+            "(Ljava/lang/String;)Lcom/sonymobile/webkit/WebResourceResponse;");
     mJavaFrame->mLoadStarted = env->GetMethodID(clazz, "loadStarted",
             "(Ljava/lang/String;Landroid/graphics/Bitmap;IZ)V");
     mJavaFrame->mTransitionToCommitted = env->GetMethodID(clazz, "transitionToCommitted",
@@ -275,9 +267,9 @@ WebFrame::WebFrame(JNIEnv* env, jobject obj, jobject historyList, WebCore::Page*
     mJavaFrame->mHandleUrl = env->GetMethodID(clazz, "handleUrl",
             "(Ljava/lang/String;)Z");
     mJavaFrame->mCreateWindow = env->GetMethodID(clazz, "createWindow",
-            "(ZZ)Landroid/webkit/BrowserFrame;");
+            "(ZZ)Lcom/sonymobile/webkit/BrowserFrame;");
     mJavaFrame->mCloseWindow = env->GetMethodID(clazz, "closeWindow",
-            "(Landroid/webkit/WebViewCore;)V");
+            "(Lcom/sonymobile/webkit/WebViewCore;)V");
     mJavaFrame->mDecidePolicyForFormResubmission = env->GetMethodID(clazz,
             "decidePolicyForFormResubmission", "(I)V");
     mJavaFrame->mRequestFocus = env->GetMethodID(clazz, "requestFocus",
@@ -338,13 +330,6 @@ WebFrame::WebFrame(JNIEnv* env, jobject obj, jobject historyList, WebCore::Page*
     mBlockNetworkLoads = false;
     m_renderSkins = 0;
     mUserAgentProfile = WTF::String();
-    mPageLoadStarted = false;
-    mCloseUnusedSocketsEnabled = false;
-    char netCloseUnusedSocketsSystemProperty[PROPERTY_VALUE_MAX];
-    if(property_get("net.close.unused.sockets",
-                    netCloseUnusedSocketsSystemProperty, "1")) {
-        mCloseUnusedSocketsEnabled = (bool)atoi(netCloseUnusedSocketsSystemProperty);
-    }
 }
 
 WebFrame::~WebFrame()
@@ -499,15 +484,6 @@ WebFrame::loadStarted(WebCore::Frame* frame)
     bool isMainFrame = (!frame->tree() || !frame->tree()->parent());
     WebCore::FrameLoadType loadType = frame->loader()->loadType();
 
-    if (isMainFrame) {
-        StatHubCmd* cmd = StatHubCmdCreate(SH_CMD_WK_PAGE, SH_ACTION_WILL_START_LOAD);
-        if (NULL!=cmd) {
-            StatHubCmdAddParamAsString(cmd, url.string().utf8().data());
-            StatHubCmdAddParamAsUint32(cmd, (unsigned int)frame);
-            StatHubCmdCommit(cmd);
-        }
-    }
-
     if (loadType == WebCore::FrameLoadTypeReplace ||
             (loadType == WebCore::FrameLoadTypeRedirectWithLockedBackForwardList &&
              !isMainFrame))
@@ -578,24 +554,6 @@ WebFrame::didFinishLoad(WebCore::Frame* frame)
     env->CallVoidMethod(javaFrame.get(), mJavaFrame->mLoadFinished, urlStr, static_cast<int>(loadType), isMainFrame);
     checkException(env);
     env->DeleteLocalRef(urlStr);
-
-    if (isMainFrame) {
-        StatHubCmd* cmd = StatHubCmdCreate(SH_CMD_WK_PAGE, SH_ACTION_DID_FINISH_LOAD);
-        if (NULL!=cmd) {
-            StatHubCmdAddParamAsString(cmd, url.string().utf8().data());
-            StatHubCmdAddParamAsUint32(cmd, (unsigned int)frame);
-            StatHubCmdCommit(cmd);
-        }
-        if (true == mCloseUnusedSocketsEnabled) {
-            if ((gPageLoadCounter > 0) && (true == mPageLoadStarted)) {
-                mPageLoadStarted = false;
-                gPageLoadCounter--;
-                if(0 == gPageLoadCounter) {
-                    SetCloseUnUsedSocketsFlag();
-                }
-            }
-        }
-    }
 }
 
 void
@@ -1990,7 +1948,7 @@ static JNINativeMethod gBrowserFrameNativeMethods[] = {
     /* name, signature, funcPtr */
     { "nativeCallPolicyFunction", "(II)V",
         (void*) CallPolicyFunction },
-    { "nativeCreateFrame", "(Landroid/webkit/WebViewCore;Landroid/content/res/AssetManager;Landroid/webkit/WebBackForwardList;)V",
+    { "nativeCreateFrame", "(Lcom/sonymobile/webkit/WebViewCore;Landroid/content/res/AssetManager;Lcom/sonymobile/webkit/WebBackForwardList;)V",
         (void*) CreateFrame },
     { "nativeDestroyFrame", "()V",
         (void*) DestroyFrame },
@@ -2051,13 +2009,13 @@ int registerWebFrame(JNIEnv* env)
 {
     JavaClassJobject::RegisterJavaClassJobject(env);
 
-    jclass clazz = env->FindClass("android/webkit/BrowserFrame");
+    jclass clazz = env->FindClass("com/sonymobile/webkit/BrowserFrame");
     ALOG_ASSERT(clazz, "Cannot find BrowserFrame");
     gFrameField = env->GetFieldID(clazz, "mNativeFrame", "I");
     ALOG_ASSERT(gFrameField, "Cannot find mNativeFrame on BrowserFrame");
     env->DeleteLocalRef(clazz);
 
-    return jniRegisterNativeMethods(env, "android/webkit/BrowserFrame",
+    return jniRegisterNativeMethods(env, "com/sonymobile/webkit/BrowserFrame",
             gBrowserFrameNativeMethods, NELEM(gBrowserFrameNativeMethods));
 }
 

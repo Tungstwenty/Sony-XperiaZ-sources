@@ -1,4 +1,5 @@
 // Copyright (c) 2010 The Chromium Authors. All rights reserved.
+// Copyright (C) 2013 Sony Mobile Communications AB.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,16 +16,11 @@ JavaISWrapper::JavaISWrapper(const FilePath& path) {
   m_read = env->GetMethodID(inputStreamClass, "read", "([B)I");
   m_close = env->GetMethodID(inputStreamClass, "close", "()V");
 
-  jclass bridgeClass = env->FindClass("android/webkit/JniUtil");
-  jmethodID method = env->GetStaticMethodID(
-      bridgeClass,
-      "contentUrlStream",
-      "(Ljava/lang/String;)Ljava/io/InputStream;");
+  android::jni::JniUtilHelper* juh = android::jni::getJniUtilHelper();
   m_inputStream = env->NewGlobalRef(env->CallStaticObjectMethod(
-      bridgeClass,
-      method,
+      juh->m_jniUtilClass,
+      juh->m_contentUrlStreamMethodID,
       jni::ConvertUTF8ToJavaString(env, path.value())));
-  env->DeleteLocalRef(bridgeClass);
   env->DeleteLocalRef(inputStreamClass);
 }
 
@@ -52,16 +48,12 @@ int JavaISWrapper::Read(char* out, int length) {
 
 uint64 contentUrlSize(const FilePath& name) {
   JNIEnv* env = jni::GetJNIEnv();
-  jclass bridgeClass = env->FindClass("android/webkit/JniUtil");
-  jmethodID method = env->GetStaticMethodID(
-      bridgeClass,
-      "contentUrlSize",
-      "(Ljava/lang/String;)J");
+
+  android::jni::JniUtilHelper* juh = android::jni::getJniUtilHelper();
   jlong length = env->CallStaticLongMethod(
-      bridgeClass,
-      method,
+      juh->m_jniUtilClass,
+      juh->m_contentUrlSizeMethodID,
       jni::ConvertUTF8ToJavaString(env, name.value()));
-  env->DeleteLocalRef(bridgeClass);
 
   return static_cast<uint64>(length);
 }

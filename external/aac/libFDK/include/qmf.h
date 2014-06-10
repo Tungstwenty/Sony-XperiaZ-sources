@@ -2,7 +2,7 @@
 /* -----------------------------------------------------------------------------------------------------------
 Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android
 
-© Copyright  1995 - 2012 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
+© Copyright  1995 - 2013 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
   Copyright (C) 2012 Sony Mobile Communications AB.
 
@@ -138,6 +138,8 @@ amm-info@iis.fraunhofer.de
 #define QMF_FLAG_MPSLDFB     16
 /* Complex Low Delay Filter Bank used in MPEG Surround Encoder allows a optimized calculation of the modulation in qmfForwardModulationHQ() */
 #define QMF_FLAG_MPSLDFB_OPTIMIZE_MODULATION  32
+/* Flag to indicate HE-AAC down-sampled SBR mode (decoder) -> adapt analysis post twiddling */
+#define QMF_FLAG_DOWNSAMPLED  64
 
 
 typedef struct

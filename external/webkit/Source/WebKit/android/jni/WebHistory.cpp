@@ -1,5 +1,6 @@
 /*
  * Copyright 2007, The Android Open Source Project
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -45,6 +46,7 @@
 #include "WebCoreJni.h"
 #include "WebIconDatabase.h"
 
+#include <cutils/log.h>
 #include <JNIHelp.h>
 #include "JNIUtility.h"
 #include <SkUtils.h>
@@ -266,7 +268,8 @@ static jobject WebHistoryGetFavicon(JNIEnv* env, jobject obj, jint ptr)
     if (!item->m_faviconCached && item->m_favicon) {
         jobject favicon = GraphicsJNI::createBitmap(env,
                                                     item->m_favicon,
-                                                    false, NULL);
+                                                    GraphicsJNI::kBitmapCreateFlag_Premultiplied,
+                                                    NULL);
         item->m_favicon = 0; // Framework now owns the pointer
         item->m_faviconCached = env->NewGlobalRef(favicon);
         env->DeleteLocalRef(favicon);
@@ -399,7 +402,7 @@ void WebHistory::AddItem(const AutoJObject& list, WebCore::HistoryItem* item)
     bridge->setActive();
     item->setBridge(bridge);
     // Allocate a blank WebHistoryItemClassic
-    jclass clazz = env->FindClass("android/webkit/WebHistoryItemClassic");
+    jclass clazz = env->FindClass("com/sonymobile/webkit/WebHistoryItemClassic");
     jobject newItem = env->NewObject(clazz, gWebHistoryItemClassic.mInit,
             reinterpret_cast<int>(bridge));
     env->DeleteLocalRef(clazz);
@@ -982,17 +985,17 @@ int registerWebHistory(JNIEnv* env)
     unitTest();
 #endif
     // Find WebHistoryItemClassic, its constructor, and the update method.
-    jclass clazz = env->FindClass("android/webkit/WebHistoryItemClassic");
-    ALOG_ASSERT(clazz, "Unable to find class android/webkit/WebHistoryItemClassic");
+    jclass clazz = env->FindClass("com/sonymobile/webkit/WebHistoryItemClassic");
+    ALOG_ASSERT(clazz, "Unable to find class com/sonymobile/webkit/WebHistoryItemClassic");
     gWebHistoryItemClassic.mInit = env->GetMethodID(clazz, "<init>", "(I)V");
     ALOG_ASSERT(gWebHistoryItemClassic.mInit, "Could not find WebHistoryItemClassic constructor");
     env->DeleteLocalRef(clazz);
 
     // Find the WebBackForwardListClassic object and method.
-    clazz = env->FindClass("android/webkit/WebBackForwardListClassic");
-    ALOG_ASSERT(clazz, "Unable to find class android/webkit/WebBackForwardListClassic");
+    clazz = env->FindClass("com/sonymobile/webkit/WebBackForwardListClassic");
+    ALOG_ASSERT(clazz, "Unable to find class com/sonymobile/webkit/WebBackForwardListClassic");
     gWebBackForwardListClassic.mAddHistoryItem = env->GetMethodID(clazz, "addHistoryItem",
-            "(Landroid/webkit/WebHistoryItem;)V");
+            "(Lcom/sonymobile/webkit/WebHistoryItem;)V");
     ALOG_ASSERT(gWebBackForwardListClassic.mAddHistoryItem, "Could not find method addHistoryItem");
     gWebBackForwardListClassic.mRemoveHistoryItem = env->GetMethodID(clazz, "removeHistoryItem",
             "(I)V");
@@ -1001,9 +1004,9 @@ int registerWebHistory(JNIEnv* env)
     ALOG_ASSERT(gWebBackForwardListClassic.mSetCurrentIndex, "Could not find method setCurrentIndex");
     env->DeleteLocalRef(clazz);
 
-    int result = jniRegisterNativeMethods(env, "android/webkit/WebBackForwardListClassic",
+    int result = jniRegisterNativeMethods(env, "com/sonymobile/webkit/WebBackForwardListClassic",
             gWebBackForwardListClassicMethods, NELEM(gWebBackForwardListClassicMethods));
-    return (result < 0) ? result : jniRegisterNativeMethods(env, "android/webkit/WebHistoryItemClassic",
+    return (result < 0) ? result : jniRegisterNativeMethods(env, "com/sonymobile/webkit/WebHistoryItemClassic",
             gWebHistoryItemClassicMethods, NELEM(gWebHistoryItemClassicMethods));
 }
 

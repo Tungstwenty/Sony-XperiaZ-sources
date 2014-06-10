@@ -1,5 +1,6 @@
 /*
  * Copyright 2010, The Android Open Source Project
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -43,7 +44,7 @@ String MIMETypeRegistry::getMIMETypeForExtension(const String& ext)
 {
     ASSERT(isMainThread());
     JNIEnv* env = JSC::Bindings::getJNIEnv();
-    jclass mimeClass = env->FindClass("android/webkit/MimeTypeMap");
+    jclass mimeClass = env->FindClass("com/sonymobile/webkit/MimeTypeMap");
     ALOG_ASSERT(mimeClass, "Could not find class MimeTypeMap");
     jmethodID mimeTypeFromExtension = env->GetStaticMethodID(mimeClass,
             "mimeTypeFromExtension",

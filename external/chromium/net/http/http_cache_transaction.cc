@@ -1,5 +1,4 @@
 // Copyright (c) 2011 The Chromium Authors. All rights reserved.
-// Copyright (c) 2011, 2012 The Linux Foundation. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,9 +34,6 @@
 #include "net/http/http_transaction.h"
 #include "net/http/http_util.h"
 #include "net/http/partial_data.h"
-#include "net/http/preconnect.h"
-#include "net/http/net-plugin-bridge.h"
-#include "net/disk_cache/stat_hub_api.h"
 
 using base::Time;
 
@@ -101,17 +97,6 @@ static bool HeaderMatches(const HttpRequestHeaders& headers,
   return false;
 }
 
-static void StatHubNotifyDone(const HttpRequestInfo* request, bool& report_to_stathub) {
-    if (NULL != request && report_to_stathub) {
-        StatHubCmd* cmd = StatHubCmdCreate(SH_CMD_CH_TRANS_CACHE, SH_ACTION_DID_FINISH);
-        if (NULL!=cmd) {
-            StatHubCmdAddParamAsString(cmd, request->url.spec().c_str());
-            StatHubCmdCommit(cmd);
-            report_to_stathub = false;
-        }
-    }
-}
-
 //-----------------------------------------------------------------------------
 
 HttpCache::Transaction::Transaction(HttpCache* cache)
@@ -142,17 +127,13 @@ HttpCache::Transaction::Transaction(HttpCache* cache)
               this, &Transaction::OnIOComplete))),
       ALLOW_THIS_IN_INITIALIZER_LIST(
           write_headers_callback_(new CancelableCompletionCallback<Transaction>(
-              this, &Transaction::OnIOComplete))),
-      report_to_stathub_(false){
+              this, &Transaction::OnIOComplete))) {
   COMPILE_ASSERT(HttpCache::Transaction::kNumValidationHeaders ==
                  arraysize(kValidationHeaders),
                  Invalid_number_of_validation_headers);
 }
 
 HttpCache::Transaction::~Transaction() {
-
-  StatHubNotifyDone(request_, report_to_stathub_);
-
   // We may have to issue another IO, but we should never invoke the callback_
   // after this point.
   callback_ = NULL;
@@ -246,28 +227,14 @@ int HttpCache::Transaction::Start(const HttpRequestInfo* request,
 
   SetRequest(net_log, request);
 
-  StatHubCmd* cmd = StatHubCmdCreate(SH_CMD_CH_TRANS_CACHE, SH_ACTION_WILL_START);
-  if (NULL!=cmd) {
-      StatHubCmdAddParamAsString(cmd, request->url.spec().c_str());
-      StatHubCmdAddParamAsString(cmd, request->extra_headers.ToString().c_str());
-      StatHubCmdCommit(cmd);
-      report_to_stathub_ = true;
-  }
-
   // We have to wait until the backend is initialized so we start the SM.
   next_state_ = STATE_GET_BACKEND;
   int rv = DoLoop(OK);
 
   // Setting this here allows us to check for the existence of a callback_ to
   // determine if we are still inside Start.
-  if (rv == ERR_IO_PENDING) {
+  if (rv == ERR_IO_PENDING)
     callback_ = callback;
-  }
-  else {
-      if (rv != OK) {
-        StatHubNotifyDone(request, report_to_stathub_);
-      }
-  }
 
   return rv;
 }
@@ -387,9 +354,6 @@ int HttpCache::Transaction::Read(IOBuffer* buf, int buf_len,
     DCHECK(!callback_);
     callback_ = callback;
   }
-  else {
-    StatHubNotifyDone(request_, report_to_stathub_);
-  }
   return rv;
 }
 
@@ -435,18 +399,6 @@ void HttpCache::Transaction::DoCallback(int rv) {
 
 int HttpCache::Transaction::HandleResult(int rv) {
   DCHECK(rv != ERR_IO_PENDING);
-
-  if (reading_) {
-      if (rv == OK || rv < 0) {
-          StatHubNotifyDone(request_, report_to_stathub_);
-      }
-  }
-  else {
-      if (rv != OK) {
-          StatHubNotifyDone(request_, report_to_stathub_);
-      }
-  }
-
   if (callback_)
     DoCallback(rv);
   return rv;
@@ -1691,17 +1643,13 @@ bool HttpCache::Transaction::RequiresValidation() {
     return true;
 
   if (response_.headers->RequiresValidation(
-      response_.request_time, response_.response_time, Time::Now())) {
-    ObserveRevalidation(&response_, request_, cache_);
+          response_.request_time, response_.response_time, Time::Now()))
     return true;
-  }
 
   // Since Vary header computation is fairly expensive, we save it for last.
   if (response_.vary_data.is_valid() &&
-      !response_.vary_data.MatchesRequest(*request_, *response_.headers)) {
-    ObserveRevalidation(&response_, request_, cache_);
+      !response_.vary_data.MatchesRequest(*request_, *response_.headers))
     return true;
-  }
 
   return false;
 }

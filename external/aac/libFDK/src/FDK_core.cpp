@@ -2,7 +2,7 @@
 /* -----------------------------------------------------------------------------------------------------------
 Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android
 
-© Copyright  1995 - 2012 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
+© Copyright  1995 - 2013 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
   Copyright (C) 2012 Sony Mobile Communications AB.
 
@@ -93,8 +93,8 @@ amm-info@iis.fraunhofer.de
 
 /* FDK tools library info */
 #define FDK_TOOLS_LIB_VL0 2
-#define FDK_TOOLS_LIB_VL1 2
-#define FDK_TOOLS_LIB_VL2 8
+#define FDK_TOOLS_LIB_VL1 3
+#define FDK_TOOLS_LIB_VL2 2
 #define FDK_TOOLS_LIB_TITLE "FDK Tools"
 #define FDK_TOOLS_LIB_BUILD_DATE __DATE__
 #define FDK_TOOLS_LIB_BUILD_TIME __TIME__

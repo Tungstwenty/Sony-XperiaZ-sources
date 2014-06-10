@@ -1,6 +1,6 @@
 /*
  * Copyright 2010, The Android Open Source Project
- * Copyright (c) 2012 The Linux Foundation. All rights reserved.
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,8 +33,6 @@
 #include "WebUrlLoaderClient.h"
 #include "net/http/http_network_session.h"
 #include <wtf/text/CString.h>
-#include <net/host_resolver_helper/dyn_lib_loader.h>
-#include <net/host_resolver_helper/host_resolver_helper.h>
 
 using namespace WTF;
 using namespace disk_cache;
@@ -50,7 +48,7 @@ static string storageDirectory()
     static const char* const kDirectory = "/webviewCacheChromium";
 
     JNIEnv* env = JSC::Bindings::getJNIEnv();
-    jclass bridgeClass = env->FindClass("android/webkit/JniUtil");
+    jclass bridgeClass = env->FindClass("com/sonymobile/webkit/JniUtil");
     jmethodID method = env->GetStaticMethodID(bridgeClass, "getCacheDirectory", "()Ljava/lang/String;");
     string storageDirectory = jstringToStdString(env, static_cast<jstring>(env->CallStaticObjectMethod(bridgeClass, method)));
     env->DeleteLocalRef(bridgeClass);
@@ -99,10 +97,8 @@ WebCache::WebCache(bool isPrivateBrowsing)
     scoped_refptr<base::MessageLoopProxy> cacheMessageLoopProxy = ioThread->message_loop_proxy();
 
     static const int kMaximumCacheSizeBytes = 20 * 1024 * 1024;
-    m_hostResolver = net::CreateSystemHostResolver(net::HostResolver::kDefaultParallelism, 0, 0,ioThread->message_loop());
-    if (!isPrivateBrowsing) {
-        m_hostPreresolver = CreateResolverIPObserver(m_hostResolver.get());
-    }
+    m_hostResolver = net::CreateSystemHostResolver(net::HostResolver::kDefaultParallelism, 0, 0);
+
     m_proxyConfigService = new ProxyConfigServiceAndroid();
     net::HttpCache::BackendFactory* backendFactory;
     if (isPrivateBrowsing)

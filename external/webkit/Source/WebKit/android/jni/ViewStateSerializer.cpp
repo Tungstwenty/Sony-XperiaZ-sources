@@ -1,5 +1,6 @@
 /*
  * Copyright 2011, The Android Open Source Project
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -46,6 +47,7 @@
 #include "SkPicture.h"
 #include "TilesManager.h"
 
+#include <cutils/log.h>
 #include <JNIUtility.h>
 #include <JNIHelp.h>
 #include <jni.h>
@@ -184,7 +186,7 @@ static BaseLayerAndroid* nativeDeserializeViewState(JNIEnv* env, jobject, jint v
     if (version == 1) {
         content = new LegacyPictureLayerContent(&stream);
     } else {
-        SkPicture* picture = new SkPicture(&stream);
+        SkPicture* picture = SkPicture::CreateFromStream(&stream);
         content = new PictureLayerContent(picture);
         SkSafeUnref(picture);
     }
@@ -541,7 +543,7 @@ LayerAndroid* deserializeLayer(int version, SkMemoryStream* stream)
         if (version == 1) {
             content = new LegacyPictureLayerContent(stream);
         } else {
-            SkPicture* picture = new SkPicture(stream);
+            SkPicture* picture = SkPicture::CreateFromStream(stream);
             content = new PictureLayerContent(picture);
             SkSafeUnref(picture);
         }
@@ -584,7 +586,7 @@ static JNINativeMethod gSerializerMethods[] = {
 
 int registerViewStateSerializer(JNIEnv* env)
 {
-    return jniRegisterNativeMethods(env, "android/webkit/ViewStateSerializer",
+    return jniRegisterNativeMethods(env, "com/sonymobile/webkit/ViewStateSerializer",
                                     gSerializerMethods, NELEM(gSerializerMethods));
 }
 

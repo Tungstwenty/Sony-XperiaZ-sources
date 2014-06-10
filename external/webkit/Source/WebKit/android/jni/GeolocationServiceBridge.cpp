@@ -1,5 +1,6 @@
 /*
  * Copyright 2012, The Android Open Source Project
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,6 +29,7 @@
 
 #include "WebViewCore.h"
 
+#include <cutils/log.h>
 #include <GeolocationError.h>
 #include <GeolocationPosition.h>
 #include <JNIHelp.h>
@@ -38,7 +40,7 @@ using WebCore::GeolocationPosition;
 
 namespace android {
 
-static const char* javaGeolocationServiceClassName = "android/webkit/GeolocationService";
+static const char* javaGeolocationServiceClassName = "com/sonymobile/webkit/GeolocationService";
 enum javaGeolocationServiceClassMethods {
     GeolocationServiceMethodInit = 0,
     GeolocationServiceMethodStart,

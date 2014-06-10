@@ -101,58 +101,14 @@ PlatformGraphicsContextSkia::PlatformGraphicsContextSkia(SkCanvas* canvas,
     : PlatformGraphicsContext()
     , mCanvas(canvas)
     , m_deleteCanvas(takeCanvasOwnership)
-    , m_canvasState(DEFAULT)
-    , m_picture(0)
 {
     m_gc = 0;
 }
 
-PlatformGraphicsContextSkia::PlatformGraphicsContextSkia(int width, int height, PlatformGraphicsContext* existing)
-    : PlatformGraphicsContext()
-    , m_deleteCanvas(false)
-    , m_canvasState(RECORDING)
-    , m_picture(new SkPicture)
-{
-    mCanvas = m_picture->beginRecording(width, height, 0);
-    if(existing)
-    {
-        PlatformGraphicsContextSkia* existingSkia = static_cast<PlatformGraphicsContextSkia*>(existing);
-        if(existingSkia)
-        {
-            //Copy over current state
-            State* existingState = existingSkia->getState();
-            if(existingState)
-                m_state = new State(*existingState);
-
-            //Copy over stateStack
-            WTF::Vector<State>& existingStateStack = existingSkia->getStateStack();
-            WTF::Vector<State>::const_iterator it = existingStateStack.begin();
-            for(; it != existingStateStack.end(); it++)
-            {
-                m_stateStack.append(*it);
-            }
-
-            //Copy over transform
-            SkMatrix existingMatrix = existingSkia->getTotalMatrix();
-            mCanvas->concat(existingMatrix);
-        }
-    }
-}
-
 PlatformGraphicsContextSkia::~PlatformGraphicsContextSkia()
 {
-    if (m_picture) {
-        delete m_picture; // The SkPicture will free mCanvas in its destructor.
-        m_picture = 0;
-        //TODO::this should be safer
-        //m_deleteCanvas = false;
-        return;
-    }
-
-    if (m_deleteCanvas) {
+    if (m_deleteCanvas)
         delete mCanvas;
-        mCanvas = 0;
-    }
 }
 
 bool PlatformGraphicsContextSkia::isPaintingDisabled()
@@ -691,57 +647,6 @@ void PlatformGraphicsContextSkia::drawMediaButton(const IntRect& rect, RenderSki
                                                   const IntRect& thumb)
 {
     RenderSkinMediaButton::Draw(mCanvas, rect, buttonType, translucent, drawBackground, thumb);
-}
-
-//**************************************
-// Recording Canvas
-//**************************************
-void PlatformGraphicsContextSkia::clearRecording()
-{
-    if (!isRecording() || !m_picture)
-        return;
-
-    int width = m_picture->width();
-    int height = m_picture->height();
-
-    delete m_picture;
-    m_picture = new SkPicture;
-
-    mCanvas = m_picture->beginRecording(width, height, 0);
-}
-
-void PlatformGraphicsContextSkia::convertToNonRecording()
-{
-    if (!isRecording() || !m_picture)
-        return;
-
-    SkBitmap bitmap;
-
-    bitmap.setConfig(SkBitmap::kARGB_8888_Config, m_picture->width(), m_picture->height());
-    bitmap.allocPixels();
-    bitmap.eraseColor(0);
-
-    SkCanvas* canvas = new SkCanvas;
-    canvas->setBitmapDevice(bitmap);
-
-    m_picture->draw(canvas);
-
-    mCanvas = canvas;
-    m_deleteCanvas = true;
-
-    delete m_picture;
-    m_picture = 0;
-
-    SLOGD("[%s] The HTML5 recording canvas has been tainted. Converting to bitmap buffer.", __FUNCTION__);
-    m_canvasState = DIRTY;
-}
-
-void PlatformGraphicsContextSkia::setIsAnimating()
-{
-    if (!m_canvasState == DEFAULT)
-        return;
-
-    m_canvasState = ANIMATION_DETECTED;
 }
 
 }   // WebCore

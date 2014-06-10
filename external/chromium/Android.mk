@@ -208,10 +208,6 @@ LOCAL_SRC_FILES += \
     net/base/x509_certificate_openssl.cc \
     net/base/x509_certificate_openssl_android.cc \
     net/base/x509_openssl_util.cc \
-    net/base/request_priority.cc \
-    \
-    net/host_resolver_helper/dyn_lib_loader.cc \
-    net/host_resolver_helper/host_resolver_helper.cc \
     \
     net/disk_cache/addr.cc \
     net/disk_cache/backend_impl.cc \
@@ -281,10 +277,6 @@ LOCAL_SRC_FILES += \
     net/http/http_vary_data.cc \
     net/http/md4.cc \
     net/http/partial_data.cc \
-    net/http/preconnect.cc \
-    net/http/tcp-connections-bridge.cc \
-    net/http/http_getzip_factory.cc \
-    net/http/http_getzip_bridge.cc \
     \
     net/proxy/init_proxy_resolver.cc \
     net/proxy/multi_threaded_proxy_resolver.cc \
@@ -318,7 +310,6 @@ LOCAL_SRC_FILES += \
     net/socket/tcp_client_socket.cc \
     net/socket/tcp_client_socket_libevent.cc \
     net/socket/transport_client_socket_pool.cc \
-    net/socket/tcp_fin_aggregation_factory.cc \
     \
     net/socket_stream/socket_stream.cc \
     net/socket_stream/socket_stream_job.cc \
@@ -338,7 +329,6 @@ LOCAL_SRC_FILES += \
     \
     net/url_request/https_prober.cc \
     net/url_request/url_request.cc \
-    net/url_request/video_url_caching_bridge.cc \
     net/url_request/url_request_context.cc \
     net/url_request/url_request_context_getter.cc \
     net/url_request/url_request_file_job.cc \
@@ -421,11 +411,6 @@ LOCAL_SRC_FILES += \
     webkit/glue/form_data.cc \
     webkit/glue/form_field.cc
 
-LOCAL_SRC_FILES += net/http/net-plugin-bridge.cc
-
-LOCAL_SRC_FILES += net/disk_cache/stat_hub.cc \
-    net/disk_cache/stat_hub_api.cc \
-
 LOCAL_C_INCLUDES := \
     $(LOCAL_PATH) \
     $(LOCAL_PATH)/chrome \
@@ -487,7 +472,7 @@ $(GEN):
 LOCAL_GENERATED_SOURCES += $(GEN)
 
 LOCAL_CFLAGS := -DHAVE_CONFIG_H -DANDROID -DEXPAT_RELATIVE_PATH -DALLOW_QUOTED_COOKIE_VALUES -DCOMPONENT_BUILD -DGURL_DLL
-LOCAL_CPPFLAGS := -Wno-sign-promo -Wno-missing-field-initializers -fvisibility-inlines-hidden
+LOCAL_CPPFLAGS := -Wno-sign-promo -Wno-missing-field-initializers -fvisibility=hidden -fvisibility-inlines-hidden
 
 # Just a few definitions not provided by bionic.
 LOCAL_CFLAGS += -include "android/prefix.h"
@@ -498,7 +483,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/android \
 	$(LOCAL_C_INCLUDES)
 
-LOCAL_WHOLE_STATIC_LIBRARIES += libevent modp_b64 dmg_fp libcutils
+LOCAL_STATIC_LIBRARIES := libevent modp_b64 dmg_fp
 LOCAL_SHARED_LIBRARIES := libstlport libexpat libcrypto libssl libz libicuuc libicui18n libsqlite libcutils liblog libdl
 
 LOCAL_PRELINK_MODULE := false

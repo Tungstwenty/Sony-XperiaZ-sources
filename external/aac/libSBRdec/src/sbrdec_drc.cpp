@@ -2,7 +2,7 @@
 /* -----------------------------------------------------------------------------------------------------------
 Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android
 
-© Copyright  1995 - 2012 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
+© Copyright  1995 - 2013 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
   Copyright (C) 2012 Sony Mobile Communications AB.
 
@@ -128,8 +128,8 @@ void sbrDecoder_drcInitChannel (
   hDrcData->currFact_exp = 1;
   hDrcData->nextFact_exp = 1;
 
-  hDrcData->numBandsCurr = 0;
-  hDrcData->numBandsNext = 0;
+  hDrcData->numBandsCurr = 1;
+  hDrcData->numBandsNext = 1;
 
   hDrcData->winSequenceCurr = 0;
   hDrcData->winSequenceNext = 0;
@@ -491,9 +491,7 @@ void sbrDecoder_drcApply (
   if (hDrcData == NULL) {
     return;
   }
-  if ( (hDrcData->enable == 0)
-    || ((hDrcData->numBandsCurr == 0) && (hDrcData->numBandsNext == 0))
-     ) {
+  if (hDrcData->enable == 0) {
     return;  /* Avoid changing the scaleFactor even though the processing is disabled. */
   }
 

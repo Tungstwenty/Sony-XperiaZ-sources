@@ -1,5 +1,6 @@
 /*
  * Copyright 2012, The Android Open Source Project
+ * Copyright (C) 2014 Sony Mobile Communications AB
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -107,8 +108,9 @@ android::Surface* CanvasTexture::nativeWindow()
         return 0;
     if (!useSurfaceTexture())
         return 0;
-    m_surfaceTexture = new android::GLConsumer(m_texture, false);
-    m_ANW = new android::Surface(m_surfaceTexture->getBufferQueue());
+    sp<BufferQueue> bq = new BufferQueue();
+    m_surfaceTexture = new android::GLConsumer(bq, m_texture);
+    m_ANW = new android::Surface(bq);
     int result = native_window_set_buffers_format(m_ANW.get(), HAL_PIXEL_FORMAT_RGBA_8888);
     GLUtils::checkSurfaceTextureError("native_window_set_buffers_format", result);
     if (result == NO_ERROR) {
@@ -122,23 +124,6 @@ android::Surface* CanvasTexture::nativeWindow()
         return 0;
     }
     return m_ANW.get();
-}
-
-bool CanvasTexture::uploadImageBitmap(SkBitmap* bitmap)
-{
-    m_hasValidTexture = false;
-    android::Surface* anw = nativeWindow();
-    if (!anw)
-        return false;
-    // Size mismatch, early abort (will fall back to software)
-    if (bitmap->width() != m_size.width() ||
-            bitmap->height() != m_size.height())
-        return false;
-
-    if (!GLUtils::updateSharedSurfaceTextureWithBitmap(anw, *bitmap))
-        return false;
-    m_hasValidTexture = true;
-    return true;
 }
 
 bool CanvasTexture::uploadImageBuffer(ImageBuffer* imageBuffer)

@@ -127,7 +127,7 @@ int prio_print_opt(struct qdisc_util *qu, FILE *f, struct rtattr *opt)
 
 	if (tb[TCA_PRIO_MQ])
 		fprintf(f, " multiqueue: %s ",
-		    *(unsigned char *)RTA_DATA(tb[TCA_PRIO_MQ]) ? "on" : "off");
+			rta_getattr_u8(tb[TCA_PRIO_MQ]) ? "on" : "off");
 
 	if (qu && !strcmp(qu->id, "prio"))
 		fprintf(f, " flow %s", qopt->enable_flow ? "enabled" : "disabled");

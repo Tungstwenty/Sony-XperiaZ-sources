@@ -66,9 +66,9 @@ void SimpleFontData::platformInit()
     if (platformData().orientation() == Vertical && !isTextOrientationFallback()) {
         static const uint32_t vheaTag = SkSetFourByteTag('v', 'h', 'e', 'a');
         static const uint32_t vorgTag = SkSetFourByteTag('V', 'O', 'R', 'G');
-        const SkFontID fontID = m_platformData.uniqueID();
-        size_t vheaSize = SkFontHost::GetTableSize(fontID, vheaTag);
-        size_t vorgSize = SkFontHost::GetTableSize(fontID, vorgTag);
+        const SkTypeface* typeface = m_platformData.typeface();
+        size_t vheaSize = typeface->getTableSize(vheaTag);
+        size_t vorgSize = typeface->getTableSize(vorgTag);
         if ((vheaSize > 0) || (vorgSize > 0))
             m_hasVerticalGlyphs = true;
     }

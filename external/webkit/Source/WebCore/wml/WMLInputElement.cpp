@@ -273,6 +273,11 @@ void WMLInputElement::reset()
 
 void WMLInputElement::defaultEventHandler(Event* evt)
 {
+    if (evt->type() == eventNames().webkitEditableContentChangedEvent && renderer() && renderer()->isTextControl()) {
+        toRenderTextControl(renderer())->subtreeHasChanged();
+        return;
+    }
+
     bool clickDefaultFormButton = false;
 
     if (evt->type() == eventNames().textInputEvent && evt->isTextEvent()) {

@@ -1,5 +1,6 @@
 /*
  * Copyright 2010, The Android Open Source Project
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -82,7 +83,7 @@ private:
 };
 
 UrlInterceptResponse::UrlInterceptResponse(JNIEnv* env, jobject response) {
-    ScopedLocalRef<jclass> javaResponse(env, env->FindClass("android/webkit/WebResourceResponse"));
+    ScopedLocalRef<jclass> javaResponse(env, env->FindClass("com/sonymobile/webkit/WebResourceResponse"));
     LOG_ALWAYS_FATAL_IF(!javaResponse.get());
     jfieldID mimeType = env->GetFieldID(javaResponse.get(), "mMimeType", "Ljava/lang/String;");
     LOG_ALWAYS_FATAL_IF(!mimeType);

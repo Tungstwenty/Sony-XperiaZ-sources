@@ -1,5 +1,6 @@
 /*
  * Copyright 2010, The Android Open Source Project
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -56,7 +57,7 @@ static const std::string& databaseDirectory()
     static std::string databaseDirectory;
     if (databaseDirectory.empty()) {
         JNIEnv* env = JSC::Bindings::getJNIEnv();
-        jclass bridgeClass = env->FindClass("android/webkit/JniUtil");
+        jclass bridgeClass = env->FindClass("com/sonymobile/webkit/JniUtil");
         jmethodID method = env->GetStaticMethodID(bridgeClass, "getDatabaseDirectory", "()Ljava/lang/String;");
         databaseDirectory = jstringToStdString(env, static_cast<jstring>(env->CallStaticObjectMethod(bridgeClass, method)));
         env->DeleteLocalRef(bridgeClass);

@@ -184,7 +184,12 @@ void WMLGoElement::prepareGETRequest(ResourceRequest& request, const KURL& url)
     RefPtr<FormData> data = createFormData(CString());
 
     KURL remoteURL(url);
-    remoteURL.setQuery(data->flattenToString());
+    String amps = "";
+    if (!remoteURL.query().isEmpty() && !data->flattenToString().isEmpty())
+        amps = "&";
+    String query = remoteURL.query() + amps + data->flattenToString();
+    remoteURL.setQuery(query);
+
     request.setURL(remoteURL);
 }
 

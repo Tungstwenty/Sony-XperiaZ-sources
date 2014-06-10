@@ -1,5 +1,4 @@
 // Copyright (c) 2011 The Chromium Authors. All rights reserved.
-// Copyright (c) 2012 The Linux Foundation. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -197,7 +196,7 @@ class URLRequestJob : public base::RefCounted<URLRequestJob> {
   // a glorified set_status, but also does internal state checking and
   // job tracking.  It should be called once per request, when the job is
   // finished doing all IO.
-virtual void NotifyDone(const URLRequestStatus& status);
+  void NotifyDone(const URLRequestStatus& status);
 
   // Some work performed by NotifyDone must be completed on a separate task
   // so as to avoid re-entering the delegate.  This method exists to perform

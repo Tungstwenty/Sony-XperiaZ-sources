@@ -1,5 +1,6 @@
 /*
  * Copyright 2012, The Android Open Source Project
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -83,11 +84,11 @@ static void InitJni(JNIEnv* env)
 
     jclass rectClass = env->FindClass("android/graphics/Rect");
     ALOG_ASSERT(rectClass, "Could not find android/graphics/Rect");
-    jclass hitTestClass = env->FindClass("android/webkit/WebViewCore$WebKitHitTest");
-    ALOG_ASSERT(hitTestClass, "Could not find android/webkit/WebViewCore$WebKitHitTest");
+    jclass hitTestClass = env->FindClass("com/sonymobile/webkit/WebViewCore$WebKitHitTest");
+    ALOG_ASSERT(hitTestClass, "Could not find com/sonymobile/webkit/WebViewCore$WebKitHitTest");
 
     gHitTestGlue.m_Init = env->GetMethodID(hitTestClass, "<init>",  "()V");
-    ALOG_ASSERT(gHitTestGlue.m_Init, "Could not find init method on android/webkit/WebViewCore$WebKitHitTest");
+    ALOG_ASSERT(gHitTestGlue.m_Init, "Could not find init method on com/sonymobile/webkit/WebViewCore$WebKitHitTest");
 
     field fields[] = {
         { hitTestClass, "mTouchRects", "[Landroid/graphics/Rect;", &gHitTestGlue.m_TouchRects },
@@ -203,8 +204,8 @@ void setRectArray(JNIEnv* env, jobject obj, jfieldID field, Vector<IntRect> &rec
 jobject AndroidHitTestResult::createJavaObject(JNIEnv* env)
 {
     InitJni(env);
-    jclass hitTestClass = env->FindClass("android/webkit/WebViewCore$WebKitHitTest");
-    ALOG_ASSERT(hitTestClass, "Could not find android/webkit/WebViewCore$WebKitHitTest");
+    jclass hitTestClass = env->FindClass("com/sonymobile/webkit/WebViewCore$WebKitHitTest");
+    ALOG_ASSERT(hitTestClass, "Could not find com/sonymobile/webkit/WebViewCore$WebKitHitTest");
 
     jobject hitTest = env->NewObject(hitTestClass, gHitTestGlue.m_Init);
     setRectArray(env, hitTest, gHitTestGlue.m_TouchRects, m_highlightRects);

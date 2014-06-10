@@ -2,7 +2,6 @@
     Copyright (C) 1998 Lars Knoll (knoll@mpi-hd.mpg.de)
     Copyright (C) 2001 Dirk Mueller <mueller@kde.org>
     Copyright (C) 2004, 2005, 2006, 2007, 2008 Apple Inc. All rights reserved.
-    Copyright (c) 2012 The Linux Foundation. All rights reserved
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Library General Public
@@ -171,9 +170,6 @@ public:
     typedef HashSet<RefPtr<SecurityOrigin>, SecurityOriginHash> SecurityOriginSet;
     void removeResourcesWithOrigin(SecurityOrigin*);
     void getOriginsWithCache(SecurityOriginSet& origins);
-
-    unsigned getLiveSize() { return m_liveSize; }
-    unsigned getDeadSize() { return m_deadSize; }
 
 private:
     MemoryCache();

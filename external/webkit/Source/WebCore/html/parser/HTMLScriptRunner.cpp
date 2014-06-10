@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2010 Google, Inc. All Rights Reserved.
- * Copyright (c) 2011, 2012 The Linux Foundation. All rights reserved
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -41,10 +40,6 @@
 #include "NotImplemented.h"
 #include "ScriptElement.h"
 #include "ScriptSourceCode.h"
-
-#include <wtf/text/CString.h>
-
-#include <StatHubCmdApi.h>
 
 namespace WebCore {
 
@@ -300,13 +295,6 @@ void HTMLScriptRunner::runScript(Element* script, const TextPosition1& scriptSta
 
         if (!scriptElement->willBeParserExecuted())
             return;
-        String currentUrl;
-        if (script->hasAttribute(srcAttr)) {
-            const String attrUrl = script->getAttribute(srcAttr);
-            currentUrl = script->document()->completeURL(attrUrl).string();
-        } else {
-            currentUrl = "inline script";
-        }
 
         if (scriptElement->willExecuteWhenDocumentFinishedParsing())
             requestDeferredScript(script);
@@ -318,17 +306,8 @@ void HTMLScriptRunner::runScript(Element* script, const TextPosition1& scriptSta
                 ScriptSourceCode sourceCode(script->textContent(), documentURLForScriptExecution(m_document), scriptStartPosition);
                 scriptElement->executeScript(sourceCode);
             }
-        } else {
+        } else
             requestParsingBlockingScript(script);
-            // updating JS execution
-            m_document->incrementNumExternalJs();
-            StatHubCmd* cmd = StatHubCmdCreate(SH_CMD_WK_RESOURCE, SH_ACTION_JS_SEQ);
-            if (NULL!=cmd) {
-                StatHubCmdAddParamAsString(cmd, currentUrl.latin1().data());
-                StatHubCmdAddParamAsUint32(cmd, m_document->getNumExternalJs());
-                StatHubCmdCommit(cmd);
-            }
-        }
     }
 }
 

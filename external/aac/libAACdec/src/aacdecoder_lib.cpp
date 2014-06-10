@@ -2,7 +2,7 @@
 /* -----------------------------------------------------------------------------------------------------------
 Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android
 
-© Copyright  1995 - 2012 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
+© Copyright  1995 - 2013 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
   Copyright (C) 2012-2013 Sony Mobile Communications AB.
 
@@ -82,15 +82,11 @@ www.iis.fraunhofer.de/amm
 amm-info@iis.fraunhofer.de
 
 Changes made in the code.
-
 2012-12-27 - Added call to CAacDecoder_ClearHistory function when AAC_TPDEC_CLEAR_BUFFER is
              requested this will clear all concealment and overlap-add buffers to clear
              all history.
-
 2013-01-08 - Added call to setParam of sbr decoder to force Init of SBR elements.
-
 2013-03-21 - Added CStreamInfo->numAuBitsRemaining to enable decoding down to last bit of the buffers.
-
 ----------------------------------------------------------------------------------------------------------- */
 
 /*****************************  MPEG-4 AAC Decoder  **************************
@@ -121,8 +117,8 @@ Changes made in the code.
 
 /* Decoder library info */
 #define AACDECODER_LIB_VL0 2
-#define AACDECODER_LIB_VL1 4
-#define AACDECODER_LIB_VL2 7
+#define AACDECODER_LIB_VL1 5
+#define AACDECODER_LIB_VL2 5
 #define AACDECODER_LIB_TITLE "AAC Decoder Lib"
 #define AACDECODER_LIB_BUILD_DATE __DATE__
 #define AACDECODER_LIB_BUILD_TIME __TIME__
@@ -273,7 +269,7 @@ setConcealMethod ( const HANDLE_AACDECODER  self,   /*!< Handle of the decoder i
   HANDLE_SBRDECODER hSbrDec = NULL;
   HANDLE_AAC_DRC hDrcInfo = NULL;
   HANDLE_PCM_DOWNMIX hPcmDmx = NULL;
-  CConcealmentMethod backupMethod;
+  CConcealmentMethod backupMethod = ConcealMethodNone;
   int backupDelay = 0;
   int bsDelay = 0;
 
@@ -408,11 +404,15 @@ aacDecoder_SetParam ( const HANDLE_AACDECODER  self,   /*!< Handle of the decode
   AAC_DECODER_ERROR errorStatus = AAC_DEC_OK;
   CConcealParams  *pConcealData = NULL;
   HANDLE_AAC_DRC hDrcInfo = NULL;
+  HANDLE_PCM_DOWNMIX hPcmDmx = NULL;
 
   /* check decoder handle */
   if (self != NULL) {
     pConcealData = &self->concealCommonData;
     hDrcInfo = self->hDrcInfo;
+    hPcmDmx = self->hPcmUtils;
+  } else {
+    errorStatus = AAC_DEC_INVALID_HANDLE;
   }
 
   /* configure the subsystems */
@@ -429,11 +429,14 @@ aacDecoder_SetParam ( const HANDLE_AACDECODER  self,   /*!< Handle of the decode
     break;
 
   case AAC_PCM_OUTPUT_CHANNELS:
+    if (value < -1 || value > (6)) {
+      return AAC_DEC_SET_PARAM_FAIL;
+    }
     {
       PCMDMX_ERROR err;
 
       err = pcmDmx_SetParam (
-              self->hPcmUtils,
+              hPcmDmx,
               NUMBER_OF_OUTPUT_CHANNELS,
               value );
 
@@ -453,7 +456,7 @@ aacDecoder_SetParam ( const HANDLE_AACDECODER  self,   /*!< Handle of the decode
       PCMDMX_ERROR err;
 
       err = pcmDmx_SetParam (
-              self->hPcmUtils,
+              hPcmDmx,
               DUAL_CHANNEL_DOWNMIX_MODE,
               value );
 
@@ -471,10 +474,14 @@ aacDecoder_SetParam ( const HANDLE_AACDECODER  self,   /*!< Handle of the decode
   case AAC_PCM_OUTPUT_CHANNEL_MAPPING:
     switch (value) {
       case 0:
-        self->channelOutputMapping = channelMappingTablePassthrough;
+        if (self != NULL) {
+          self->channelOutputMapping = channelMappingTablePassthrough;
+        }
         break;
       case 1:
-        self->channelOutputMapping = channelMappingTableWAV;
+        if (self != NULL) {
+          self->channelOutputMapping = channelMappingTableWAV;
+        }
         break;
       default:
         errorStatus = AAC_DEC_SET_PARAM_FAIL;
@@ -484,6 +491,9 @@ aacDecoder_SetParam ( const HANDLE_AACDECODER  self,   /*!< Handle of the decode
 
 
   case AAC_QMF_LOWPOWER:
+    if (value < -1 || value > 1) {
+      return AAC_DEC_SET_PARAM_FAIL;
+    }
     if (self == NULL) {
       return AAC_DEC_INVALID_HANDLE;
     }
@@ -544,13 +554,10 @@ aacDecoder_SetParam ( const HANDLE_AACDECODER  self,   /*!< Handle of the decode
     self->streamInfo.numBadBytes = 0;
     self->streamInfo.numTotalBytes = 0;
     self->streamInfo.numAuBitsRemaining = 0;
-
     CAacDecoder_ClearHistory(self);
-
     if (SBRDEC_OK != sbrDecoder_SetParam(self->hSbrDecoder, SBR_SET_RESET_FLAG, 1)) {
       errorStatus = AAC_DEC_UNKNOWN;
     }
-
     /* aacDecoder_SignalInterruption(self); */
     break;
 
@@ -820,8 +827,8 @@ LINKSPEC_CPP AAC_DECODER_ERROR aacDecoder_DecodeFrame(
       /* Export data into streaminfo structure */
       self->streamInfo.sampleRate = self->streamInfo.aacSampleRate;
       self->streamInfo.frameSize  = self->streamInfo.aacSamplesPerFrame;
-      self->streamInfo.numChannels = self->aacChannels;
     }
+    self->streamInfo.numChannels = self->streamInfo.aacNumChannels;
 
 
 
@@ -858,7 +865,7 @@ LINKSPEC_CPP AAC_DECODER_ERROR aacDecoder_DecodeFrame(
                                     pTimeData,
                                    &self->streamInfo.numChannels,
                                    &self->streamInfo.sampleRate,
-                                    self->channelOutputMapping[self->aacChannels-1],
+                                    self->channelOutputMapping[self->streamInfo.numChannels-1],
                                     interleaved,
                                     self->frameOK,
                                    &self->psPossible);

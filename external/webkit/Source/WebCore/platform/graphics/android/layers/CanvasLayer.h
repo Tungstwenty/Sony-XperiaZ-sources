@@ -34,8 +34,6 @@
 #include "LayerAndroid.h"
 #include "RenderLayer.h"
 
-#include <map>
-
 #include <wtf/RefPtr.h>
 
 namespace WebCore {
@@ -57,9 +55,6 @@ public:
     virtual bool needsTexture();
     virtual bool needsIsolatedSurface() { return true; }
 
-    static void copyRecordingToLayer(GraphicsContext* ctx, IntRect& r, int canvas_id);
-    static void setGpuCanvasStatus(int canvas_id, bool val);
-    static void copyRecording(GraphicsContext* ctx, IntRect& r, int canvas_id);
 protected:
     virtual InvalidateFlags onSetHwAccelerated(bool hwAccelerated);
 
@@ -79,35 +74,6 @@ private:
     SkRegion m_dirtyCanvas;
     SkBitmapRef* m_bitmap;
     RefPtr<CanvasTexture> m_texture;
-
-    /*******************************
-     * Recording/GPU Canvas
-     ******************************/
-    CanvasLayerAndroid* m_gpuCanvas;
-
-    /*******************************
-     * WebKit Thread
-     ******************************/
-    static SkBitmap* getRecordingBitmap(CanvasLayer* layer);
-    static SkCanvas* getRecordingCanvas(CanvasLayer* layer);
-    static SkPicture* getRecordingPicture(CanvasLayer* layer);
-    static void setRecordingBitmap(SkBitmap* bitmap, CanvasLayer* layer);
-    static void setRecordingCanvas(SkCanvas* canvas, CanvasLayer* layer);
-    static void setRecordingPicture(SkPicture* canvas, int layer_id);
-
-    /*******************************
-     * UI Thread/WebKit thread (needs synchronization)
-     ******************************/
-    static void setGpuCanvas(CanvasLayerAndroid* canvas, CanvasLayer* layer);
-    static void eraseGpuCanvas(CanvasLayer* layer);
-    static CanvasLayerAndroid* getGpuCanvas(CanvasLayer* layer);
-    static CanvasLayerAndroid* getGpuCanvas(int layerId);
-
-    static std::map<int, SkBitmap*> s_recording_bitmap;
-    static std::map<int, SkCanvas*> s_recording_canvas;
-    static std::map<int, SkPicture*> s_recording_picture;
-    static std::map<int, CanvasLayerAndroid*> s_gpu_canvas;
-    static WTF::Mutex s_mutex;
 };
 
 } // namespace WebCore

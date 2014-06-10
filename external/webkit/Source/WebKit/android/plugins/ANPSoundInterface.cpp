@@ -35,7 +35,7 @@
 struct ANPAudioTrack {
     void*                mUser;
     ANPAudioCallbackProc mProc;
-    android::AudioTrack* mTrack;
+    android::sp<android::AudioTrack> mTrack;
     int                  mChannelCount;
 };
 
@@ -110,7 +110,7 @@ static ANPAudioTrack* ANPCreateTrack(uint32_t sampleRate,
     track->mChannelCount = channelCount;
     
     if (track->mTrack->initCheck() != 0) {  // failure
-        delete track->mTrack;
+        track->mTrack.clear();
         delete track;
         track = NULL;
     }
@@ -119,7 +119,7 @@ static ANPAudioTrack* ANPCreateTrack(uint32_t sampleRate,
 
 static void ANPDeleteTrack(ANPAudioTrack* track) {
     if (track) {
-        delete track->mTrack;
+        track->mTrack.clear();
         delete track;
     }
 }

@@ -1,5 +1,6 @@
 /*
  * Copyright 2009, The Android Open Source Project
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -36,6 +37,7 @@
 #include "SecurityOrigin.h"
 #include "WebCoreJni.h"
 
+#include <cutils/log.h>
 #include <JNIHelp.h>
 
 namespace android {
@@ -170,12 +172,12 @@ static JNINativeMethod gWebStorageMethods[] = {
 int registerWebStorage(JNIEnv* env)
 {
 #ifndef NDEBUG
-    jclass webStorage = env->FindClass("android/webkit/WebStorageClassic");
+    jclass webStorage = env->FindClass("com/sonymobile/webkit/WebStorageClassic");
     ALOG_ASSERT(webStorage, "Unable to find class android.webkit.WebStorageClassic");
     env->DeleteLocalRef(webStorage);
 #endif
 
-    return jniRegisterNativeMethods(env, "android/webkit/WebStorageClassic",
+    return jniRegisterNativeMethods(env, "com/sonymobile/webkit/WebStorageClassic",
             gWebStorageMethods, NELEM(gWebStorageMethods));
 }
 

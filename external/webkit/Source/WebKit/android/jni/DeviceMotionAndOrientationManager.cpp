@@ -1,5 +1,6 @@
 /*
  * Copyright 2010, The Android Open Source Project
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,6 +34,7 @@
 #include "Frame.h"
 #include "Page.h"
 
+#include <cutils/log.h>
 #include <DeviceOrientationClientMock.h>
 #include <JNIHelp.h>
 
@@ -114,11 +116,11 @@ DeviceOrientationClient* DeviceMotionAndOrientationManager::orientationClient()
 }
 
 // JNI for android.webkit.DeviceMotionAndOrientationManager
-static const char* javaDeviceMotionAndOrientationManagerClass = "android/webkit/DeviceMotionAndOrientationManager";
+static const char* javaDeviceMotionAndOrientationManagerClass = "com/sonymobile/webkit/DeviceMotionAndOrientationManager";
 
 static WebViewCore* getWebViewCore(JNIEnv* env, jobject webViewCoreObject)
 {
-    jclass webViewCoreClass = env->FindClass("android/webkit/WebViewCore");
+    jclass webViewCoreClass = env->FindClass("com/sonymobile/webkit/WebViewCore");
     jfieldID nativeClassField = env->GetFieldID(webViewCoreClass, "mNativeClass", "I");
     env->DeleteLocalRef(webViewCoreClass);
     return reinterpret_cast<WebViewCore*>(env->GetIntField(webViewCoreObject, nativeClassField));
@@ -151,10 +153,10 @@ static void onOrientationChange(JNIEnv* env, jobject, jobject webViewCoreObject,
 }
 
 static JNINativeMethod gDeviceMotionAndOrientationManagerMethods[] = {
-    { "nativeSetUseMock", "(Landroid/webkit/WebViewCore;)V", (void*) setUseMock },
-    { "nativeOnMotionChange", "(Landroid/webkit/WebViewCore;ZDZDZDD)V", (void*) onMotionChange },
-    { "nativeSetMockOrientation", "(Landroid/webkit/WebViewCore;ZDZDZD)V", (void*) setMockOrientation },
-    { "nativeOnOrientationChange", "(Landroid/webkit/WebViewCore;ZDZDZD)V", (void*) onOrientationChange }
+    { "nativeSetUseMock", "(Lcom/sonymobile/webkit/WebViewCore;)V", (void*) setUseMock },
+    { "nativeOnMotionChange", "(Lcom/sonymobile/webkit/WebViewCore;ZDZDZDD)V", (void*) onMotionChange },
+    { "nativeSetMockOrientation", "(Lcom/sonymobile/webkit/WebViewCore;ZDZDZD)V", (void*) setMockOrientation },
+    { "nativeOnOrientationChange", "(Lcom/sonymobile/webkit/WebViewCore;ZDZDZD)V", (void*) onOrientationChange }
 };
 
 int registerDeviceMotionAndOrientationManager(JNIEnv* env)

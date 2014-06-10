@@ -2,7 +2,7 @@
 /* -----------------------------------------------------------------------------------------------------------
 Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android
 
-© Copyright  1995 - 2012 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
+© Copyright  1995 - 2013 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
   Copyright (C) 2012 Sony Mobile Communications AB.
 
@@ -124,11 +124,6 @@ struct SBR_HEADER_DATA
   INT sbr_smoothing_length;
   INT alterScale;
   INT freqScale;
-
-  /*
-    element of sbrdata
-  */
-  SR_MODE sampleRateMode;
 
   /*
     element of channelpairelement

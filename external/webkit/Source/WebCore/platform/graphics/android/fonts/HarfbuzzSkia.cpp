@@ -202,8 +202,10 @@ HB_FontClass harfbuzzSkiaClass = {
 HB_Error harfbuzzSkiaGetTable(void* voidface, const HB_Tag tag, HB_Byte* buffer, HB_UInt* len)
 {
     FontPlatformData* font = reinterpret_cast<FontPlatformData*>(voidface);
+    if (!font->typeface())
+        return HB_Err_Invalid_Argument;
 
-    const size_t tableSize = SkFontHost::GetTableSize(font->uniqueID(), tag);
+    const size_t tableSize = font->typeface()->getTableSize(tag);
     if (!tableSize)
         return HB_Err_Invalid_Argument;
     // If Harfbuzz specified a NULL buffer then it's asking for the size of the table.
@@ -214,7 +216,7 @@ HB_Error harfbuzzSkiaGetTable(void* voidface, const HB_Tag tag, HB_Byte* buffer,
 
     if (*len < tableSize)
         return HB_Err_Invalid_Argument;
-    SkFontHost::GetTableData(font->uniqueID(), tag, 0, tableSize, buffer);
+    font->typeface()->getTableData(tag, 0, tableSize, buffer);
     return HB_Err_Ok;
 }
 

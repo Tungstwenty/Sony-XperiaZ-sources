@@ -2,7 +2,7 @@
  * Copyright 2007, The Android Open Source Project
  * Copyright (c) 2011, 2012 The Linux Foundation. All rights reserved.
  * Copyright (C) 2011, Sony Ericsson Mobile Communications AB
- * Copyright (C) 2012 Sony Mobile Communications AB.
+ * Copyright (C) 2012-2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -61,6 +61,7 @@
 #include "WebSocket.h"
 #include "WebViewCore.h"
 
+#include <cutils/log.h>
 #include <JNIHelp.h>
 #include <utils/misc.h>
 #include <wtf/text/CString.h>
@@ -72,7 +73,7 @@ static const int permissionFlags660 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
 struct FieldIds {
     FieldIds(JNIEnv* env, jclass clazz) {
         mLayoutAlgorithm = env->GetFieldID(clazz, "mLayoutAlgorithm",
-                "Landroid/webkit/WebSettings$LayoutAlgorithm;");
+                "Lcom/sonymobile/webkit/WebSettings$LayoutAlgorithm;");
         mTextSize = env->GetFieldID(clazz, "mTextSize", "I");
         mStandardFontFamily = env->GetFieldID(clazz, "mStandardFontFamily",
                 "Ljava/lang/String;");
@@ -104,7 +105,7 @@ struct FieldIds {
         mAllowUniversalAccessFromFileURLs = env->GetFieldID(clazz, "mAllowUniversalAccessFromFileURLs", "Z");
         mAllowFileAccessFromFileURLs = env->GetFieldID(clazz, "mAllowFileAccessFromFileURLs", "Z");
         mPluginState = env->GetFieldID(clazz, "mPluginState",
-                "Landroid/webkit/WebSettings$PluginState;");
+                "Lcom/sonymobile/webkit/WebSettings$PluginState;");
 #if ENABLE(DATABASE)
         mDatabaseEnabled = env->GetFieldID(clazz, "mDatabaseEnabled", "Z");
 #endif
@@ -143,8 +144,8 @@ struct FieldIds {
         mPageCacheCapacity = env->GetFieldID(clazz, "mPageCacheCapacity", "I");
 #if ENABLE(WEB_AUTOFILL)
         mAutoFillEnabled = env->GetFieldID(clazz, "mAutoFillEnabled", "Z");
-        mAutoFillProfile = env->GetFieldID(clazz, "mAutoFillProfile", "Landroid/webkit/WebSettingsClassic$AutoFillProfile;");
-        jclass autoFillProfileClass = env->FindClass("android/webkit/WebSettingsClassic$AutoFillProfile");
+        mAutoFillProfile = env->GetFieldID(clazz, "mAutoFillProfile", "Lcom/sonymobile/webkit/WebSettingsClassic$AutoFillProfile;");
+        jclass autoFillProfileClass = env->FindClass("com/sonymobile/webkit/WebSettingsClassic$AutoFillProfile");
         mAutoFillProfileFullName = env->GetFieldID(autoFillProfileClass, "mFullName", "Ljava/lang/String;");
         mAutoFillProfileEmailAddress = env->GetFieldID(autoFillProfileClass, "mEmailAddress", "Ljava/lang/String;");
         mAutoFillProfileCompanyName = env->GetFieldID(autoFillProfileClass, "mCompanyName", "Ljava/lang/String;");
@@ -661,11 +662,11 @@ static JNINativeMethod gWebSettingsMethods[] = {
 
 int registerWebSettings(JNIEnv* env)
 {
-    jclass clazz = env->FindClass("android/webkit/WebSettingsClassic");
+    jclass clazz = env->FindClass("com/sonymobile/webkit/WebSettingsClassic");
     ALOG_ASSERT(clazz, "Unable to find class WebSettingsClassic!");
     gFieldIds = new FieldIds(env, clazz);
     env->DeleteLocalRef(clazz);
-    return jniRegisterNativeMethods(env, "android/webkit/WebSettingsClassic",
+    return jniRegisterNativeMethods(env, "com/sonymobile/webkit/WebSettingsClassic",
             gWebSettingsMethods, NELEM(gWebSettingsMethods));
 }
 

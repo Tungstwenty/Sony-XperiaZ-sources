@@ -76,6 +76,10 @@ typedef HashMap<FallbackFontKey, FontPlatformData*> FallbackHash;
 static void updateForFont(SkPaint* paint, const SimpleFontData* font) {
     font->platformData().setupPaint(paint);
     paint->setTextEncoding(SkPaint::kGlyphID_TextEncoding);
+
+    SkPaintOptionsAndroid paintOpts = paint->getPaintOptionsAndroid();
+    paintOpts.setUseFontFallbacks(true);
+    paint->setPaintOptionsAndroid(paintOpts);
 }
 
 static SkPaint* setupFill(SkPaint* paint, GraphicsContext* gc,
@@ -716,7 +720,7 @@ const FontPlatformData* TextRunWalker::setupComplexFont(
         if (platformData.typeface())
             currentStyle = platformData.typeface()->style();
         SkTypeface* typeface = SkCreateTypefaceForScript(script, currentStyle,
-            SkPaint::kElegant_Variant);
+            SkPaintOptionsAndroid::kElegant_Variant);
         newPlatformData = new FontPlatformData(platformData, typeface);
         SkSafeUnref(typeface);
         fallbackPlatformData.set(key, newPlatformData);
@@ -861,10 +865,12 @@ void TextRunWalker::setGlyphPositions(bool isRTL)
         // no advance on this glyph, that should be ok.
         if (0 == m_item.advances[i]) {
             const HB_UChar16 c = m_item.string[m_item.item.pos + logClustersIndex];
+#ifndef REVERIE
             if ((c == zeroWidthJoiner) || (c == zeroWidthNonJoiner)) {
                 static Glyph spaceGlyph = m_font->glyphDataForCharacter(space, false).glyph;
                 m_glyphs16[i] = spaceGlyph;
             }
+#endif
         }
 
         // TODO We would like to add m_letterSpacing after each cluster, but I

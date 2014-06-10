@@ -280,9 +280,9 @@ MediaTexture::TextureWrapper* MediaTexture::createTexture()
 
     // populate the wrapper
     glGenTextures(1, &wrapper->textureId);
-    wrapper->surfaceTexture = new android::GLConsumer(wrapper->textureId);
-    wrapper->nativeWindow = new android::Surface(
-            wrapper->surfaceTexture->getBufferQueue());
+    sp<BufferQueue> bq = new BufferQueue();
+    wrapper->surfaceTexture = new android::GLConsumer(bq, wrapper->textureId);
+    wrapper->nativeWindow = new android::Surface(bq);
     wrapper->dimensions.setEmpty();
 
     // setup callback

@@ -42,18 +42,8 @@
 #include "SkBitmapRef.h"
 #include "SkCanvas.h"
 #include "TilesManager.h"
-#include "PlatformGraphicsContext.h"
-#include "PlatformGraphicsContextSkia.h"
-#include "CanvasLayerAndroid.h"
-#include <cutils/log.h>
 
 namespace WebCore {
-
-std::map<int, SkBitmap*> CanvasLayer::s_recording_bitmap;
-std::map<int, SkCanvas*> CanvasLayer::s_recording_canvas;
-std::map<int, SkPicture*> CanvasLayer::s_recording_picture;
-std::map<int, CanvasLayerAndroid*> CanvasLayer::s_gpu_canvas;
-WTF::Mutex CanvasLayer::s_mutex;
 
 CanvasLayer::CanvasLayer(RenderLayer* owner, HTMLCanvasElement* canvas)
     : LayerAndroid(owner)
@@ -63,22 +53,14 @@ CanvasLayer::CanvasLayer(RenderLayer* owner, HTMLCanvasElement* canvas)
 {
     init();
     m_canvas->addObserver(this);
-    m_gpuCanvas = new CanvasLayerAndroid();
-    int canvasId = uniqueId();
-    m_gpuCanvas->setCanvasID(canvasId);
-    m_canvas->setCanvasId(canvasId);
     // Make sure we initialize in case the canvas has already been laid out
     canvasResized(m_canvas);
-
-    MutexLocker locker(s_mutex);
-    CanvasLayer::setGpuCanvas(m_gpuCanvas, this);
 }
 
 CanvasLayer::CanvasLayer(const CanvasLayer& layer)
     : LayerAndroid(layer)
     , m_canvas(0)
     , m_bitmap(0)
-    , m_gpuCanvas(0)
 {
     init();
     if (!layer.m_canvas) {
@@ -93,98 +75,29 @@ CanvasLayer::CanvasLayer(const CanvasLayer& layer)
     m_visibleContentRect = layer.visibleContentRect();
     m_offsetFromRenderer = layer.offsetFromRenderer();
     bool previousState = m_texture->hasValidTexture();
-
-    if(layer.m_canvas->isUsingGpuRendering())
-        return;
-
-    ImageBuffer* imageBuffer = layer.m_canvas->buffer();
-    
-    if (!previousState && layer.m_dirtyCanvas.isEmpty() && imageBuffer && !(imageBuffer->drawsUsingRecording())) {
+    if (!previousState && layer.m_dirtyCanvas.isEmpty()) {
         // We were previously in software and don't have anything new to draw,
         // so stay in software
         m_bitmap = layer.bitmap();
         SkSafeRef(m_bitmap);
     } else {
-
-        if(imageBuffer && imageBuffer->drawsUsingRecording() && !layer.m_canvas->isUsingGpuRendering())
-        {
-            bool canUseGpuRendering = imageBuffer->canUseGpuRendering();
-
-            if(canUseGpuRendering && layer.m_canvas->canUseGpuRendering())
-            {
-                layer.m_canvas->enableGpuRendering();
-                CanvasLayer::setGpuCanvasStatus(layer.uniqueId(), true);
+        // Attempt to upload to a surface texture
+        if (!m_texture->uploadImageBuffer(layer.m_canvas->buffer())) {
+            // Blargh, no surface texture or ImageBuffer - fall back to software
+            m_bitmap = layer.bitmap();
+            SkSafeRef(m_bitmap);
+            // Merge the canvas invals with the layer's invals to repaint the needed
+            // tiles.
+            SkRegion::Iterator iter(layer.m_dirtyCanvas);
+            const IntPoint& offset = m_visibleContentRect.location();
+            for (; !iter.done(); iter.next()) {
+                SkIRect diff = iter.rect();
+                diff.fLeft += offset.x();
+                diff.fRight += offset.x();
+                diff.fTop += offset.y();
+                diff.fBottom += offset.y();
+                m_dirtyRegion.op(diff, SkRegion::kUnion_Op);
             }
-        }
-
-        // If recording is being used
-        if(imageBuffer && imageBuffer->drawsUsingRecording())
-        {
-            GraphicsContext* gc = imageBuffer->context();
-            //SkPicture* canvasRecording = gc->platformContext()->getRecordingPicture();
-
-            SkPicture* canvasRecording = CanvasLayer::getRecordingPicture(this);
-            SkBitmap* bitmap = CanvasLayer::getRecordingBitmap(this);
-            SkCanvas* canvas = CanvasLayer::getRecordingCanvas(this);
-
-            if(canvasRecording == NULL)
-                return;
-
-            if(bitmap == NULL || bitmap->width() != canvasRecording->width()
-                    || bitmap->height() != canvasRecording->height())
-            {
-                SkBitmap* newBitmap = new SkBitmap();
-                newBitmap->setConfig(SkBitmap::kARGB_8888_Config, canvasRecording->width(), canvasRecording->height());
-                newBitmap->allocPixels();
-                newBitmap->eraseColor(0);
-                CanvasLayer::setRecordingBitmap(newBitmap, this);
-                bitmap = newBitmap;
-                if(canvas != NULL)
-                    canvas->setBitmapDevice(*bitmap);
-            }
-
-            if(canvas == NULL)
-            {
-                canvas = new SkCanvas();
-                canvas->setBitmapDevice(*bitmap);
-                CanvasLayer::setRecordingCanvas(canvas, this);
-            }
-
-            canvas->drawARGB(0, 0, 0, 0, SkXfermode::kClear_Mode);
-            canvasRecording->draw(canvas);
-
-            if (!m_texture->uploadImageBitmap(bitmap)) {
-                //SLOGD("+++++++++++++++++++++ Didn't upload bitmap .. fall back to software");
-                // TODO:: Fix this
-            }
-        }
-        else
-        {
-            if (!m_texture->uploadImageBuffer(layer.m_canvas->buffer())) {
-                // Blargh, no surface texture or ImageBuffer - fall back to software
-                m_bitmap = layer.bitmap();
-                SkSafeRef(m_bitmap);
-                // Merge the canvas invals with the layer's invals to repaint the needed
-                // tiles.
-                SkRegion::Iterator iter(layer.m_dirtyCanvas);
-                const IntPoint& offset = m_visibleContentRect.location();
-                for (; !iter.done(); iter.next()) {
-                    SkIRect diff = iter.rect();
-                    diff.fLeft += offset.x();
-                    diff.fRight += offset.x();
-                    diff.fTop += offset.y();
-                    diff.fBottom += offset.y();
-                    m_dirtyRegion.op(diff, SkRegion::kUnion_Op);
-                }
-            }else{
-                ImageBuffer* imageBuffer = layer.m_canvas->buffer();
-                bool recordingCanvasEnabled = layer.m_canvas->isRecordingCanvasEnabled();
-
-                if(recordingCanvasEnabled && imageBuffer && imageBuffer->isAnimating()){
-                    SLOGD("[%s] Animation detected. Converting the HTML5 canvas buffer to a SkPicture.", __FUNCTION__);
-                    imageBuffer->convertToRecording();
-                }
-            }//End of non-recording
         }
         if (previousState != m_texture->hasValidTexture()) {
             // Need to do a full inval of the canvas content as we are mode switching
@@ -197,41 +110,7 @@ CanvasLayer::CanvasLayer(const CanvasLayer& layer)
 CanvasLayer::~CanvasLayer()
 {
     if (m_canvas)
-    {
         m_canvas->removeObserver(this);
-        MutexLocker lock(s_mutex);
-        if(m_gpuCanvas)
-        {
-            CanvasLayer::eraseGpuCanvas(this);
-            int id = m_gpuCanvas->getCanvasID();
-            CanvasLayerAndroid::markGLAssetsForRemoval(id);
-            delete m_gpuCanvas;
-            m_gpuCanvas = NULL;
-        }
-
-        int canvas_id = this->uniqueId();
-        SkCanvas* canvas = CanvasLayer::getRecordingCanvas(this);
-        if(canvas != NULL)
-        {
-            delete canvas;
-            s_recording_canvas.erase(canvas_id);
-        }
-
-        SkBitmap* bitmap = CanvasLayer::getRecordingBitmap(this);
-        if(bitmap != NULL)
-        {
-            delete bitmap;
-            s_recording_bitmap.erase(canvas_id);
-        }
-
-        SkPicture* picture = CanvasLayer::getRecordingPicture(this);
-        if(picture != NULL)
-        {
-            delete picture;
-            s_recording_picture.erase(canvas_id);
-        }
-
-    }
     SkSafeUnref(m_bitmap);
 }
 
@@ -302,12 +181,7 @@ IntSize CanvasLayer::offsetFromRenderer() const
 
 bool CanvasLayer::needsTexture()
 {
-    MutexLocker locker(s_mutex);
-    CanvasLayerAndroid* gpuCanvas = CanvasLayer::getGpuCanvas(this);
-    if(gpuCanvas && gpuCanvas->isGpuCanvasEnabled())
-        return false;
-    else
-        return (m_bitmap && !masksToBounds()) || LayerAndroid::needsTexture();
+    return (m_bitmap && !masksToBounds()) || LayerAndroid::needsTexture();
 }
 
 void CanvasLayer::contentDraw(SkCanvas* canvas, PaintStyle style)
@@ -324,211 +198,24 @@ void CanvasLayer::contentDraw(SkCanvas* canvas, PaintStyle style)
 
 bool CanvasLayer::drawGL(bool layerTilesDisabled)
 {
-    MutexLocker locker(s_mutex);
-    CanvasLayerAndroid* gpuCanvas = CanvasLayer::getGpuCanvas(this);
-    if(gpuCanvas && gpuCanvas->isGpuCanvasEnabled())
-    {
-        bool ret = LayerAndroid::drawGL(layerTilesDisabled);
-        gpuCanvas->drawGL(layerTilesDisabled, m_drawTransform);
-        return ret;
+    bool ret = LayerAndroid::drawGL(layerTilesDisabled);
+    m_texture->requireTexture();
+    if (!m_bitmap && m_texture->updateTexImage()) {
+        SkRect rect = SkRect::MakeXYWH(m_visibleContentRect.x() - m_offsetFromRenderer.width(),
+                                       m_visibleContentRect.y() - m_offsetFromRenderer.height(),
+                                       m_visibleContentRect.width(), m_visibleContentRect.height());
+        TextureQuadData data(m_texture->texture(), GL_TEXTURE_EXTERNAL_OES,
+                             GL_LINEAR, LayerQuad, &m_drawTransform, &rect);
+        TilesManager::instance()->shader()->drawQuad(&data);
     }
-    else
-    {
-        bool ret = LayerAndroid::drawGL(layerTilesDisabled);
-        m_texture->requireTexture();
-        if (!m_bitmap && m_texture->updateTexImage()) {
-            SkRect rect = SkRect::MakeXYWH(m_visibleContentRect.x() - m_offsetFromRenderer.width(),
-                                           m_visibleContentRect.y() - m_offsetFromRenderer.height(),
-                                           m_visibleContentRect.width(), m_visibleContentRect.height());
-            TextureQuadData data(m_texture->texture(), GL_TEXTURE_EXTERNAL_OES,
-                                 GL_LINEAR, LayerQuad, &m_drawTransform, &rect);
-            TilesManager::instance()->shader()->drawQuad(&data);
-        }
-        return ret;
-    }
+    return ret;
 }
-
-/******************************************
- * Recording/GPU Canvas
- * ****************************************/
 
 LayerAndroid::InvalidateFlags CanvasLayer::onSetHwAccelerated(bool hwAccelerated)
 {
     if (m_texture->setHwAccelerated(hwAccelerated))
         return LayerAndroid::InvalidateLayers;
     return LayerAndroid::InvalidateNone;
-}
-
-SkBitmap* CanvasLayer::getRecordingBitmap(CanvasLayer* layer)
-{
-    int canvas_id = layer->uniqueId();
-    std::map<int, SkBitmap*>::iterator bit_it = s_recording_bitmap.find(canvas_id);
-    if(bit_it != s_recording_bitmap.end())
-        return bit_it->second;
-    else
-        return NULL;
-}
-
-SkCanvas* CanvasLayer::getRecordingCanvas(CanvasLayer* layer)
-{
-    int canvas_id = layer->uniqueId();
-    std::map<int, SkCanvas*>::iterator can_it = s_recording_canvas.find(canvas_id);
-    if(can_it != s_recording_canvas.end())
-        return can_it->second;
-    else
-        return NULL;
-}
-
-SkPicture* CanvasLayer::getRecordingPicture(CanvasLayer* layer)
-{
-    int canvas_id = layer->uniqueId();
-    std::map<int, SkPicture*>::iterator can_it = s_recording_picture.find(canvas_id);
-    if(can_it != s_recording_picture.end())
-        return can_it->second;
-    else
-        return NULL;
-}
-
-void CanvasLayer::setRecordingBitmap(SkBitmap* bitmap, CanvasLayer* layer)
-{
-    int canvas_id = layer->uniqueId();
-    std::map<int, SkBitmap*>::iterator bit_it = s_recording_bitmap.find(canvas_id);
-    if(bit_it != s_recording_bitmap.end())
-    {
-        SkBitmap* oldBitmap = bit_it->second;
-        if(oldBitmap != NULL)
-        {
-            oldBitmap->reset();
-            delete oldBitmap;
-            oldBitmap = NULL;
-            s_recording_bitmap.erase(canvas_id);
-        }
-    }
-
-    s_recording_bitmap.insert(std::make_pair(canvas_id, bitmap));
-}
-
-void CanvasLayer::setRecordingCanvas(SkCanvas* canvas, CanvasLayer* layer)
-{
-    int canvas_id = layer->uniqueId();
-    std::map<int, SkCanvas*>::iterator can_it = s_recording_canvas.find(canvas_id);
-    if(can_it != s_recording_canvas.end())
-    {
-        SkCanvas* oldCanvas = can_it->second;
-        if(oldCanvas != NULL)
-        {
-            delete oldCanvas;
-            oldCanvas = NULL;
-            s_recording_canvas.erase(canvas_id);
-        }
-    }
-
-    s_recording_canvas.insert(std::make_pair(canvas_id, canvas));
-}
-
-void CanvasLayer::setRecordingPicture(SkPicture* picture, int layer_id)
-{
-    int canvas_id = layer_id;
-    std::map<int, SkPicture*>::iterator can_it = s_recording_picture.find(canvas_id);
-    if(can_it != s_recording_picture.end())
-    {
-        SkPicture* oldPicture = can_it->second;
-        if(oldPicture != NULL)
-        {
-            delete oldPicture;
-            oldPicture = NULL;
-            s_recording_picture.erase(canvas_id);
-        }
-    }
-
-    s_recording_picture.insert(std::make_pair(canvas_id, picture));
-}
-
-void CanvasLayer::setGpuCanvasStatus(int canvas_id, bool val)
-{
-    MutexLocker locker(s_mutex);
-    CanvasLayerAndroid* gpuCanvas = CanvasLayer::getGpuCanvas(canvas_id);
-    if(gpuCanvas != NULL)
-    {
-        gpuCanvas->setGpuCanvasStatus(val);
-    }
-}
-
-void CanvasLayer::copyRecordingToLayer(GraphicsContext* ctx, IntRect& r, int canvas_id)
-{
-    if(ctx)
-    {
-        SkPicture* canvasRecording = ctx->platformContext()->getRecordingPicture();
-        SkPicture dstPicture(*canvasRecording);
-        IntSize size = r.size();
-
-        MutexLocker locker(s_mutex);
-        CanvasLayerAndroid* gpuCanvas = CanvasLayer::getGpuCanvas(canvas_id);
-        if(gpuCanvas)
-        {
-            gpuCanvas->setPicture(dstPicture, size);
-        }
-    }
-}
-
-void CanvasLayer::copyRecording(GraphicsContext* ctx, IntRect& r, int canvas_id)
-{
-    if(ctx)
-    {
-        SkPicture* canvasRecording = ctx->platformContext()->getRecordingPicture();
-        SkPicture* dstPicture = new SkPicture(*canvasRecording);
-        IntSize size = r.size();
-
-        CanvasLayer::setRecordingPicture(dstPicture, canvas_id);
-    }
-}
-//NOTE::USE OF THE FOLLOWING FUNCTIONS WITHOUT LOCKING s_mutex is THREAD UNSAFE
-
-CanvasLayerAndroid* CanvasLayer::getGpuCanvas(int layerId)
-{
-    std::map<int, CanvasLayerAndroid*>::iterator can_it = s_gpu_canvas.find(layerId);
-    if(can_it != s_gpu_canvas.end())
-        return can_it->second;
-    else
-        return NULL;
-}
-
-CanvasLayerAndroid* CanvasLayer::getGpuCanvas(CanvasLayer* layer)
-{
-    int canvas_id = layer->uniqueId();
-    std::map<int, CanvasLayerAndroid*>::iterator can_it = s_gpu_canvas.find(canvas_id);
-    if(can_it != s_gpu_canvas.end())
-        return can_it->second;
-    else
-        return NULL;
-}
-
-void CanvasLayer::setGpuCanvas(CanvasLayerAndroid* canvas, CanvasLayer* layer)
-{
-    int canvas_id = layer->uniqueId();
-    std::map<int, CanvasLayerAndroid*>::iterator can_it = s_gpu_canvas.find(canvas_id);
-    if(can_it != s_gpu_canvas.end())
-    {
-        CanvasLayerAndroid* oldCanvas = can_it->second;
-        if(oldCanvas != NULL)
-        {
-            oldCanvas = NULL;
-            s_gpu_canvas.erase(canvas_id);
-        }
-    }
-    s_gpu_canvas.insert(std::make_pair(canvas_id, canvas));
-}
-
-void CanvasLayer::eraseGpuCanvas(CanvasLayer* layer)
-{
-    int canvas_id = layer->uniqueId();
-    std::map<int, CanvasLayerAndroid*>::iterator can_it = s_gpu_canvas.find(canvas_id);
-    if(can_it != s_gpu_canvas.end())
-    {
-        CanvasLayerAndroid* oldCanvas = can_it->second;
-        oldCanvas = NULL;
-        s_gpu_canvas.erase(canvas_id);
-    }
 }
 
 } // namespace WebCore

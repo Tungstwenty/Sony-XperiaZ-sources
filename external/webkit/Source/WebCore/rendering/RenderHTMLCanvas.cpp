@@ -41,8 +41,6 @@ using namespace HTMLNames;
 
 RenderHTMLCanvas::RenderHTMLCanvas(HTMLCanvasElement* element)
     : RenderReplaced(element, element->size())
-    , m_acceleratedCanvas(false)
-    , m_requiresLayer(false)
 {
     view()->frameView()->setIsVisuallyNonEmpty();
 }
@@ -60,7 +58,7 @@ bool RenderHTMLCanvas::requiresLayer() const
         return true;
     
     HTMLCanvasElement* canvas = static_cast<HTMLCanvasElement*>(node());
-    return (canvas && canvas->renderingContext() && canvas->renderingContext()->isAccelerated());
+    return canvas && canvas->renderingContext() && canvas->renderingContext()->isAccelerated();
 }
 
 void RenderHTMLCanvas::paintReplaced(PaintInfo& paintInfo, int tx, int ty)

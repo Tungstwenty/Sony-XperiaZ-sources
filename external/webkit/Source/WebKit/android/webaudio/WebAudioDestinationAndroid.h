@@ -35,6 +35,7 @@
 #include "AudioBus.h"
 #include "AudioDestination.h"
 #include "AudioSourceProvider.h"
+#include <utils/StrongPointer.h>
 #include <utils/threads.h>
 
 #include <wtf/Vector.h>
@@ -71,7 +72,7 @@ private:
     AudioSourceProvider& m_provider;
     AudioBus m_renderBus;
 
-    android::AudioTrack* m_audioTrack;
+    android::sp<android::AudioTrack> m_audioTrack;
     android::Mutex       m_lock;
 
     float m_sampleRate;

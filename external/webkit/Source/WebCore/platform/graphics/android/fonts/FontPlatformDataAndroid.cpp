@@ -1,6 +1,7 @@
 /*
  * Copyright 2009, The Android Open Source Project
  * Copyright (C) 2006 Apple Computer, Inc.
+ * Copyright (C) 2014 Sony Mobile Communications AB
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -210,10 +211,15 @@ void FontPlatformData::setupPaint(SkPaint* paint) const
     paint->setAntiAlias(true);
     paint->setSubpixelText(true);
     paint->setHinting(SkPaint::kSlight_Hinting);
+    paint->setEmbeddedBitmapText(true);
     paint->setTextSize(SkFloatToScalar(m_textSize));
     paint->setFakeBoldText(m_fakeBold);
     paint->setTextSkewX(m_fakeItalic ? -SK_Scalar1/4 : 0);
-    paint->setLanguage(s_defaultLanguage);
+
+    SkPaintOptionsAndroid paintOpts = paint->getPaintOptionsAndroid();
+    paintOpts.setLanguage(s_defaultLanguage);
+    paintOpts.setUseFontFallbacks(true);
+    paint->setPaintOptionsAndroid(paintOpts);
 #ifndef SUPPORT_COMPLEX_SCRIPTS
     paint->setTextEncoding(SkPaint::kUTF16_TextEncoding);
 #endif
@@ -258,7 +264,7 @@ unsigned FontPlatformData::hash() const
 bool FontPlatformData::isFixedPitch() const
 {
     if (m_typeface && (m_typeface != hashTableDeletedFontValue()))
-        return m_typeface->isFixedWidth();
+        return m_typeface->isFixedPitch();
     else
         return false;
 }

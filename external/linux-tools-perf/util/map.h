@@ -70,8 +70,6 @@ struct machine {
 	struct rb_node	  rb_node;
 	pid_t		  pid;
 	char		  *root_dir;
-	struct rb_root    threads;
-	struct list_head  dead_threads;
 	struct list_head  user_dsos;
 	struct list_head  kernel_dsos;
 	struct map_groups kmaps;

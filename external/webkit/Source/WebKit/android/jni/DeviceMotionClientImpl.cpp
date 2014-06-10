@@ -27,6 +27,7 @@
 #include "DeviceMotionClientImpl.h"
 
 #include "WebViewCore.h"
+#include <cutils/log.h>
 #include <DeviceMotionController.h>
 #include <Frame.h>
 #include <JNIHelp.h>

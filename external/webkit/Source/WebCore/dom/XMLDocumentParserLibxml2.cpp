@@ -1063,18 +1063,11 @@ void XMLDocumentParser::internalSubset(const xmlChar* name, const xmlChar* exter
         String extId = toString(externalID);
 #endif
 #if ENABLE(WML)
-        //make sure extid in uppercase
-        extId = extId.upper();
         if (isWMLDocument()
-            && extId != "-//WAPFORUM//DTD WML 2.0//EN"
             && extId != "-//WAPFORUM//DTD WML 1.3//EN"
             && extId != "-//WAPFORUM//DTD WML 1.2//EN"
             && extId != "-//WAPFORUM//DTD WML 1.1//EN"
-            && extId != "-//WAPFORUM//DTD WML 1.0//EN"
-            && extId != "-//OPENWAVE.COM//DTD WML 1.3//EN"
-            && extId != "-//OPENWAVE.COM//DTD WML 1.2//EN"
-            && extId != "-//OPENWAVE.COM//DTD WML 1.1//EN"
-            && extId != "-//OPENWAVE.COM//DTD WML 1.0//EN")
+            && extId != "-//WAPFORUM//DTD WML 1.0//EN")
             handleError(fatal, "Invalid DTD Public ID", lineNumber(), columnNumber());
 #endif
 #if ENABLE(XHTMLMP)

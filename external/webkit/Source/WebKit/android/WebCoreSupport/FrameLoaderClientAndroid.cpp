@@ -805,16 +805,15 @@ bool FrameLoaderClientAndroid::canShowMIMEType(const String& mimeType) const {
     // FIXME: This looks like it has to do with whether or not a type can be
     // shown "internally" (i.e. inside the browser) regardless of whether
     // or not the browser is doing the rendering, e.g. a full page plugin.
-
-    // Porting from ics, add some exception, we need Clients to handle these types:
-    // oma download
-    if (mimeType == "application/vnd.oma.dd+xml")
-        return false;
-
     //Always download Microsoft PlayReady DRM WebInitiator mimeTypes and not try to load
     //them even if they end with +xml This change is made because of the addition of
     //DOMImplementation::isXMLMIMEType in the condition below
     if (mimeType == "application/vnd.ms-playready.initiator+xml")
+        return false;
+
+    // Porting from ics, add some exception, we need Clients to handle these types:
+    // oma download
+    if (mimeType == "application/vnd.oma.dd+xml")
         return false;
 
     if (MIMETypeRegistry::isSupportedImageResourceMIMEType(mimeType) ||

@@ -160,8 +160,6 @@
 #include <wtf/PassRefPtr.h>
 #include <wtf/StdLibExtras.h>
 #include <wtf/text/StringBuffer.h>
-#include <wtf/text/CString.h>
-#include <cutils/properties.h>
 
 #if ENABLE(SHARED_WORKERS)
 #include "SharedWorkerRepository.h"
@@ -236,8 +234,6 @@
 using namespace std;
 using namespace WTF;
 using namespace Unicode;
-
-#include <StatHubCmdApi.h>
 
 namespace WebCore {
 
@@ -454,9 +450,6 @@ Document::Document(Frame* frame, const KURL& url, bool isXHTML, bool isHTML)
     , m_writingModeSetOnDocumentElement(false)
     , m_writeRecursionIsTooDeep(false)
     , m_writeRecursionDepth(0)
-    , m_externalJs(0)
-    , m_doObjPrfth(true)
-    , m_doJsCssPrfth(false)
 {
     m_document = this;
 
@@ -529,12 +522,6 @@ Document::Document(Frame* frame, const KURL& url, bool isXHTML, bool isHTML)
 #if ENABLE(XHTMLMP)
     m_shouldProcessNoScriptElement = !(m_frame && m_frame->script()->canExecuteScripts(NotAboutToExecuteScript));
 #endif
-
-    m_doObjPrfth = StatHubIsProcReady("pp_plugin");
-    char value[PROPERTY_VALUE_MAX] = {'\0'};
-    property_get("stathub.pp.prfthmod", value, "0");
-    if (atoi(value) == 1)
-        m_doJsCssPrfth = true;
 }
 
 Document::~Document()
@@ -600,7 +587,6 @@ Document::~Document()
         m_documentRareData = 0;
         clearFlag(HasRareDataFlag);
     }
-    m_externalJs = 0;
 }
 
 void Document::removedLastRef()
@@ -2350,26 +2336,11 @@ void Document::logExceptionToConsole(const String& errorMessage, int lineNumber,
     addMessage(JSMessageSource, messageType, ErrorMessageLevel, errorMessage, lineNumber, sourceURL, callStack);
 }
 
-static void updateDocumentUrl(const KURL& url) {
-
-    unsigned short main_url_len = url.string().length();
-
-    if (main_url_len && url.protocolInHTTPFamily()) {
-        StatHubCmd* cmd = StatHubCmdCreate(SH_CMD_WK_MAIN_URL, SH_ACTION_WILL_START);
-        if (NULL!=cmd) {
-            StatHubCmdAddParamAsString(cmd, url.string().latin1().data());
-            StatHubCmdCommit(cmd);
-        }
-    }
-}
-
 void Document::setURL(const KURL& url)
 {
     const KURL& newURL = url.isEmpty() ? blankURL() : url;
     if (newURL == m_url)
         return;
-
-    updateDocumentUrl(url);
 
     m_url = newURL;
     m_documentURI = m_url.string();

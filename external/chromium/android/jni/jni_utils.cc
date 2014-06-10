@@ -1,4 +1,5 @@
  // Copyright (c) 2010 The Chromium Authors. All rights reserved.
+// Copyright (C) 2013 Sony Mobile Communications AB.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +10,7 @@
 
 namespace {
 JavaVM* sVM = NULL;
+android::jni::JniUtilHelper sJniUtilHelper;
 
 JavaVM* getJavaVM() {
   return sVM;
@@ -18,10 +20,52 @@ JavaVM* getJavaVM() {
 namespace android {
 namespace jni {
 
+JniUtilHelper::JniUtilHelper() :
+    m_jniUtilClass(0),
+    m_getAutoFillQueryMethodID(0),
+    m_contentUrlSizeMethodID(0),
+    m_contentUrlStreamMethodID(0),
+    m_initialized(false) {
+}
+
+JniUtilHelper::~JniUtilHelper() {
+  if (m_jniUtilClass) {
+    GetJNIEnv()->DeleteGlobalRef(m_jniUtilClass);
+  }
+}
+
+void JniUtilHelper::init() {
+  if (!m_initialized) {
+    JNIEnv* env = android::jni::GetJNIEnv();
+
+    jclass localClass = env->FindClass("com/sonymobile/webkit/JniUtil");
+    if (!localClass) {
+      LOG(ERROR) << "failed to find JniUtil java class";
+    }
+    m_jniUtilClass = static_cast<jclass>(env->NewGlobalRef(localClass));
+    env->DeleteLocalRef(localClass);
+
+    m_getAutoFillQueryMethodID = env->GetStaticMethodID(m_jniUtilClass,
+        "getAutofillQueryUrl", "()Ljava/lang/String;");
+    m_contentUrlSizeMethodID = env->GetStaticMethodID(m_jniUtilClass,
+        "contentUrlSize", "(Ljava/lang/String;)J");
+    m_contentUrlStreamMethodID = env->GetStaticMethodID(m_jniUtilClass,
+        "contentUrlStream", "(Ljava/lang/String;)Ljava/io/InputStream;");
+
+    m_initialized = true;
+  }
+}
+
+JniUtilHelper* getJniUtilHelper() {
+  return &sJniUtilHelper;
+}
+
 // All JNI code assumes this has previously been called with a valid VM
 void SetJavaVM(JavaVM* vm)
 {
   sVM = vm;
+
+  sJniUtilHelper.init();
 }
 
 bool checkException(JNIEnv* env)

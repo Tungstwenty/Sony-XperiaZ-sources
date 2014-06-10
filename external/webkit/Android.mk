@@ -53,10 +53,6 @@ ifneq ($(ENABLE_AUTOFILL),false)
   ENABLE_AUTOFILL = true
 endif
 
-# Control WML compiling in webkit.
-ifneq ($(ENABLE_WML),true)
-    ENABLE_WML = false
-endif
 # Custom y-to-cpp rule
 define webkit-transform-y-to-cpp
 @mkdir -p $(dir $@)
@@ -100,6 +96,7 @@ WEBCORE_INTERMEDIATES_PATH := $(base_intermediates)/Source/WebCore
 # the right config.h.
 LOCAL_C_INCLUDES := \
 	$(JNI_H_INCLUDE) \
+	$(BASE_PATH)/emoji \
 	$(WEBKIT_PATH)/android/icu \
 	external/ \
 	external/icu4c/common \
@@ -108,7 +105,6 @@ LOCAL_C_INCLUDES := \
 	external/libxml2/include \
 	external/libxslt \
 	external/hyphenation \
-	external/skia/emoji \
 	external/skia/gpu/include \
 	external/skia/include/core \
 	external/skia/include/effects \
@@ -121,7 +117,8 @@ LOCAL_C_INCLUDES := \
 	external/skia/src/ports \
 	external/sqlite/dist \
 	frameworks/base/core/jni/android/graphics \
-	frameworks/base/include
+	frameworks/base/include \
+	frameworks/opt/emoji
 
 LOCAL_C_INCLUDES += external/libpng \
                     external/zlib
@@ -204,11 +201,6 @@ LOCAL_C_INCLUDES := $(LOCAL_C_INCLUDES) \
 	$(WEBCORE_PATH)/websockets \
 	$(WEBCORE_PATH)/workers \
 	$(WEBCORE_PATH)/xml
-
-ifeq ($(ENABLE_WML),true)
-LOCAL_C_INCLUDES := $(LOCAL_C_INCLUDES) \
-       $(WEBCORE_PATH)/wml
-endif
 
 LOCAL_C_INCLUDES := $(LOCAL_C_INCLUDES) \
 	$(WEBKIT_PATH)/android \
@@ -339,10 +331,6 @@ ifeq ($(ENABLE_SVG),true)
 LOCAL_CFLAGS += -DENABLE_SVG=1 -DENABLE_SVG_ANIMATION=1
 endif
 
-ifeq ($(ENABLE_WML),true)
-LOCAL_CFLAGS += -DENABLE_WML=1
-endif
-
 ifeq ($(ENABLE_WTF_USE_ACCELERATED_COMPOSITING),false)
 LOCAL_CFLAGS += -DWTF_USE_ACCELERATED_COMPOSITING=0
 endif
@@ -377,9 +365,11 @@ LOCAL_SHARED_LIBRARIES := \
 	libcrypto \
 	libcutils \
 	libdl \
+	libemoji \
 	libgui \
 	libicuuc \
 	libicui18n \
+	libinput \
 	liblog \
 	libmedia \
 	libnativehelper \
@@ -418,9 +408,7 @@ else
 LOCAL_STATIC_LIBRARIES += libv8
 endif
 
-ifeq ($(ENABLE_WEBGL),true)
 LOCAL_STATIC_LIBRARIES += libpng
-endif
 
 # WebAudio
 ifeq ($(ENABLE_WEBAUDIO),true)
@@ -506,6 +494,10 @@ LOCAL_SRC_FILES += \
 	Source/WebKit/chromium/src/WebRegularExpression.cpp
 endif
 
+# these are for emoji support, needed by webkit
+LOCAL_SRC_FILES += \
+	emoji/EmojiFont.cpp
+
 # Do this dependency by hand. The reason we have to do this is because the
 # headers that this file pulls in are generated during the build of webcore.
 # We make all of our object files depend on those files so that they are built
@@ -534,4 +526,8 @@ include $(BASE_PATH)/Tools/android/webkitmerge/Android.mk
 
 ifeq ($(ENABLE_WEBAUDIO),true)
 include $(BASE_PATH)/Source/WebCore/platform/audio/resources/webaudiores/Android.mk
+endif
+
+ifeq ($(DYNAMIC_SHARED_LIBV8SO),true)
+include $(BASE_PATH)/prebuilt_v8/Android.mk
 endif

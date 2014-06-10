@@ -1,5 +1,6 @@
 /*
  * Copyright 2012, The Android Open Source Project
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,6 +31,7 @@
 
 #include "WebViewCore.h"
 
+#include <cutils/log.h>
 #include <GeolocationError.h>
 #include <GeolocationPosition.h>
 #include "JNIHelp.h"
@@ -40,11 +42,11 @@ using namespace WebCore;
 
 namespace android {
 
-static const char* javaMockGeolocationClass = "android/webkit/MockGeolocation";
+static const char* javaMockGeolocationClass = "com/sonymobile/webkit/MockGeolocation";
 
 WebViewCore* getWebViewCore(JNIEnv* env, jobject webViewCore)
 {
-    ScopedLocalRef<jclass> webViewCoreClass(env, env->FindClass("android/webkit/WebViewCore"));
+    ScopedLocalRef<jclass> webViewCoreClass(env, env->FindClass("com/sonymobile/webkit/WebViewCore"));
     jfieldID nativeClassField = env->GetFieldID(webViewCoreClass.get(), "mNativeClass", "I");
     return reinterpret_cast<WebViewCore*>(env->GetIntField(webViewCore, nativeClassField));
 }
@@ -78,10 +80,10 @@ static void setPermission(JNIEnv* env, jobject, jobject webViewCore, bool allow)
 }
 
 static JNINativeMethod gMockGeolocationMethods[] = {
-    { "nativeSetUseMock", "(Landroid/webkit/WebViewCore;)V", (void*) setUseMock },
-    { "nativeSetPosition", "(Landroid/webkit/WebViewCore;DDD)V", (void*) setPosition },
-    { "nativeSetError", "(Landroid/webkit/WebViewCore;ILjava/lang/String;)V", (void*) setError },
-    { "nativeSetPermission", "(Landroid/webkit/WebViewCore;Z)V", (void*) setPermission },
+    { "nativeSetUseMock", "(Lcom/sonymobile/webkit/WebViewCore;)V", (void*) setUseMock },
+    { "nativeSetPosition", "(Lcom/sonymobile/webkit/WebViewCore;DDD)V", (void*) setPosition },
+    { "nativeSetError", "(Lcom/sonymobile/webkit/WebViewCore;ILjava/lang/String;)V", (void*) setError },
+    { "nativeSetPermission", "(Lcom/sonymobile/webkit/WebViewCore;Z)V", (void*) setPermission },
 };
 
 int registerMockGeolocation(JNIEnv* env)

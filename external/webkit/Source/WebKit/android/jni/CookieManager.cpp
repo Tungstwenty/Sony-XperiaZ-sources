@@ -1,5 +1,6 @@
 /*
  * Copyright 2010, The Android Open Source Project
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,6 +29,7 @@
 #include "ChromiumIncludes.h"
 #include "WebCookieJar.h"
 #include "WebCoreJni.h"
+#include <cutils/log.h>
 #include <JNIHelp.h>
 
 using namespace base;
@@ -36,7 +38,7 @@ using namespace net;
 namespace android {
 
 // JNI for android.webkit.CookieManagerClassic
-static const char* javaCookieManagerClass = "android/webkit/CookieManagerClassic";
+static const char* javaCookieManagerClass = "com/sonymobile/webkit/CookieManagerClassic";
 
 static bool acceptCookie(JNIEnv*, jobject)
 {

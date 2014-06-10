@@ -2,7 +2,7 @@
 /* -----------------------------------------------------------------------------------------------------------
 Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android
 
-© Copyright  1995 - 2012 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
+© Copyright  1995 - 2013 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
   Copyright (C) 2012 Sony Mobile Communications AB.
 
@@ -172,6 +172,9 @@ extern const FIXP_WTP sin_twiddle_L64[];
 
 extern const FIXP_QTW qmf_phaseshift_cos32[32];
 extern const FIXP_QTW qmf_phaseshift_sin32[32];
+/* Adapted analysis post-twiddles for down-sampled HQ SBR */
+extern const FIXP_QTW qmf_phaseshift_cos_downsamp32[32];
+extern const FIXP_QTW qmf_phaseshift_sin_downsamp32[32];
 extern const FIXP_QTW qmf_phaseshift_cos64[64];
 extern const FIXP_QTW qmf_phaseshift_sin64[64];
 

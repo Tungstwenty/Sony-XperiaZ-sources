@@ -689,11 +689,11 @@ struct trace_switch_event {
 	u32 common_pid;
 	u32 common_tgid;
 
-	char prev_comm[COMM_LEN];
+	char prev_comm[16];
 	u32 prev_pid;
 	u32 prev_prio;
 	u64 prev_state;
-	char next_comm[COMM_LEN];
+	char next_comm[16];
 	u32 next_pid;
 	u32 next_prio;
 };
@@ -707,7 +707,7 @@ struct trace_runtime_event {
 	u32 common_pid;
 	u32 common_tgid;
 
-	char comm[COMM_LEN];
+	char comm[16];
 	u32 pid;
 	u64 runtime;
 	u64 vruntime;
@@ -722,7 +722,7 @@ struct trace_wakeup_event {
 	u32 common_pid;
 	u32 common_tgid;
 
-	char comm[COMM_LEN];
+	char comm[16];
 	u32 pid;
 
 	u32 prio;
@@ -739,9 +739,9 @@ struct trace_fork_event {
 	u32 common_pid;
 	u32 common_tgid;
 
-	char parent_comm[COMM_LEN];
+	char parent_comm[16];
 	u32 parent_pid;
-	char child_comm[COMM_LEN];
+	char child_comm[16];
 	u32 child_pid;
 };
 
@@ -754,7 +754,7 @@ struct trace_migrate_task_event {
 	u32 common_pid;
 	u32 common_tgid;
 
-	char comm[COMM_LEN];
+	char comm[16];
 	u32 pid;
 
 	u32 prio;

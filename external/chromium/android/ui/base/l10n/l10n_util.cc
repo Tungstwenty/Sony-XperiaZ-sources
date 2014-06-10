@@ -1,5 +1,6 @@
 /*
  * Copyright 2010, The Android Open Source Project
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -65,7 +66,7 @@ string16 JNIHelper::getLocalisedString(int message_id)
     android::Mutex::Autolock lock(mGetStringLock);
     JNIEnv* env = android::jni::GetJNIEnv();
     if (!mInited) {
-        jclass localClass = env->FindClass("android/webkit/L10nUtils");
+        jclass localClass = env->FindClass("com/sonymobile/webkit/L10nUtils");
         mClassRef = static_cast<jclass>(env->NewGlobalRef(localClass));
         env->DeleteLocalRef(localClass);
         mInited = true;

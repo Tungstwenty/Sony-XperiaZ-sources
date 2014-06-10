@@ -1,6 +1,5 @@
 /*
  * Copyright 2011 The Android Open Source Project
- * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,7 +30,6 @@
 
 #include "GLUtils.h"
 #include "LayerAndroid.h"
-#include "VideoLayerManager.h"
 #include <jni.h>
 
 namespace android {
@@ -40,55 +38,42 @@ class GLConsumer;
 
 namespace WebCore {
 
-// This instance is shared between the WebCore and UI copies of VideoLayerAndroid
-class FrameCaptureMutex : public SkRefCnt {
-public:
-    android::Condition& condition() { return m_condition; }
-    android::Mutex& mutex() { return m_mutex; }
-private:
-    android::Condition m_condition;
-    android::Mutex m_mutex;
-};
-
-class VideoLayerObserverInterface : public SkRefCnt {
-public:
-    virtual ~VideoLayerObserverInterface() { }
-    virtual void notifyRectChange(const FloatRect&) = 0;
-};
+// state get from UI thread to decide which image to draw.
+// PREPARING should be the progressing image
+// PLAYING will be the Video (Surface Texture).
+// Otherwise will draw a static image.
+// NOTE: These values are matching the ones in HTML5VideoView.java
+// Please keep them in sync when changed here.
+typedef enum {INITIALIZED, PREPARING, PREPARED, PLAYING, RESETTED, RELEASED} PlayerState;
 
 class VideoLayerAndroid : public LayerAndroid {
 
 public:
     VideoLayerAndroid();
     explicit VideoLayerAndroid(const VideoLayerAndroid& layer);
-    virtual ~VideoLayerAndroid();
 
     virtual bool isVideo() const { return true; }
-
     virtual LayerAndroid* copy() const { return new VideoLayerAndroid(*this); }
 
     // The following functions are called in UI thread only.
     virtual bool drawGL(bool layerTilesDisabled);
-    void setSurfaceTexture(sp<GLConsumer> texture, int textureName);
+    void setSurfaceTexture(sp<GLConsumer> texture, int textureName, PlayerState playerState);
     virtual bool needsIsolatedSurface() { return true; }
-    void registerVideoLayerObserver(VideoLayerObserverInterface* observer);
-    bool copyToBitmap(SkBitmapRef*& bitmapRef);
+
 private:
-    void showProgressSpinner(const SkRect& innerRect);
+    void init();
+    void showPreparingAnimation(const SkRect& rect,
+                                const SkRect innerRect);
     SkRect calVideoRect(const SkRect& rect);
-    void serviceFrameCapture();
     // Surface texture for showing the video is actually allocated in Java side
     // and passed into this native code.
     sp<android::GLConsumer> m_surfaceTexture;
 
+    PlayerState m_playerState;
+
     static double m_rotateDegree;
 
     static const int ROTATESTEP = 12;
-
-    VideoLayerObserverInterface* m_observer;
-    // Used for signalling between rendering and UI thread for
-    // video frame capture case
-    SkRefPtr<FrameCaptureMutex> m_frameCaptureMutex;
 };
 
 } // namespace WebCore

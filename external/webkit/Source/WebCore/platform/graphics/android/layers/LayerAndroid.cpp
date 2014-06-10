@@ -956,7 +956,7 @@ void LayerAndroid::contentDraw(SkCanvas* canvas, PaintStyle style)
 
         static SkTypeface* s_typeface = 0;
         if (!s_typeface)
-            s_typeface = SkTypeface::CreateFromName("", SkTypeface::kBold);
+            s_typeface = SkTypeface::CreateFromName(NULL, SkTypeface::kBold);
         paint.setARGB(255, 0, 0, 255);
         paint.setTextSize(17);
         char str[256];

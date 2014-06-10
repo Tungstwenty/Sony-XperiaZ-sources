@@ -1,5 +1,4 @@
 // Copyright (c) 2011 The Chromium Authors. All rights reserved.
-// Copyright (c) 2012, The Linux Foundation. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,20 +35,12 @@ class HttpStreamFactoryImpl : public HttpStreamFactory {
                                  const HttpRequestInfo& info,
                                  const SSLConfig& ssl_config,
                                  const BoundNetLog& net_log);
-  virtual int PreconnectStreams(int num_streams,
-                                 const HttpRequestInfo& info,
-                                 const SSLConfig& ssl_config,
-                                 const BoundNetLog& net_log,
-                                 CompletionCallback* callback);
   virtual void AddTLSIntolerantServer(const HostPortPair& server);
   virtual bool IsTLSIntolerantServer(const HostPortPair& server) const;
 
  private:
   class Request;
   class Job;
-
-  typedef std::map<const Job*, CompletionCallback*> RequestCallbackMap;
-  RequestCallbackMap request_callback_map_;
 
   typedef std::set<Request*> RequestSet;
   typedef std::map<HostPortProxyPair, RequestSet> SpdySessionRequestMap;
