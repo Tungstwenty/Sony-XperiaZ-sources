@@ -30,7 +30,8 @@
 
 #include "core/inspector/ContentSearchUtils.h"
 
-#include "core/platform/text/RegularExpression.h"
+#include "bindings/v8/ScriptRegexp.h"
+#include "wtf/text/StringBuilder.h"
 
 using namespace std;
 
@@ -44,19 +45,19 @@ static const char regexSpecialCharacters[] = "[](){}+-*.,?\\^$|";
 
 static String createSearchRegexSource(const String& text)
 {
-    String result;
+    StringBuilder result;
     String specials(regexSpecialCharacters);
 
     for (unsigned i = 0; i < text.length(); i++) {
-        if (specials.find(text[i]) != notFound)
+        if (specials.find(text[i]) != kNotFound)
             result.append("\\");
         result.append(text[i]);
     }
 
-    return result;
+    return result.toString();
 }
 
-static Vector<pair<int, String> > getRegularExpressionMatchesByLines(const RegularExpression* regex, const String& text)
+static Vector<pair<int, String> > getScriptRegexpMatchesByLines(const ScriptRegexp* regex, const String& text)
 {
     Vector<pair<int, String> > result;
     if (text.isEmpty())
@@ -88,13 +89,13 @@ static PassRefPtr<TypeBuilder::Page::SearchMatch> buildObjectForSearchMatch(int 
         .release();
 }
 
-PassOwnPtr<RegularExpression> createSearchRegex(const String& query, bool caseSensitive, bool isRegex)
+PassOwnPtr<ScriptRegexp> createSearchRegex(const String& query, bool caseSensitive, bool isRegex)
 {
     String regexSource = isRegex ? query : createSearchRegexSource(query);
-    return adoptPtr(new RegularExpression(regexSource, caseSensitive ? TextCaseSensitive : TextCaseInsensitive));
+    return adoptPtr(new ScriptRegexp(regexSource, caseSensitive ? TextCaseSensitive : TextCaseInsensitive));
 }
 
-int countRegularExpressionMatches(const RegularExpression* regex, const String& content)
+int countScriptRegexpMatches(const ScriptRegexp* regex, const String& content)
 {
     if (content.isEmpty())
         return 0;
@@ -117,8 +118,8 @@ PassRefPtr<TypeBuilder::Array<TypeBuilder::Page::SearchMatch> > searchInTextByLi
 {
     RefPtr<TypeBuilder::Array<TypeBuilder::Page::SearchMatch> > result = TypeBuilder::Array<TypeBuilder::Page::SearchMatch>::create();
 
-    OwnPtr<RegularExpression> regex = ContentSearchUtils::createSearchRegex(query, caseSensitive, isRegex);
-    Vector<pair<int, String> > matches = getRegularExpressionMatchesByLines(regex.get(), text);
+    OwnPtr<ScriptRegexp> regex = ContentSearchUtils::createSearchRegex(query, caseSensitive, isRegex);
+    Vector<pair<int, String> > matches = getScriptRegexpMatchesByLines(regex.get(), text);
 
     for (Vector<pair<int, String> >::const_iterator it = matches.begin(); it != matches.end(); ++it)
         result->addItem(buildObjectForSearchMatch(it->first, it->second));
@@ -128,7 +129,7 @@ PassRefPtr<TypeBuilder::Array<TypeBuilder::Page::SearchMatch> > searchInTextByLi
 
 static String findMagicComment(const String& content, const String& name, MagicCommentType commentType, bool* deprecated = 0)
 {
-    ASSERT(name.find("=") == notFound);
+    ASSERT(name.find("=") == kNotFound);
     if (deprecated)
         *deprecated = false;
     String pattern;
@@ -146,8 +147,8 @@ static String findMagicComment(const String& content, const String& name, MagicC
         ASSERT_NOT_REACHED();
         return String();
     }
-    RegularExpression regex(pattern, TextCaseSensitive, MultilineEnabled);
-    RegularExpression deprecatedRegex(deprecatedPattern, TextCaseSensitive, MultilineEnabled);
+    ScriptRegexp regex(pattern, TextCaseSensitive, MultilineEnabled);
+    ScriptRegexp deprecatedRegex(deprecatedPattern, TextCaseSensitive, MultilineEnabled);
 
     int matchLength;
     int offset = regex.match(content, 0, &matchLength);
@@ -161,7 +162,7 @@ static String findMagicComment(const String& content, const String& name, MagicC
 
     String match = content.substring(offset, matchLength);
     size_t separator = match.find("=");
-    ASSERT(separator != notFound);
+    ASSERT(separator != kNotFound);
     match = match.substring(separator + 1);
 
     switch (commentType) {
@@ -169,7 +170,7 @@ static String findMagicComment(const String& content, const String& name, MagicC
         return match.stripWhiteSpace();
     case CSSMagicComment: {
         size_t lastStarIndex = match.reverseFind('*');
-        ASSERT(lastStarIndex != notFound);
+        ASSERT(lastStarIndex != kNotFound);
         return match.substring(0, lastStarIndex).stripWhiteSpace();
     }
     default:

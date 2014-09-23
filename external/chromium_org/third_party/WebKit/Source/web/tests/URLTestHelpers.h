@@ -31,10 +31,10 @@
 #ifndef URLTestHelpers_h
 #define URLTestHelpers_h
 
+#include "platform/weborigin/KURL.h"
 #include "public/platform/WebString.h"
-#include "weborigin/KURL.h"
 
-namespace WebKit {
+namespace blink {
 
 class WebURL;
 
@@ -56,6 +56,6 @@ void registerMockedURLLoad(const WebURL& fullURL, const WebString& fileName, con
 void registerMockedURLLoad(const WebURL& fullURL, const WebString& fileName, const WebString& relativeBaseDirectory, const WebString& mimeType);
 
 } // namespace URLTestHelpers
-} // namespace WebKit
+} // namespace blink
 
 #endif

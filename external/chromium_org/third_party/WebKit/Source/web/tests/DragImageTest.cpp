@@ -32,9 +32,9 @@
 
 #include "core/platform/DragImage.h"
 
-#include "core/platform/graphics/Image.h"
-#include "core/platform/graphics/IntSize.h"
-#include "core/platform/graphics/skia/NativeImageSkia.h"
+#include "platform/geometry/IntSize.h"
+#include "platform/graphics/Image.h"
+#include "platform/graphics/skia/NativeImageSkia.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
@@ -83,17 +83,12 @@ public:
     {
     }
 
-    virtual unsigned decodedSize() const OVERRIDE
-    {
-        return 0u;
-    }
-
     virtual bool currentFrameKnownToBeOpaque() OVERRIDE
     {
         return false;
     }
 
-    virtual void draw(GraphicsContext*, const FloatRect&, const FloatRect&, CompositeOperator, BlendMode) OVERRIDE
+    virtual void draw(GraphicsContext*, const FloatRect&, const FloatRect&, CompositeOperator, blink::WebBlendMode) OVERRIDE
     {
     }
 

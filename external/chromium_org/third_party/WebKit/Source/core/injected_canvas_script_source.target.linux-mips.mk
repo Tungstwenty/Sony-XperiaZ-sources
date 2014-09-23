@@ -18,9 +18,9 @@ $(gyp_shared_intermediate_dir)/blink/InjectedScriptCanvasModuleSource.h: gyp_loc
 $(gyp_shared_intermediate_dir)/blink/InjectedScriptCanvasModuleSource.h: gyp_intermediate_dir := $(abspath $(gyp_intermediate_dir))
 $(gyp_shared_intermediate_dir)/blink/InjectedScriptCanvasModuleSource.h: gyp_shared_intermediate_dir := $(abspath $(gyp_shared_intermediate_dir))
 $(gyp_shared_intermediate_dir)/blink/InjectedScriptCanvasModuleSource.h: export PATH := $(subst $(ANDROID_BUILD_PATHS),,$(PATH))
-$(gyp_shared_intermediate_dir)/blink/InjectedScriptCanvasModuleSource.h: $(LOCAL_PATH)/third_party/WebKit/Source/core/inspector/xxd.pl $(LOCAL_PATH)/third_party/WebKit/Source/core/inspector/InjectedScriptCanvasModuleSource.js $(GYP_TARGET_DEPENDENCIES)
+$(gyp_shared_intermediate_dir)/blink/InjectedScriptCanvasModuleSource.h: $(LOCAL_PATH)/third_party/WebKit/Source/build/scripts/xxd.py $(LOCAL_PATH)/third_party/WebKit/Source/core/inspector/InjectedScriptCanvasModuleSource.js $(GYP_TARGET_DEPENDENCIES)
 	@echo "Gyp action: Generating $(gyp_shared_intermediate_dir)/blink/InjectedScriptCanvasModuleSource.h from inspector/InjectedScriptCanvasModuleSource.js ($@)"
-	$(hide)cd $(gyp_local_path)/third_party/WebKit/Source/core; mkdir -p $(gyp_shared_intermediate_dir)/blink; perl inspector/xxd.pl InjectedScriptCanvasModuleSource_js inspector/InjectedScriptCanvasModuleSource.js "$(gyp_shared_intermediate_dir)/blink/InjectedScriptCanvasModuleSource.h"
+	$(hide)cd $(gyp_local_path)/third_party/WebKit/Source/core; mkdir -p $(gyp_shared_intermediate_dir)/blink; python ../build/scripts/xxd.py InjectedScriptCanvasModuleSource_js inspector/InjectedScriptCanvasModuleSource.js "$(gyp_shared_intermediate_dir)/blink/InjectedScriptCanvasModuleSource.h"
 
 
 

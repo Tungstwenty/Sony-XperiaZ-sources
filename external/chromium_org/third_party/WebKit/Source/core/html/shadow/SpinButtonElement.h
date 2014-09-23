@@ -29,7 +29,7 @@
 
 #include "core/html/HTMLDivElement.h"
 #include "core/page/PopupOpeningObserver.h"
-#include "core/platform/Timer.h"
+#include "platform/Timer.h"
 
 namespace WebCore {
 
@@ -54,7 +54,7 @@ public:
     // The owner of SpinButtonElement must call removeSpinButtonOwner
     // because SpinButtonElement can be outlive SpinButtonOwner
     // implementation, e.g. during event handling.
-    static PassRefPtr<SpinButtonElement> create(Document*, SpinButtonOwner&);
+    static PassRefPtr<SpinButtonElement> create(Document&, SpinButtonOwner&);
     UpDownState upDownState() const { return m_upDownState; }
     virtual void releaseCapture();
     void removeSpinButtonOwner() { m_spinButtonOwner = 0; }
@@ -67,7 +67,7 @@ public:
     void forwardEvent(Event*);
 
 private:
-    SpinButtonElement(Document*, SpinButtonOwner&);
+    SpinButtonElement(Document&, SpinButtonOwner&);
 
     virtual void detach(const AttachContext& = AttachContext()) OVERRIDE;
     virtual bool isSpinButtonElement() const { return true; }
@@ -91,11 +91,7 @@ private:
     Timer<SpinButtonElement> m_repeatingTimer;
 };
 
-inline SpinButtonElement* toSpinButtonElement(Element* element)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!element || element->isSpinButtonElement());
-    return static_cast<SpinButtonElement*>(element);
-}
+DEFINE_TYPE_CASTS(SpinButtonElement, Node, node, toElement(node)->isSpinButtonElement(), toElement(node).isSpinButtonElement());
 
 } // namespace
 

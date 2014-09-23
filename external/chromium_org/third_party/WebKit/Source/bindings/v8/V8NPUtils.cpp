@@ -36,13 +36,14 @@
 #include "bindings/v8/V8NPObject.h"
 #include "bindings/v8/npruntime_impl.h"
 #include "bindings/v8/npruntime_priv.h"
-#include "core/page/DOMWindow.h"
-#include "core/page/Frame.h"
+#include "core/frame/DOMWindow.h"
 #include "wtf/text/WTFString.h"
+
+#include <stdlib.h>
 
 namespace WebCore {
 
-void convertV8ObjectToNPVariant(v8::Local<v8::Value> object, NPObject* owner, NPVariant* result)
+void convertV8ObjectToNPVariant(v8::Local<v8::Value> object, NPObject* owner, NPVariant* result, v8::Isolate* isolate)
 {
     VOID_TO_NPVARIANT(*result);
 
@@ -62,14 +63,14 @@ void convertV8ObjectToNPVariant(v8::Local<v8::Value> object, NPObject* owner, NP
     else if (object->IsUndefined())
         VOID_TO_NPVARIANT(*result);
     else if (object->IsString()) {
-        v8::Handle<v8::String> str = object->ToString();
+        v8::Handle<v8::String> str = object.As<v8::String>();
         int length = str->Utf8Length() + 1;
         char* utf8Chars = reinterpret_cast<char*>(malloc(length));
         str->WriteUtf8(utf8Chars, length, 0, v8::String::HINT_MANY_WRITES_EXPECTED);
         STRINGN_TO_NPVARIANT(utf8Chars, length-1, *result);
     } else if (object->IsObject()) {
-        DOMWindow* window = toDOMWindow(v8::Context::GetCurrent());
-        NPObject* npobject = npCreateV8ScriptObject(0, v8::Handle<v8::Object>::Cast(object), window);
+        DOMWindow* window = toDOMWindow(isolate->GetCurrentContext());
+        NPObject* npobject = npCreateV8ScriptObject(0, v8::Handle<v8::Object>::Cast(object), window, isolate);
         if (npobject)
             _NPN_RegisterObject(npobject, owner);
         OBJECT_TO_NPVARIANT(npobject, *result);
@@ -84,25 +85,25 @@ v8::Handle<v8::Value> convertNPVariantToV8Object(const NPVariant* variant, NPObj
     case NPVariantType_Int32:
         return v8::Integer::New(NPVARIANT_TO_INT32(*variant), isolate);
     case NPVariantType_Double:
-        return v8::Number::New(NPVARIANT_TO_DOUBLE(*variant));
+        return v8::Number::New(isolate, NPVARIANT_TO_DOUBLE(*variant));
     case NPVariantType_Bool:
-        return v8Boolean(NPVARIANT_TO_BOOLEAN(*variant));
+        return v8Boolean(NPVARIANT_TO_BOOLEAN(*variant), isolate);
     case NPVariantType_Null:
-        return v8::Null();
+        return v8::Null(isolate);
     case NPVariantType_Void:
-        return v8::Undefined();
+        return v8::Undefined(isolate);
     case NPVariantType_String: {
         NPString src = NPVARIANT_TO_STRING(*variant);
-        return v8::String::New(src.UTF8Characters, src.UTF8Length);
+        return v8::String::NewFromUtf8(isolate, src.UTF8Characters, v8::String::kNormalString, src.UTF8Length);
     }
     case NPVariantType_Object: {
         NPObject* object = NPVARIANT_TO_OBJECT(*variant);
         if (V8NPObject* v8Object = npObjectToV8NPObject(object))
             return v8::Local<v8::Object>::New(isolate, v8Object->v8Object);
-        return createV8ObjectForNPObject(object, owner);
+        return createV8ObjectForNPObject(object, owner, isolate);
     }
     default:
-        return v8::Undefined();
+        return v8::Undefined(isolate);
     }
 }
 

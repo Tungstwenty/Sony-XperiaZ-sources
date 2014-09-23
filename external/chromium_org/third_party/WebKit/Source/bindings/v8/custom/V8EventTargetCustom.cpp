@@ -29,33 +29,27 @@
  */
 
 #include "config.h"
-#include "core/dom/EventTarget.h"
+#include "V8EventTarget.h"
 
 #include "EventTargetHeaders.h"
 #include "EventTargetInterfaces.h"
-#include "V8EventTarget.h"
 
 namespace WebCore {
 
 #define TRY_TO_WRAP_WITH_INTERFACE(interfaceName) \
-    if (eventNames().interfaceFor##interfaceName == desiredInterface) \
+    if (EventTargetNames::interfaceName == desiredInterface) \
         return toV8(static_cast<interfaceName*>(impl), creationContext, isolate);
 
 v8::Handle<v8::Value> toV8(EventTarget* impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
 {
     if (!impl)
-        return v8NullWithCheck(isolate);
+        return v8::Null(isolate);
 
     AtomicString desiredInterface = impl->interfaceName();
     EVENT_TARGET_INTERFACES_FOR_EACH(TRY_TO_WRAP_WITH_INTERFACE)
 
     ASSERT_NOT_REACHED();
     return v8Undefined();
-}
-
-v8::Handle<v8::Value> toV8ForMainWorld(EventTarget* impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
-{
-    return toV8(impl, creationContext, isolate);
 }
 
 #undef TRY_TO_WRAP_WITH_INTERFACE

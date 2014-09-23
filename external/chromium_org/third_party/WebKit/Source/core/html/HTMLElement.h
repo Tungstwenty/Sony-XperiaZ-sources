@@ -40,22 +40,17 @@ enum TranslateAttributeMode {
 
 class HTMLElement : public Element {
 public:
-    static PassRefPtr<HTMLElement> create(const QualifiedName& tagName, Document*);
+    static PassRefPtr<HTMLElement> create(const QualifiedName& tagName, Document&);
 
     virtual String title() const OVERRIDE FINAL;
 
     virtual short tabIndex() const;
     void setTabIndex(int);
 
-    String innerHTML() const;
-    String outerHTML() const;
-    void setInnerHTML(const String&, ExceptionState&);
-    void setOuterHTML(const String&, ExceptionState&);
     void setInnerText(const String&, ExceptionState&);
     void setOuterText(const String&, ExceptionState&);
 
     Element* insertAdjacentElement(const String& where, Element* newChild, ExceptionState&);
-    void insertAdjacentHTML(const String& where, const String& html, ExceptionState&);
     void insertAdjacentText(const String& where, const String& text, ExceptionState&);
 
     virtual bool hasCustomFocusLogic() const;
@@ -79,10 +74,10 @@ public:
 
     bool ieForbidsInsertHTML() const;
 
-    virtual bool rendererIsNeeded(const NodeRenderingContext&);
+    virtual bool rendererIsNeeded(const RenderStyle&);
     virtual RenderObject* createRenderer(RenderStyle*);
 
-    HTMLFormElement* form() const { return virtualForm(); }
+    virtual HTMLFormElement* formOwner() const { return 0; }
 
     HTMLFormElement* findFormAncestor() const;
 
@@ -92,11 +87,12 @@ public:
     virtual bool isHTMLUnknownElement() const { return false; }
 
     virtual bool isLabelable() const { return false; }
-
+    // http://www.whatwg.org/specs/web-apps/current-work/multipage/elements.html#interactive-content
+    virtual bool isInteractiveContent() const;
     virtual void defaultEventHandler(Event*) OVERRIDE;
 
 protected:
-    HTMLElement(const QualifiedName& tagName, Document*, ConstructionType);
+    HTMLElement(const QualifiedName& tagName, Document&, ConstructionType);
 
     void addHTMLLengthToStyle(MutableStylePropertySet*, CSSPropertyID, const String& value);
     void addHTMLColorToStyle(MutableStylePropertySet*, CSSPropertyID, const String& color);
@@ -117,9 +113,6 @@ private:
 
     void mapLanguageAttributeToLocale(const AtomicString&, MutableStylePropertySet*);
 
-    virtual HTMLFormElement* virtualForm() const;
-
-    Node* insertAdjacent(const String& where, Node* newChild, ExceptionState&);
     PassRefPtr<DocumentFragment> textToFragment(const String&, ExceptionState&);
 
     void dirAttributeChanged(const AtomicString&);
@@ -129,31 +122,18 @@ private:
 
     TranslateAttributeMode translateAttributeMode() const;
 
-    AtomicString eventNameForAttributeName(const QualifiedName& attrName) const;
+    const AtomicString& eventNameForAttributeName(const QualifiedName& attrName) const;
 
     void handleKeypressEvent(KeyboardEvent*);
     bool supportsSpatialNavigationFocus() const;
 };
 
-inline HTMLElement* toHTMLElement(Node* node)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!node || node->isHTMLElement());
-    return static_cast<HTMLElement*>(node);
-}
+DEFINE_NODE_TYPE_CASTS(HTMLElement, isHTMLElement());
 
-inline const HTMLElement* toHTMLElement(const Node* node)
+inline HTMLElement::HTMLElement(const QualifiedName& tagName, Document& document, ConstructionType type = CreateHTMLElement)
+    : Element(tagName, &document, type)
 {
-    ASSERT_WITH_SECURITY_IMPLICATION(!node || node->isHTMLElement());
-    return static_cast<const HTMLElement*>(node);
-}
-
-// This will catch anyone doing an unnecessary cast.
-void toHTMLElement(const HTMLElement*);
-
-inline HTMLElement::HTMLElement(const QualifiedName& tagName, Document* document, ConstructionType type = CreateHTMLElement)
-    : Element(tagName, document, type)
-{
-    ASSERT(tagName.localName().impl());
+    ASSERT(!tagName.localName().isNull());
     ScriptWrappable::init(this);
 }
 

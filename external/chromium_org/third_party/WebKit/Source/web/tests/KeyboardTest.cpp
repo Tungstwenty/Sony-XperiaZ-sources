@@ -32,15 +32,15 @@
 
 #include <gtest/gtest.h>
 
-#include "EditorClientImpl.h"
 #include "WebInputEvent.h"
 #include "WebInputEventConversion.h"
-#include "core/dom/EventTarget.h"
-#include "core/dom/KeyboardEvent.h"
-#include "core/platform/chromium/KeyboardCodes.h"
+#include "core/editing/Editor.h"
+#include "core/events/EventTarget.h"
+#include "core/events/KeyboardEvent.h"
+#include "platform/KeyboardCodes.h"
 
 using namespace WebCore;
-using namespace WebKit;
+using namespace blink;
 
 namespace {
 
@@ -54,11 +54,10 @@ public:
         const WebKeyboardEvent& webKeyboardEvent,
         PlatformEvent::Type keyType)
     {
-        EditorClientImpl editorImpl(0);
         PlatformKeyboardEventBuilder evt(webKeyboardEvent);
         evt.setKeyType(keyType);
         RefPtr<KeyboardEvent> keyboardEvent = KeyboardEvent::create(evt, 0);
-        return editorImpl.interpretKeyEvent(keyboardEvent.get());
+        return Editor::interpretKeyEvent(keyboardEvent.get());
     }
 
     // Set up a WebKeyboardEvent KEY_DOWN event with key code and modifiers.
@@ -79,7 +78,7 @@ public:
     const char* interpretOSModifierKeyPress(char keyCode)
     {
         WebKeyboardEvent keyboardEvent;
-#if OS(DARWIN)
+#if OS(MACOSX)
         WebInputEvent::Modifiers osModifier = WebInputEvent::MetaKey;
 #else
         WebInputEvent::Modifiers osModifier = WebInputEvent::ControlKey;
@@ -123,42 +122,42 @@ TEST_F(KeyboardTest, TestCtrlReturn)
 
 TEST_F(KeyboardTest, TestOSModifierZ)
 {
-#if !OS(DARWIN)
+#if !OS(MACOSX)
     EXPECT_STREQ("Undo", interpretOSModifierKeyPress('Z'));
 #endif
 }
 
 TEST_F(KeyboardTest, TestOSModifierY)
 {
-#if !OS(DARWIN)
+#if !OS(MACOSX)
     EXPECT_STREQ("Redo", interpretOSModifierKeyPress('Y'));
 #endif
 }
 
 TEST_F(KeyboardTest, TestOSModifierA)
 {
-#if !OS(DARWIN)
+#if !OS(MACOSX)
     EXPECT_STREQ("SelectAll", interpretOSModifierKeyPress('A'));
 #endif
 }
 
 TEST_F(KeyboardTest, TestOSModifierX)
 {
-#if !OS(DARWIN)
+#if !OS(MACOSX)
     EXPECT_STREQ("Cut", interpretOSModifierKeyPress('X'));
 #endif
 }
 
 TEST_F(KeyboardTest, TestOSModifierC)
 {
-#if !OS(DARWIN)
+#if !OS(MACOSX)
     EXPECT_STREQ("Copy", interpretOSModifierKeyPress('C'));
 #endif
 }
 
 TEST_F(KeyboardTest, TestOSModifierV)
 {
-#if !OS(DARWIN)
+#if !OS(MACOSX)
     EXPECT_STREQ("Paste", interpretOSModifierKeyPress('V'));
 #endif
 }

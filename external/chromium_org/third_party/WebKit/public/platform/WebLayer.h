@@ -27,11 +27,11 @@
 #define WebLayer_h
 
 #include "WebAnimation.h"
+#include "WebBlendMode.h"
 #include "WebColor.h"
 #include "WebCommon.h"
 #include "WebCompositingReasons.h"
 #include "WebPoint.h"
-#include "WebPrivatePtr.h"
 #include "WebRect.h"
 #include "WebString.h"
 #include "WebVector.h"
@@ -39,16 +39,15 @@
 class SkMatrix44;
 class SkImageFilter;
 
-namespace WebKit {
+namespace blink {
 class WebAnimationDelegate;
 class WebFilterOperations;
+class WebLayerClient;
 class WebLayerScrollClient;
 struct WebFloatPoint;
 struct WebFloatRect;
 struct WebLayerPositionConstraint;
 struct WebSize;
-
-class WebLayerImpl;
 
 class WebLayer {
 public:
@@ -88,6 +87,12 @@ public:
     virtual void setOpacity(float) = 0;
     virtual float opacity() const = 0;
 
+    virtual void setBlendMode(WebBlendMode) = 0;
+    virtual WebBlendMode blendMode() const = 0;
+
+    virtual void setIsRootForIsolatedGroup(bool) = 0;
+    virtual bool isRootForIsolatedGroup() = 0;
+
     virtual void setOpaque(bool) = 0;
     virtual bool opaque() const = 0;
 
@@ -122,12 +127,6 @@ public:
     // WebFilterOperations object.
     virtual void setFilters(const WebFilterOperations&) = 0;
 
-    // Set the root of the image filter graph for this layer. The
-    // implementation should grab a ref on the passed-in filter in order
-    // to retain ownership. The passed-in graph will be unref'ed by the
-    // caller after this call.
-    virtual void setFilter(SkImageFilter*) = 0;
-
     // Apply filters to pixels that show through the background of this layer.
     // Note: These filters are only possible on layers that are drawn directly
     // to a root render surface with an opaque background. This means if an
@@ -135,11 +134,8 @@ public:
     // (opacity, transforms), it may conflict and hide the background filters.
     virtual void setBackgroundFilters(const WebFilterOperations&) = 0;
 
-    virtual void setDebugName(WebString) = 0;
-
     // Provides a bitfield that describe why this composited layer was created.
-    // FIXME: non-pure until the chromium-side implements this.
-    virtual void setCompositingReasons(WebCompositingReasons) { }
+    virtual void setCompositingReasons(WebCompositingReasons) = 0;
 
     // An animation delegate is notified when animations are started and
     // stopped. The WebLayer does not take ownership of the delegate, and it is
@@ -147,7 +143,9 @@ public:
     // deleting the delegate.
     virtual void setAnimationDelegate(WebAnimationDelegate*) = 0;
 
+
     // Returns false if the animation cannot be added.
+    // Takes ownership of the WebAnimation object.
     virtual bool addAnimation(WebAnimation*) = 0;
 
     // Removes all animations with the given id.
@@ -159,16 +157,18 @@ public:
     // Pauses all animations with the given id.
     virtual void pauseAnimation(int animationId, double timeOffset) = 0;
 
-    // The following functions suspend and resume all animations. The given time
-    // is assumed to use the same time base as monotonicallyIncreasingTime().
-    virtual void suspendAnimations(double monotonicTime) = 0;
-    virtual void resumeAnimations(double monotonicTime) = 0;
-
     // Returns true if this layer has any active animations - useful for tests.
     virtual bool hasActiveAnimation() = 0;
 
-    // Transfers all animations running on the current layer.
-    virtual void transferAnimationsTo(WebLayer*) { }
+    // If a scroll parent is set, this layer will inherit its parent's scroll
+    // delta and offset even though it will not be a descendant of the scroll
+    // in the layer hierarchy.
+    virtual void setScrollParent(WebLayer*) = 0;
+
+    // A layer will not respect any clips established by layers between it and
+    // its nearest clipping ancestor. Note, the clip parent must be an ancestor.
+    // This is not a requirement of the scroll parent.
+    virtual void setClipParent(WebLayer*) = 0;
 
     // Scrolling
     virtual void setScrollPosition(WebPoint) = 0;
@@ -180,6 +180,10 @@ public:
     virtual void setScrollable(bool) = 0;
     virtual bool scrollable() const = 0;
 
+    virtual void setUserScrollable(bool horizontal, bool vertical) = 0;
+    virtual bool userScrollableHorizontal() const = 0;
+    virtual bool userScrollableVertical() const = 0;
+
     virtual void setHaveWheelEventHandlers(bool) = 0;
     virtual bool haveWheelEventHandlers() const = 0;
 
@@ -189,8 +193,8 @@ public:
     virtual void setNonFastScrollableRegion(const WebVector<WebRect>&) = 0;
     virtual WebVector<WebRect> nonFastScrollableRegion() const = 0;
 
-    virtual void setTouchEventHandlerRegion(const WebVector<WebRect>&) { };
-    virtual WebVector<WebRect> touchEventHandlerRegion() const { return WebVector<WebRect>();}
+    virtual void setTouchEventHandlerRegion(const WebVector<WebRect>&) = 0;
+    virtual WebVector<WebRect> touchEventHandlerRegion() const = 0;
 
     virtual void setIsContainerForFixedPositionLayers(bool) = 0;
     virtual bool isContainerForFixedPositionLayers() const = 0;
@@ -213,8 +217,10 @@ public:
 
     // True if the layer is not part of a tree attached to a WebLayerTreeView.
     virtual bool isOrphan() const = 0;
+
+    virtual void setWebLayerClient(WebLayerClient*) = 0;
 };
 
-} // namespace WebKit
+} // namespace blink
 
 #endif // WebLayer_h

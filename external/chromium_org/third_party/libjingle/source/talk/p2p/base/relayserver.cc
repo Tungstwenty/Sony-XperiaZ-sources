@@ -51,7 +51,7 @@ static const uint32 kMessageAcceptConnection = 1;
 // Calls SendTo on the given socket and logs any bad results.
 void Send(talk_base::AsyncPacketSocket* socket, const char* bytes, size_t size,
           const talk_base::SocketAddress& addr) {
-  int result = socket->SendTo(bytes, size, addr);
+  int result = socket->SendTo(bytes, size, addr, talk_base::DSCP_NO_CHANGE);
   if (result < static_cast<int>(size)) {
     LOG(LS_ERROR) << "SendTo wrote only " << result << " of " << size
                   << " bytes";
@@ -198,7 +198,8 @@ void RelayServer::OnReadEvent(talk_base::AsyncSocket* socket) {
 
 void RelayServer::OnInternalPacket(
     talk_base::AsyncPacketSocket* socket, const char* bytes, size_t size,
-    const talk_base::SocketAddress& remote_addr) {
+    const talk_base::SocketAddress& remote_addr,
+    const talk_base::PacketTime& packet_time) {
 
   // Get the address of the connection we just received on.
   talk_base::SocketAddressPair ap(remote_addr, socket->GetLocalAddress());
@@ -242,7 +243,8 @@ void RelayServer::OnInternalPacket(
 
 void RelayServer::OnExternalPacket(
     talk_base::AsyncPacketSocket* socket, const char* bytes, size_t size,
-    const talk_base::SocketAddress& remote_addr) {
+    const talk_base::SocketAddress& remote_addr,
+    const talk_base::PacketTime& packet_time) {
 
   // Get the address of the connection we just received on.
   talk_base::SocketAddressPair ap(remote_addr, socket->GetLocalAddress());

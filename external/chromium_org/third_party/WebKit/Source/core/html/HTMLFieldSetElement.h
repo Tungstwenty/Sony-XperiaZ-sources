@@ -33,7 +33,7 @@ class HTMLCollection;
 
 class HTMLFieldSetElement FINAL : public HTMLFormControlElement {
 public:
-    static PassRefPtr<HTMLFieldSetElement> create(const QualifiedName&, Document*, HTMLFormElement*);
+    static PassRefPtr<HTMLFieldSetElement> create(Document&, HTMLFormElement*);
     HTMLLegendElement* legend() const;
 
     PassRefPtr<HTMLCollection> elements();
@@ -45,7 +45,7 @@ protected:
     virtual void disabledAttributeChanged() OVERRIDE;
 
 private:
-    HTMLFieldSetElement(const QualifiedName&, Document*, HTMLFormElement*);
+    HTMLFieldSetElement(Document&, HTMLFormElement*);
 
     virtual bool isEnumeratable() const { return true; }
     virtual bool supportsFocus() const;
@@ -55,13 +55,15 @@ private:
     virtual void childrenChanged(bool changedByParser, Node* beforeChange, Node* afterChange, int childCountDelta) OVERRIDE;
     virtual bool areAuthorShadowsAllowed() const OVERRIDE { return false; }
 
-    static void invalidateDisabledStateUnder(Element*);
+    static void invalidateDisabledStateUnder(Element&);
     void refreshElementsIfNeeded() const;
 
     mutable Vector<FormAssociatedElement*> m_associatedElements;
     // When dom tree is modified, we have to refresh the m_associatedElements array.
     mutable uint64_t m_documentVersion;
 };
+
+DEFINE_NODE_TYPE_CASTS(HTMLFieldSetElement, hasTagName(HTMLNames::fieldsetTag));
 
 } // namespace
 

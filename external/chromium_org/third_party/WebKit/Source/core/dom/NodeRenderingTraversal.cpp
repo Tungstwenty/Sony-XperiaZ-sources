@@ -28,13 +28,13 @@
 #include "core/dom/NodeRenderingTraversal.h"
 
 #include "core/dom/PseudoElement.h"
-#include "core/dom/shadow/ComposedShadowTreeWalker.h"
+#include "core/dom/shadow/ComposedTreeWalker.h"
 
 namespace WebCore {
 
 namespace NodeRenderingTraversal {
 
-void ParentDetails::didTraverseInsertionPoint(InsertionPoint* insertionPoint)
+void ParentDetails::didTraverseInsertionPoint(const InsertionPoint* insertionPoint)
 {
     if (!m_insertionPoint) {
         m_insertionPoint = insertionPoint;
@@ -49,15 +49,19 @@ void ParentDetails::didTraverseShadowRoot(const ShadowRoot* root)
 
 ContainerNode* parent(const Node* node, ParentDetails* details)
 {
-    // FIXME: Once everything lazy attaches we should assert that we don't need a distribution recalc here.
-    ComposedShadowTreeWalker walker(node, ComposedShadowTreeWalker::CrossUpperBoundary, ComposedShadowTreeWalker::CanStartFromShadowBoundary);
-    ContainerNode* found = toContainerNode(walker.traverseParent(walker.get(), details));
-    return details->outOfComposition() ? 0 : found;
+    // FIXME: We should probably ASSERT(!node->document().childNeedsDistributionRecalc()) here, but
+    // a bunch of things use NodeRenderingTraversal::parent in places where that looks like it could
+    // be false.
+    ASSERT(node);
+    if (isActiveInsertionPoint(*node))
+        return 0;
+    ComposedTreeWalker walker(node, ComposedTreeWalker::CanStartFromShadowBoundary);
+    return toContainerNode(walker.traverseParent(walker.get(), details));
 }
 
 Node* nextSibling(const Node* node)
 {
-    ComposedShadowTreeWalker walker(node);
+    ComposedTreeWalker walker(node);
     if (node->isBeforePseudoElement()) {
         walker.parent();
         walker.firstChild();
@@ -76,7 +80,7 @@ Node* nextSibling(const Node* node)
 
 Node* previousSibling(const Node* node)
 {
-    ComposedShadowTreeWalker walker(node);
+    ComposedTreeWalker walker(node);
     if (node->isAfterPseudoElement()) {
         walker.parent();
         walker.lastChild();
@@ -91,34 +95,6 @@ Node* previousSibling(const Node* node)
         return toElement(parent)->pseudoElement(BEFORE);
 
     return 0;
-}
-
-Node* nextInScope(const Node* node)
-{
-    ComposedShadowTreeWalker walker = ComposedShadowTreeWalker(node, ComposedShadowTreeWalker::DoNotCrossUpperBoundary);
-    walker.next();
-    return walker.get();
-}
-
-Node* previousInScope(const Node* node)
-{
-    ComposedShadowTreeWalker walker = ComposedShadowTreeWalker(node, ComposedShadowTreeWalker::DoNotCrossUpperBoundary);
-    walker.previous();
-    return walker.get();
-}
-
-Node* parentInScope(const Node* node)
-{
-    ComposedShadowTreeWalker walker = ComposedShadowTreeWalker(node, ComposedShadowTreeWalker::DoNotCrossUpperBoundary);
-    walker.parent();
-    return walker.get();
-}
-
-Node* lastChildInScope(const Node* node)
-{
-    ComposedShadowTreeWalker walker = ComposedShadowTreeWalker(node, ComposedShadowTreeWalker::DoNotCrossUpperBoundary);
-    walker.lastChild();
-    return walker.get();
 }
 
 }

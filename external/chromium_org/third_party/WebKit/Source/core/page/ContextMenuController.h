@@ -38,6 +38,7 @@ namespace WebCore {
     class ContextMenuClient;
     class ContextMenuItem;
     class ContextMenuProvider;
+    class Document;
     class Event;
     class Page;
 
@@ -50,6 +51,8 @@ namespace WebCore {
 
         ContextMenu* contextMenu() const { return m_contextMenu.get(); }
         void clearContextMenu();
+
+        void documentDetached(Document*);
 
         void handleContextMenuEvent(Event*);
         void showContextMenu(Event*, PassRefPtr<ContextMenuProvider>);
@@ -64,7 +67,6 @@ namespace WebCore {
         PassOwnPtr<ContextMenu> createContextMenu(Event*);
         void showContextMenu(Event*);
 
-        Page* m_page;
         ContextMenuClient* m_client;
         OwnPtr<ContextMenu> m_contextMenu;
         RefPtr<ContextMenuProvider> m_menuProvider;

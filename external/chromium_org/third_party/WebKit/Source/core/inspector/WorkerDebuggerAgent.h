@@ -46,7 +46,7 @@ public:
     static PassOwnPtr<WorkerDebuggerAgent> create(InstrumentingAgents*, InspectorCompositeState*, WorkerScriptDebugServer*, WorkerGlobalScope*, InjectedScriptManager*);
     virtual ~WorkerDebuggerAgent();
 
-    static const char* debuggerTaskMode;
+    static const char debuggerTaskMode[];
     static void interruptAndDispatchInspectorCommands(WorkerThread*);
 
 private:
@@ -58,7 +58,6 @@ private:
     virtual InjectedScript injectedScriptForEval(ErrorString*, const int* executionContextId);
     virtual void muteConsole();
     virtual void unmuteConsole();
-    virtual void addConsoleMessage(MessageSource, MessageLevel, const String& message, const String& sourceURL);
 
     WorkerScriptDebugServer* m_scriptDebugServer;
     WorkerGlobalScope* m_inspectedWorkerGlobalScope;

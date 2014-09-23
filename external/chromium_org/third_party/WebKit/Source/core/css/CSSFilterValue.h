@@ -57,7 +57,7 @@ public:
         return adoptRef(new CSSFilterValue(type));
     }
 
-    String customCssText() const;
+    String customCSSText() const;
 
     FilterOperationType operationType() const { return m_type; }
 
@@ -66,11 +66,13 @@ public:
     bool equals(const CSSFilterValue&) const;
 
 private:
-    CSSFilterValue(FilterOperationType);
-    CSSFilterValue(const CSSFilterValue& cloneFrom);
+    explicit CSSFilterValue(FilterOperationType);
+    explicit CSSFilterValue(const CSSFilterValue& cloneFrom);
 
     FilterOperationType m_type;
 };
+
+DEFINE_CSS_VALUE_TYPE_CASTS(CSSFilterValue, isFilterValue());
 
 }
 

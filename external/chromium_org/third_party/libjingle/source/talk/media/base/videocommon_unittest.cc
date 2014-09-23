@@ -276,6 +276,15 @@ TEST(VideoCommonTest, TestComputeCrop) {
   EXPECT_EQ(640, cropped_width);
   EXPECT_EQ(480, cropped_height);
 
+  // Request 9:16 from VGA rotated (portrait).  Expect crop.
+  ComputeCrop(360, 640,  // Crop size 9:16
+              640, 480,  // Frame is 3:4 portrait
+              1, 1,  // Normal 1:1 pixels
+              90,
+              &cropped_width, &cropped_height);
+  EXPECT_EQ(640, cropped_width);
+  EXPECT_EQ(360, cropped_height);
+
   // Cropped size 0x0.  Expect no cropping.
   // This is used when adding multiple capturers
   ComputeCrop(0, 0,  // Crop size 0x0
@@ -285,6 +294,28 @@ TEST(VideoCommonTest, TestComputeCrop) {
               &cropped_width, &cropped_height);
   EXPECT_EQ(1024, cropped_width);
   EXPECT_EQ(768, cropped_height);
+}
+
+TEST(VideoCommonTest, TestComputeScaleToSquarePixels) {
+  int scaled_width, scaled_height;
+
+  // Pixel aspect ratio is 4:3.  Logical aspect ratio is 16:9.  Expect scale
+  // to square pixels with physical aspect ratio of 16:9.
+  ComputeScaleToSquarePixels(640, 480,
+                             4, 3,  // 4 x 3 pixel aspect ratio
+                             &scaled_width, &scaled_height);
+  EXPECT_EQ(640, scaled_width);
+  EXPECT_EQ(360, scaled_height);
+
+  // Pixel aspect ratio is 3:8.  Physical aspect ratio is 4:3.  Expect scale
+  // to square pixels with logical aspect ratio of 1:2.
+  // Note that 640x1280 will be scaled down by video adapter to view request
+  // of 640*360 and will end up using 320x640.
+  ComputeScaleToSquarePixels(640, 480,
+                             3, 8,  // 4 x 3 pixel aspect ratio
+                             &scaled_width, &scaled_height);
+  EXPECT_EQ(640, scaled_width);
+  EXPECT_EQ(1280, scaled_height);
 }
 
 }  // namespace cricket

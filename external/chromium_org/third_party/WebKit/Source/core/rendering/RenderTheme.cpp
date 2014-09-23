@@ -24,6 +24,7 @@
 
 #include "CSSValueKeywords.h"
 #include "HTMLNames.h"
+#include "InputTypeNames.h"
 #include "RuntimeEnabledFeatures.h"
 #include "core/dom/Document.h"
 #include "core/dom/shadow/ElementShadow.h"
@@ -34,25 +35,25 @@
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLMeterElement.h"
 #include "core/html/HTMLOptionElement.h"
-#include "core/html/InputTypeNames.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html/shadow/MediaControlElements.h"
+#include "core/html/shadow/ShadowElementNames.h"
 #include "core/html/shadow/SpinButtonElement.h"
 #include "core/html/shadow/TextControlInnerElements.h"
 #include "core/page/FocusController.h"
-#include "core/page/Frame.h"
+#include "core/frame/Frame.h"
 #include "core/page/Page.h"
-#include "core/page/Settings.h"
-#include "core/platform/FileSystem.h"
-#include "core/platform/FloatConversion.h"
-#include "core/platform/LocalizedStrings.h"
-#include "core/platform/graphics/FontSelector.h"
-#include "core/platform/graphics/GraphicsContextStateSaver.h"
-#include "core/platform/graphics/StringTruncator.h"
+#include "core/frame/Settings.h"
 #include "core/rendering/PaintInfo.h"
 #include "core/rendering/RenderMeter.h"
 #include "core/rendering/RenderView.h"
 #include "core/rendering/style/RenderStyle.h"
+#include "platform/FileMetadata.h"
+#include "platform/FloatConversion.h"
+#include "platform/fonts/FontSelector.h"
+#include "platform/graphics/GraphicsContextStateSaver.h"
+#include "platform/text/PlatformLocale.h"
+#include "platform/text/StringTruncator.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebFallbackThemeEngine.h"
 #include "public/platform/WebRect.h"
@@ -68,30 +69,29 @@ namespace WebCore {
 
 using namespace HTMLNames;
 
-static StyleColor& customFocusRingColor()
+static Color& customFocusRingColor()
 {
-    DEFINE_STATIC_LOCAL(StyleColor, color, ());
+    DEFINE_STATIC_LOCAL(Color, color, ());
     return color;
 }
 
-static WebKit::WebFallbackThemeEngine::State getWebFallbackThemeState(const RenderTheme* theme, const RenderObject* o)
+static blink::WebFallbackThemeEngine::State getWebFallbackThemeState(const RenderTheme* theme, const RenderObject* o)
 {
     if (!theme->isEnabled(o))
-        return WebKit::WebFallbackThemeEngine::StateDisabled;
+        return blink::WebFallbackThemeEngine::StateDisabled;
     if (theme->isPressed(o))
-        return WebKit::WebFallbackThemeEngine::StatePressed;
+        return blink::WebFallbackThemeEngine::StatePressed;
     if (theme->isHovered(o))
-        return WebKit::WebFallbackThemeEngine::StateHover;
+        return blink::WebFallbackThemeEngine::StateHover;
 
-    return WebKit::WebFallbackThemeEngine::StateNormal;
+    return blink::WebFallbackThemeEngine::StateNormal;
 }
 
 RenderTheme::RenderTheme()
 #if USE(NEW_THEME)
-    : m_theme(platformTheme())
+    : m_platformTheme(platformTheme())
 #endif
 {
-    m_selectionColorsValid = 0;
 }
 
 void RenderTheme::adjustStyle(RenderStyle* style, Element* e, const CachedUAStyle& uaStyle)
@@ -103,7 +103,7 @@ void RenderTheme::adjustStyle(RenderStyle* style, Element* e, const CachedUAStyl
         || style->display() == TABLE_ROW || style->display() == TABLE_COLUMN_GROUP || style->display() == TABLE_COLUMN
         || style->display() == TABLE_CELL || style->display() == TABLE_CAPTION)
         style->setDisplay(INLINE_BLOCK);
-    else if (style->display() == COMPACT || style->display() == RUN_IN || style->display() == LIST_ITEM || style->display() == TABLE)
+    else if (style->display() == LIST_ITEM || style->display() == TABLE)
         style->setDisplay(BLOCK);
 
     if (uaStyle.hasAppearance && isControlStyled(style, uaStyle)) {
@@ -132,7 +132,7 @@ void RenderTheme::adjustStyle(RenderStyle* style, Element* e, const CachedUAStyl
     case ButtonPart: {
         // Border
         LengthBox borderBox(style->borderTopWidth(), style->borderRightWidth(), style->borderBottomWidth(), style->borderLeftWidth());
-        borderBox = m_theme->controlBorder(part, style->font(), borderBox, style->effectiveZoom());
+        borderBox = m_platformTheme->controlBorder(part, style->font().fontDescription(), borderBox, style->effectiveZoom());
         if (borderBox.top().value() != static_cast<int>(style->borderTopWidth())) {
             if (borderBox.top().value())
                 style->setBorderTopWidth(borderBox.top().value());
@@ -161,32 +161,32 @@ void RenderTheme::adjustStyle(RenderStyle* style, Element* e, const CachedUAStyl
         }
 
         // Padding
-        LengthBox paddingBox = m_theme->controlPadding(part, style->font(), style->paddingBox(), style->effectiveZoom());
+        LengthBox paddingBox = m_platformTheme->controlPadding(part, style->font().fontDescription(), style->paddingBox(), style->effectiveZoom());
         if (paddingBox != style->paddingBox())
             style->setPaddingBox(paddingBox);
 
         // Whitespace
-        if (m_theme->controlRequiresPreWhiteSpace(part))
+        if (m_platformTheme->controlRequiresPreWhiteSpace(part))
             style->setWhiteSpace(PRE);
 
         // Width / Height
         // The width and height here are affected by the zoom.
         // FIXME: Check is flawed, since it doesn't take min-width/max-width into account.
-        LengthSize controlSize = m_theme->controlSize(part, style->font(), LengthSize(style->width(), style->height()), style->effectiveZoom());
+        LengthSize controlSize = m_platformTheme->controlSize(part, style->font().fontDescription(), LengthSize(style->width(), style->height()), style->effectiveZoom());
         if (controlSize.width() != style->width())
             style->setWidth(controlSize.width());
         if (controlSize.height() != style->height())
             style->setHeight(controlSize.height());
 
         // Min-Width / Min-Height
-        LengthSize minControlSize = m_theme->minimumControlSize(part, style->font(), style->effectiveZoom());
+        LengthSize minControlSize = m_platformTheme->minimumControlSize(part, style->font().fontDescription(), style->effectiveZoom());
         if (minControlSize.width() != style->minWidth())
             style->setMinWidth(minControlSize.width());
         if (minControlSize.height() != style->minHeight())
             style->setMinHeight(minControlSize.height());
 
         // Font
-        FontDescription controlFont = m_theme->controlFont(part, style->font(), style->effectiveZoom());
+        FontDescription controlFont = m_platformTheme->controlFont(part, style->font().fontDescription(), style->effectiveZoom());
         if (controlFont != style->font().fontDescription()) {
             // Reset our line-height
             style->setLineHeight(RenderStyle::initialLineHeight());
@@ -215,28 +215,10 @@ void RenderTheme::adjustStyle(RenderStyle* style, Element* e, const CachedUAStyl
     case InnerSpinButtonPart:
         return adjustInnerSpinButtonStyle(style, e);
 #endif
-    case TextFieldPart:
-        return adjustTextFieldStyle(style, e);
-    case TextAreaPart:
-        return adjustTextAreaStyle(style, e);
     case MenulistPart:
         return adjustMenuListStyle(style, e);
     case MenulistButtonPart:
         return adjustMenuListButtonStyle(style, e);
-    case MediaPlayButtonPart:
-    case MediaCurrentTimePart:
-    case MediaTimeRemainingPart:
-    case MediaEnterFullscreenButtonPart:
-    case MediaExitFullscreenButtonPart:
-    case MediaMuteButtonPart:
-    case MediaVolumeSliderContainerPart:
-        return adjustMediaControlStyle(style, e);
-    case MediaSliderPart:
-    case MediaVolumeSliderPart:
-    case MediaFullScreenVolumeSliderPart:
-    case SliderHorizontalPart:
-    case SliderVerticalPart:
-        return adjustSliderTrackStyle(style, e);
     case SliderThumbHorizontalPart:
     case SliderThumbVerticalPart:
         return adjustSliderThumbStyle(style, e);
@@ -248,14 +230,6 @@ void RenderTheme::adjustStyle(RenderStyle* style, Element* e, const CachedUAStyl
         return adjustSearchFieldDecorationStyle(style, e);
     case SearchFieldResultsDecorationPart:
         return adjustSearchFieldResultsDecorationStyle(style, e);
-    case ProgressBarPart:
-        return adjustProgressBarStyle(style, e);
-    case MeterPart:
-    case RelevancyLevelIndicatorPart:
-    case ContinuousCapacityLevelIndicatorPart:
-    case DiscreteCapacityLevelIndicatorPart:
-    case RatingLevelIndicatorPart:
-        return adjustMeterStyle(style, e);
 #if ENABLE(INPUT_SPEECH)
     case InputSpeechButtonPart:
         return adjustInputFieldSpeechButtonStyle(style, e);
@@ -291,7 +265,7 @@ bool RenderTheme::paint(RenderObject* o, const PaintInfo& paintInfo, const IntRe
     case SquareButtonPart:
     case ButtonPart:
     case InnerSpinButtonPart:
-        m_theme->paint(part, controlStatesForRenderer(o), const_cast<GraphicsContext*>(paintInfo.context), r, o->style()->effectiveZoom(), o->view()->frameView());
+        m_platformTheme->paint(part, controlStatesForRenderer(o), const_cast<GraphicsContext*>(paintInfo.context), r, o->style()->effectiveZoom(), o->view()->frameView());
         return false;
     default:
         break;
@@ -496,8 +470,8 @@ String RenderTheme::extraDefaultStyleSheet()
     }
     if (RuntimeEnabledFeatures::dialogElementEnabled()) {
         runtimeCSS.appendLiteral("dialog:not([open]) { display: none; }");
-        runtimeCSS.appendLiteral("dialog { position: absolute; left: 0; right: 0; margin: auto; border: solid; padding: 1em; background: white; color: black;}");
-        runtimeCSS.appendLiteral("dialog::backdrop { background: rgba(0,0,0,0.1); }");
+        runtimeCSS.appendLiteral("dialog { position: absolute; left: 0; right: 0; width: -webkit-fit-content; height: -webkit-fit-content; margin: auto; border: solid; padding: 1em; background: white; color: black;}");
+        runtimeCSS.appendLiteral("dialog::backdrop { position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: rgba(0,0,0,0.1); }");
     }
 
     return runtimeCSS.toString();
@@ -526,88 +500,59 @@ String RenderTheme::formatMediaControlsCurrentTime(float currentTime, float /*du
     return formatMediaControlsTime(currentTime);
 }
 
-namespace SelectionColors {
-enum {
-    ActiveBackground = 1,
-    InactiveBackground = 2,
-    ActiveForeground = 4,
-    InactiveForeground = 8,
-    ActiveListBoxBackground = 16,
-    InactiveListBoxBackground = 32,
-    ActiveListBoxForeground = 64,
-    InactiveListBoxForeground = 128
-};
-};
-
 Color RenderTheme::activeSelectionBackgroundColor() const
 {
-    if (!(m_selectionColorsValid & SelectionColors::ActiveBackground)) {
+    if (!m_activeSelectionBackgroundColor.isValid())
         m_activeSelectionBackgroundColor = platformActiveSelectionBackgroundColor().blendWithWhite();
-        m_selectionColorsValid |= SelectionColors::ActiveBackground;
-    }
     return m_activeSelectionBackgroundColor;
 }
 
 Color RenderTheme::inactiveSelectionBackgroundColor() const
 {
-    if (!(m_selectionColorsValid & SelectionColors::InactiveBackground)) {
+    if (!m_inactiveSelectionBackgroundColor.isValid())
         m_inactiveSelectionBackgroundColor = platformInactiveSelectionBackgroundColor().blendWithWhite();
-        m_selectionColorsValid |= SelectionColors::InactiveBackground;
-    }
     return m_inactiveSelectionBackgroundColor;
 }
 
 Color RenderTheme::activeSelectionForegroundColor() const
 {
-    if (!(m_selectionColorsValid & SelectionColors::ActiveForeground) && supportsSelectionForegroundColors()) {
+    if (!m_activeSelectionForegroundColor.isValid() && supportsSelectionForegroundColors())
         m_activeSelectionForegroundColor = platformActiveSelectionForegroundColor();
-        m_selectionColorsValid |= SelectionColors::ActiveForeground;
-    }
     return m_activeSelectionForegroundColor;
 }
 
 Color RenderTheme::inactiveSelectionForegroundColor() const
 {
-    if (!(m_selectionColorsValid & SelectionColors::InactiveForeground) && supportsSelectionForegroundColors()) {
+    if (!m_inactiveSelectionForegroundColor.isValid() && supportsSelectionForegroundColors())
         m_inactiveSelectionForegroundColor = platformInactiveSelectionForegroundColor();
-        m_selectionColorsValid |= SelectionColors::InactiveForeground;
-    }
     return m_inactiveSelectionForegroundColor;
 }
 
 Color RenderTheme::activeListBoxSelectionBackgroundColor() const
 {
-    if (!(m_selectionColorsValid & SelectionColors::ActiveListBoxBackground)) {
+    if (!m_activeListBoxSelectionBackgroundColor.isValid())
         m_activeListBoxSelectionBackgroundColor = platformActiveListBoxSelectionBackgroundColor();
-        m_selectionColorsValid |= SelectionColors::ActiveListBoxBackground;
-    }
     return m_activeListBoxSelectionBackgroundColor;
 }
 
 Color RenderTheme::inactiveListBoxSelectionBackgroundColor() const
 {
-    if (!(m_selectionColorsValid & SelectionColors::InactiveListBoxBackground)) {
+    if (!m_inactiveListBoxSelectionBackgroundColor.isValid())
         m_inactiveListBoxSelectionBackgroundColor = platformInactiveListBoxSelectionBackgroundColor();
-        m_selectionColorsValid |= SelectionColors::InactiveListBoxBackground;
-    }
     return m_inactiveListBoxSelectionBackgroundColor;
 }
 
 Color RenderTheme::activeListBoxSelectionForegroundColor() const
 {
-    if (!(m_selectionColorsValid & SelectionColors::ActiveListBoxForeground) && supportsListBoxSelectionForegroundColors()) {
+    if (!m_activeListBoxSelectionForegroundColor.isValid() && supportsListBoxSelectionForegroundColors())
         m_activeListBoxSelectionForegroundColor = platformActiveListBoxSelectionForegroundColor();
-        m_selectionColorsValid |= SelectionColors::ActiveListBoxForeground;
-    }
     return m_activeListBoxSelectionForegroundColor;
 }
 
 Color RenderTheme::inactiveListBoxSelectionForegroundColor() const
 {
-    if (!(m_selectionColorsValid & SelectionColors::InactiveListBoxForeground) && supportsListBoxSelectionForegroundColors()) {
+    if (!m_inactiveListBoxSelectionForegroundColor.isValid() && supportsListBoxSelectionForegroundColors())
         m_inactiveListBoxSelectionForegroundColor = platformInactiveListBoxSelectionForegroundColor();
-        m_selectionColorsValid |= SelectionColors::InactiveListBoxForeground;
-    }
     return m_inactiveListBoxSelectionForegroundColor;
 }
 
@@ -664,7 +609,7 @@ int RenderTheme::baselinePosition(const RenderObject* o) const
     const RenderBox* box = toRenderBox(o);
 
 #if USE(NEW_THEME)
-    return box->height() + box->marginTop() + m_theme->baselinePositionAdjustment(o->style()->appearance()) * o->style()->effectiveZoom();
+    return box->height() + box->marginTop() + m_platformTheme->baselinePositionAdjustment(o->style()->appearance()) * o->style()->effectiveZoom();
 #else
     return box->height() + box->marginTop();
 #endif
@@ -689,7 +634,7 @@ static bool isBackgroundOrBorderStyled(const RenderStyle& style, const CachedUAS
     // Test the style to see if the UA border and background match.
     return style.border() != uaStyle.border
         || backgroundLayersCopy != backgroundCopy
-        || style.visitedDependentColor(CSSPropertyBackgroundColor).color() != uaStyle.backgroundColor;
+        || style.visitedDependentColor(CSSPropertyBackgroundColor) != uaStyle.backgroundColor;
 }
 
 bool RenderTheme::isControlStyled(const RenderStyle* style, const CachedUAStyle& uaStyle) const
@@ -725,10 +670,7 @@ bool RenderTheme::isControlStyled(const RenderStyle* style, const CachedUAStyle&
 void RenderTheme::adjustRepaintRect(const RenderObject* o, IntRect& r)
 {
 #if USE(NEW_THEME)
-    m_theme->inflateControlPaintRect(o->style()->appearance(), controlStatesForRenderer(o), r, o->style()->effectiveZoom());
-#else
-    UNUSED_PARAM(o);
-    UNUSED_PARAM(r);
+    m_platformTheme->inflateControlPaintRect(o->style()->appearance(), controlStatesForRenderer(o), r, o->style()->effectiveZoom());
 #endif
 }
 
@@ -802,7 +744,7 @@ bool RenderTheme::isActive(const RenderObject* o) const
     if (!node)
         return false;
 
-    Page* page = node->document()->page();
+    Page* page = node->document().page();
     if (!page)
         return false;
 
@@ -838,9 +780,9 @@ bool RenderTheme::isFocused(const RenderObject* o) const
         return false;
 
     node = node->focusDelegate();
-    Document* document = node->document();
-    Frame* frame = document->frame();
-    return node == document->focusedElement() && node->shouldHaveFocusAppearance() && frame && frame->selection()->isFocusedAndActive();
+    Document& document = node->document();
+    Frame* frame = document.frame();
+    return node == document.focusedElement() && node->shouldHaveFocusAppearance() && frame && frame->selection().isFocusedAndActive();
 }
 
 bool RenderTheme::isPressed(const RenderObject* o) const
@@ -856,7 +798,7 @@ bool RenderTheme::isSpinUpButtonPartPressed(const RenderObject* o) const
     if (!node || !node->active() || !node->isElementNode()
         || !toElement(node)->isSpinButtonElement())
         return false;
-    SpinButtonElement* element = static_cast<SpinButtonElement*>(node);
+    SpinButtonElement* element = toSpinButtonElement(node);
     return element->upDownState() == SpinButtonElement::Up;
 }
 
@@ -875,7 +817,7 @@ bool RenderTheme::isHovered(const RenderObject* o) const
         return false;
     if (!node->isElementNode() || !toElement(node)->isSpinButtonElement())
         return node->hovered();
-    SpinButtonElement* element = static_cast<SpinButtonElement*>(node);
+    SpinButtonElement* element = toSpinButtonElement(node);
     return element->hovered() && element->upDownState() != SpinButtonElement::Indeterminate;
 }
 
@@ -884,7 +826,7 @@ bool RenderTheme::isSpinUpButtonPartHovered(const RenderObject* o) const
     Node* node = o->node();
     if (!node || !node->isElementNode() || !toElement(node)->isSpinButtonElement())
         return false;
-    SpinButtonElement* element = static_cast<SpinButtonElement*>(node);
+    SpinButtonElement* element = toSpinButtonElement(node);
     return element->upDownState() == SpinButtonElement::Up;
 }
 
@@ -922,24 +864,12 @@ void RenderTheme::adjustRadioStyle(RenderStyle* style, Element*) const
 
 void RenderTheme::adjustButtonStyle(RenderStyle* style, Element*) const
 {
-    // Most platforms will completely honor all CSS, and so we have no need to
-    // adjust the style at all by default. We will still allow the theme a crack
-    // at setting up a desired vertical size.
-    setButtonSize(style);
 }
 
 void RenderTheme::adjustInnerSpinButtonStyle(RenderStyle*, Element*) const
 {
 }
 #endif
-
-void RenderTheme::adjustTextFieldStyle(RenderStyle*, Element*) const
-{
-}
-
-void RenderTheme::adjustTextAreaStyle(RenderStyle*, Element*) const
-{
-}
 
 void RenderTheme::adjustMenuListStyle(RenderStyle*, Element*) const
 {
@@ -957,10 +887,6 @@ bool RenderTheme::paintInputFieldSpeechButton(RenderObject* object, const PaintI
 }
 #endif
 
-void RenderTheme::adjustMeterStyle(RenderStyle* style, Element*) const
-{
-}
-
 IntSize RenderTheme::meterSizeForBounds(const RenderMeter*, const IntRect& bounds) const
 {
     return bounds.size();
@@ -974,11 +900,6 @@ bool RenderTheme::supportsMeter(ControlPart) const
 bool RenderTheme::paintMeter(RenderObject*, const PaintInfo&, const IntRect&)
 {
     return true;
-}
-
-LayoutUnit RenderTheme::sliderTickSnappingThreshold() const
-{
-    return 5;
 }
 
 void RenderTheme::paintSliderTicks(RenderObject* o, const PaintInfo& paintInfo, const IntRect& rect)
@@ -1001,7 +922,7 @@ void RenderTheme::paintSliderTicks(RenderObject* o, const PaintInfo& paintInfo, 
     bool isHorizontal = part ==  SliderHorizontalPart;
 
     IntSize thumbSize;
-    RenderObject* thumbRenderer = input->sliderThumbElement()->renderer();
+    RenderObject* thumbRenderer = input->userAgentShadowRoot()->getElementById(ShadowElementNames::sliderThumb())->renderer();
     if (thumbRenderer) {
         RenderStyle* thumbStyle = thumbRenderer->style();
         int thumbWidth = thumbStyle->width().intValue();
@@ -1016,7 +937,7 @@ void RenderTheme::paintSliderTicks(RenderObject* o, const PaintInfo& paintInfo, 
     int tickRegionSideMargin = 0;
     int tickRegionWidth = 0;
     IntRect trackBounds;
-    RenderObject* trackRenderer = input->sliderTrackElement()->renderer();
+    RenderObject* trackRenderer = input->userAgentShadowRoot()->getElementById(ShadowElementNames::sliderTrack())->renderer();
     // We can ignoring transforms because transform is handled by the graphics context.
     if (trackRenderer)
         trackBounds = trackRenderer->absoluteBoundingBoxRectIgnoringTransforms();
@@ -1070,24 +991,12 @@ double RenderTheme::animationDurationForProgressBar(RenderProgress*) const
     return 0;
 }
 
-void RenderTheme::adjustProgressBarStyle(RenderStyle*, Element*) const
-{
-}
-
 bool RenderTheme::shouldHaveSpinButton(HTMLInputElement* inputElement) const
 {
     return inputElement->isSteppable() && !inputElement->isRangeControl();
 }
 
 void RenderTheme::adjustMenuListButtonStyle(RenderStyle*, Element*) const
-{
-}
-
-void RenderTheme::adjustMediaControlStyle(RenderStyle*, Element*) const
-{
-}
-
-void RenderTheme::adjustSliderTrackStyle(RenderStyle*, Element*) const
 {
 }
 
@@ -1118,7 +1027,16 @@ void RenderTheme::adjustSearchFieldResultsDecorationStyle(RenderStyle*, Element*
 
 void RenderTheme::platformColorsDidChange()
 {
-    m_selectionColorsValid = 0;
+    m_activeSelectionForegroundColor = Color();
+    m_inactiveSelectionForegroundColor = Color();
+    m_activeSelectionBackgroundColor = Color();
+    m_inactiveSelectionBackgroundColor = Color();
+
+    m_activeListBoxSelectionForegroundColor = Color();
+    m_inactiveListBoxSelectionForegroundColor = Color();
+    m_activeListBoxSelectionBackgroundColor = Color();
+    m_inactiveListBoxSelectionForegroundColor = Color();
+
     Page::scheduleForcedStyleRecalcForAllPages();
 }
 
@@ -1213,7 +1131,7 @@ Color RenderTheme::platformInactiveTextSearchHighlightColor() const
 
 Color RenderTheme::tapHighlightColor()
 {
-    return defaultTheme()->platformTapHighlightColor();
+    return theme().platformTapHighlightColor();
 }
 
 void RenderTheme::setCustomFocusRingColor(const Color& c)
@@ -1223,28 +1141,23 @@ void RenderTheme::setCustomFocusRingColor(const Color& c)
 
 Color RenderTheme::focusRingColor()
 {
-    return customFocusRingColor().isValid() ? customFocusRingColor().color() : defaultTheme()->platformFocusRingColor();
+    return customFocusRingColor().isValid() ? customFocusRingColor() : theme().platformFocusRingColor();
 }
 
-String RenderTheme::fileListDefaultLabel(bool multipleFilesAllowed) const
-{
-    if (multipleFilesAllowed)
-        return fileButtonNoFilesSelectedLabel();
-    return fileButtonNoFileSelectedLabel();
-}
-
-String RenderTheme::fileListNameForWidth(const FileList* fileList, const Font& font, int width, bool multipleFilesAllowed) const
+String RenderTheme::fileListNameForWidth(Locale& locale, const FileList* fileList, const Font& font, int width) const
 {
     if (width <= 0)
         return String();
 
     String string;
-    if (fileList->isEmpty())
-        string = fileListDefaultLabel(multipleFilesAllowed);
-    else if (fileList->length() == 1)
+    if (fileList->isEmpty()) {
+        string = locale.queryString(blink::WebLocalizedString::FileButtonNoFileSelectedLabel);
+    } else if (fileList->length() == 1) {
         string = fileList->item(0)->name();
-    else
-        return StringTruncator::rightTruncate(multipleFileUploadText(fileList->length()), width, font, StringTruncator::EnableRoundingHacks);
+    } else {
+        // FIXME: Localization of fileList->length().
+        return StringTruncator::rightTruncate(locale.queryString(blink::WebLocalizedString::MultipleFileUploadText, String::number(fileList->length())), width, font, StringTruncator::EnableRoundingHacks);
+    }
 
     return StringTruncator::centerTruncate(string, width, font, StringTruncator::EnableRoundingHacks);
 }
@@ -1256,26 +1169,26 @@ bool RenderTheme::shouldOpenPickerWithF4Key() const
 
 bool RenderTheme::supportsDataListUI(const AtomicString& type) const
 {
-    return type == InputTypeNames::text() || type == InputTypeNames::search() || type == InputTypeNames::url()
-        || type == InputTypeNames::telephone() || type == InputTypeNames::email() || type == InputTypeNames::number()
-        || type == InputTypeNames::color()
-        || type == InputTypeNames::date()
-        || type == InputTypeNames::datetime()
-        || type == InputTypeNames::datetimelocal()
-        || type == InputTypeNames::month()
-        || type == InputTypeNames::week()
-        || type == InputTypeNames::time()
-        || type == InputTypeNames::range();
+    return type == InputTypeNames::text || type == InputTypeNames::search || type == InputTypeNames::url
+        || type == InputTypeNames::tel || type == InputTypeNames::email || type == InputTypeNames::number
+        || type == InputTypeNames::color
+        || type == InputTypeNames::date
+        || type == InputTypeNames::datetime
+        || type == InputTypeNames::datetime_local
+        || type == InputTypeNames::month
+        || type == InputTypeNames::week
+        || type == InputTypeNames::time
+        || type == InputTypeNames::range;
 }
 
 #if ENABLE(INPUT_MULTIPLE_FIELDS_UI)
 bool RenderTheme::supportsCalendarPicker(const AtomicString& type) const
 {
-    return type == InputTypeNames::date()
-        || type == InputTypeNames::datetime()
-        || type == InputTypeNames::datetimelocal()
-        || type == InputTypeNames::month()
-        || type == InputTypeNames::week();
+    return type == InputTypeNames::date
+        || type == InputTypeNames::datetime
+        || type == InputTypeNames::datetime_local
+        || type == InputTypeNames::month
+        || type == InputTypeNames::week;
 }
 #endif
 
@@ -1322,8 +1235,8 @@ void RenderTheme::setSizeIfAuto(RenderStyle* style, const IntSize& size)
 
 bool RenderTheme::paintCheckboxUsingFallbackTheme(RenderObject* o, const PaintInfo& i, const IntRect& r)
 {
-    WebKit::WebFallbackThemeEngine::ExtraParams extraParams;
-    WebKit::WebCanvas* canvas = i.context->canvas();
+    blink::WebFallbackThemeEngine::ExtraParams extraParams;
+    blink::WebCanvas* canvas = i.context->canvas();
     extraParams.button.checked = isChecked(o);
     extraParams.button.indeterminate = isIndeterminate(o);
 
@@ -1338,7 +1251,7 @@ bool RenderTheme::paintCheckboxUsingFallbackTheme(RenderObject* o, const PaintIn
         i.context->translate(-unzoomedRect.x(), -unzoomedRect.y());
     }
 
-    WebKit::Platform::current()->fallbackThemeEngine()->paint(canvas, WebKit::WebFallbackThemeEngine::PartCheckbox, getWebFallbackThemeState(this, o), WebKit::WebRect(unzoomedRect), &extraParams);
+    blink::Platform::current()->fallbackThemeEngine()->paint(canvas, blink::WebFallbackThemeEngine::PartCheckbox, getWebFallbackThemeState(this, o), blink::WebRect(unzoomedRect), &extraParams);
     return false;
 }
 
@@ -1348,7 +1261,7 @@ void RenderTheme::adjustCheckboxStyleUsingFallbackTheme(RenderStyle* style, Elem
     if (!style->width().isIntrinsicOrAuto() && !style->height().isAuto())
         return;
 
-    IntSize size = WebKit::Platform::current()->fallbackThemeEngine()->getSize(WebKit::WebFallbackThemeEngine::PartCheckbox);
+    IntSize size = blink::Platform::current()->fallbackThemeEngine()->getSize(blink::WebFallbackThemeEngine::PartCheckbox);
     float zoomLevel = style->effectiveZoom();
     size.setWidth(size.width() * zoomLevel);
     size.setHeight(size.height() * zoomLevel);
@@ -1364,8 +1277,8 @@ void RenderTheme::adjustCheckboxStyleUsingFallbackTheme(RenderStyle* style, Elem
 
 bool RenderTheme::paintRadioUsingFallbackTheme(RenderObject* o, const PaintInfo& i, const IntRect& r)
 {
-    WebKit::WebFallbackThemeEngine::ExtraParams extraParams;
-    WebKit::WebCanvas* canvas = i.context->canvas();
+    blink::WebFallbackThemeEngine::ExtraParams extraParams;
+    blink::WebCanvas* canvas = i.context->canvas();
     extraParams.button.checked = isChecked(o);
     extraParams.button.indeterminate = isIndeterminate(o);
 
@@ -1380,7 +1293,7 @@ bool RenderTheme::paintRadioUsingFallbackTheme(RenderObject* o, const PaintInfo&
         i.context->translate(-unzoomedRect.x(), -unzoomedRect.y());
     }
 
-    WebKit::Platform::current()->fallbackThemeEngine()->paint(canvas, WebKit::WebFallbackThemeEngine::PartRadio, getWebFallbackThemeState(this, o), WebKit::WebRect(unzoomedRect), &extraParams);
+    blink::Platform::current()->fallbackThemeEngine()->paint(canvas, blink::WebFallbackThemeEngine::PartRadio, getWebFallbackThemeState(this, o), blink::WebRect(unzoomedRect), &extraParams);
     return false;
 }
 
@@ -1390,7 +1303,7 @@ void RenderTheme::adjustRadioStyleUsingFallbackTheme(RenderStyle* style, Element
     if (!style->width().isIntrinsicOrAuto() && !style->height().isAuto())
         return;
 
-    IntSize size = WebKit::Platform::current()->fallbackThemeEngine()->getSize(WebKit::WebFallbackThemeEngine::PartRadio);
+    IntSize size = blink::Platform::current()->fallbackThemeEngine()->getSize(blink::WebFallbackThemeEngine::PartRadio);
     float zoomLevel = style->effectiveZoom();
     size.setWidth(size.width() * zoomLevel);
     size.setHeight(size.height() * zoomLevel);

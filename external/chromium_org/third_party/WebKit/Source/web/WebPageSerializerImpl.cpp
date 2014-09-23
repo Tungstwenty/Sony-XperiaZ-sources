@@ -92,14 +92,12 @@
 #include "core/html/HTMLMetaElement.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
-#include "public/platform/WebURL.h"
 #include "public/platform/WebVector.h"
-#include "weborigin/KURL.h"
 #include "wtf/text/TextEncoding.h"
 
 using namespace WebCore;
 
-namespace WebKit {
+namespace blink {
 
 // Maximum length of data buffer which is used to temporary save generated
 // html content data. This is a soft limit which might be passed if a very large
@@ -135,7 +133,7 @@ String WebPageSerializerImpl::preActionBeforeSerializeOpenTag(
         // have overrided the META which have correct charset declaration after
         // serializing open tag of HEAD element.
         if (element->hasTagName(HTMLNames::metaTag)) {
-            const HTMLMetaElement* meta = static_cast<const HTMLMetaElement*>(element);
+            const HTMLMetaElement* meta = toHTMLMetaElement(element);
             // Check whether the META tag has declared charset or not.
             String equiv = meta->httpEquiv();
             if (equalIgnoringCase(equiv, "content-type")) {
@@ -169,7 +167,7 @@ String WebPageSerializerImpl::preActionBeforeSerializeOpenTag(
             // Get encoding info.
             String xmlEncoding = param->document->xmlEncoding();
             if (xmlEncoding.isEmpty())
-                xmlEncoding = param->document->encoding();
+                xmlEncoding = param->document->encodingName();
             if (xmlEncoding.isEmpty())
                 xmlEncoding = UTF8Encoding().name();
             result.append("<?xml version=\"");
@@ -446,7 +444,7 @@ WebPageSerializerImpl::WebPageSerializerImpl(WebFrame* frame,
 {
     // Must specify available webframe.
     ASSERT(frame);
-    m_specifiedWebFrameImpl = static_cast<WebFrameImpl*>(frame);
+    m_specifiedWebFrameImpl = toWebFrameImpl(frame);
     // Make sure we have non 0 client.
     ASSERT(client);
     // Build local resources map.
@@ -509,8 +507,7 @@ bool WebPageSerializerImpl::serialize()
 
         didSerialization = true;
 
-        String encoding = document->encoding();
-        const WTF::TextEncoding& textEncoding = encoding.isEmpty() ? UTF8Encoding() : WTF::TextEncoding(encoding);
+        const WTF::TextEncoding& textEncoding = document->encoding().isValid() ? document->encoding() : UTF8Encoding();
         String directoryName = url == mainURL ? m_localDirectoryName : "";
 
         SerializeDomParam param(url, textEncoding, document, directoryName);
@@ -527,4 +524,4 @@ bool WebPageSerializerImpl::serialize()
     return didSerialization;
 }
 
-}  // namespace WebKit
+}  // namespace blink

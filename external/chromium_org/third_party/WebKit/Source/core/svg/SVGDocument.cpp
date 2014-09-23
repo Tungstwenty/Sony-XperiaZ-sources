@@ -23,9 +23,8 @@
 
 #include "SVGNames.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "core/dom/EventNames.h"
-#include "core/dom/NodeRenderingContext.h"
-#include "core/page/FrameView.h"
+#include "core/events/ThreadLocalEventNames.h"
+#include "core/frame/FrameView.h"
 #include "core/rendering/RenderView.h"
 #include "core/svg/SVGElement.h"
 #include "core/svg/SVGSVGElement.h"
@@ -52,8 +51,8 @@ SVGSVGElement* SVGDocument::rootElement() const
 
 void SVGDocument::dispatchZoomEvent(float prevScale, float newScale)
 {
-    RefPtr<SVGZoomEvent> event = static_pointer_cast<SVGZoomEvent>(createEvent("SVGZoomEvents", IGNORE_EXCEPTION));
-    event->initEvent(eventNames().zoomEvent, true, false);
+    RefPtr<SVGZoomEvent> event = SVGZoomEvent::create();
+    event->initEvent(EventTypeNames::zoom, true, false);
     event->setPreviousScale(prevScale);
     event->setNewScale(newScale);
     rootElement()->dispatchEvent(event.release(), IGNORE_EXCEPTION);
@@ -61,19 +60,20 @@ void SVGDocument::dispatchZoomEvent(float prevScale, float newScale)
 
 void SVGDocument::dispatchScrollEvent()
 {
-    RefPtr<Event> event = createEvent("SVGEvents", IGNORE_EXCEPTION);
-    event->initEvent(eventNames().scrollEvent, true, false);
+    RefPtr<Event> event = Event::create();
+    event->initEvent(EventTypeNames::scroll, true, false);
     rootElement()->dispatchEvent(event.release(), IGNORE_EXCEPTION);
 }
 
 bool SVGDocument::zoomAndPanEnabled() const
 {
-    if (rootElement()) {
-        if (rootElement()->useCurrentView()) {
-            if (rootElement()->currentView())
-                return rootElement()->currentView()->zoomAndPan() == SVGZoomAndPanMagnify;
-        } else
-            return rootElement()->zoomAndPan() == SVGZoomAndPanMagnify;
+    if (SVGSVGElement* svg = rootElement()) {
+        if (svg->useCurrentView()) {
+            if (svg->currentView())
+                return svg->currentView()->zoomAndPan() == SVGZoomAndPanMagnify;
+        } else {
+            return svg->zoomAndPan() == SVGZoomAndPanMagnify;
+        }
     }
 
     return false;
@@ -81,24 +81,29 @@ bool SVGDocument::zoomAndPanEnabled() const
 
 void SVGDocument::startPan(const FloatPoint& start)
 {
-    if (rootElement())
-        m_translate = FloatPoint(start.x() - rootElement()->currentTranslate().x(), start.y() - rootElement()->currentTranslate().y());
+    if (SVGSVGElement* svg = rootElement())
+        m_translate = FloatPoint(start.x() - svg->currentTranslate().x(), start.y() - svg->currentTranslate().y());
 }
 
 void SVGDocument::updatePan(const FloatPoint& pos) const
 {
-    if (rootElement()) {
-        rootElement()->setCurrentTranslate(FloatPoint(pos.x() - m_translate.x(), pos.y() - m_translate.y()));
+    if (SVGSVGElement* svg = rootElement()) {
+        svg->setCurrentTranslate(FloatPoint(pos.x() - m_translate.x(), pos.y() - m_translate.y()));
         if (renderer())
             renderer()->repaint();
     }
 }
 
-bool SVGDocument::childShouldCreateRenderer(const NodeRenderingContext& childContext) const
+bool SVGDocument::childShouldCreateRenderer(const Node& child) const
 {
-    if (childContext.node()->hasTagName(SVGNames::svgTag))
-        return toSVGSVGElement(childContext.node())->isValid();
+    if (child.hasTagName(SVGNames::svgTag))
+        return toSVGSVGElement(&child)->isValid();
     return true;
+}
+
+PassRefPtr<Document> SVGDocument::cloneDocumentWithoutChildren()
+{
+    return create(DocumentInit(url()));
 }
 
 }

@@ -28,26 +28,25 @@
 #include "bindings/v8/ScriptEventListener.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/Document.h"
-#include "core/dom/Event.h"
-#include "core/dom/EventNames.h"
 #include "core/dom/ScriptLoader.h"
 #include "core/dom/Text.h"
+#include "core/events/Event.h"
+#include "core/events/ThreadLocalEventNames.h"
 
 namespace WebCore {
 
 using namespace HTMLNames;
 
-inline HTMLScriptElement::HTMLScriptElement(const QualifiedName& tagName, Document* document, bool wasInsertedByParser, bool alreadyStarted)
-    : HTMLElement(tagName, document)
+inline HTMLScriptElement::HTMLScriptElement(Document& document, bool wasInsertedByParser, bool alreadyStarted)
+    : HTMLElement(scriptTag, document)
     , m_loader(ScriptLoader::create(this, wasInsertedByParser, alreadyStarted))
 {
-    ASSERT(hasTagName(scriptTag));
     ScriptWrappable::init(this);
 }
 
-PassRefPtr<HTMLScriptElement> HTMLScriptElement::create(const QualifiedName& tagName, Document* document, bool wasInsertedByParser, bool alreadyStarted)
+PassRefPtr<HTMLScriptElement> HTMLScriptElement::create(Document& document, bool wasInsertedByParser, bool alreadyStarted)
 {
-    return adoptRef(new HTMLScriptElement(tagName, document, wasInsertedByParser, alreadyStarted));
+    return adoptRef(new HTMLScriptElement(document, wasInsertedByParser, alreadyStarted));
 }
 
 bool HTMLScriptElement::isURLAttribute(const Attribute& attribute) const
@@ -68,7 +67,7 @@ void HTMLScriptElement::parseAttribute(const QualifiedName& name, const AtomicSt
     else if (name == asyncAttr)
         m_loader->handleAsyncAttribute();
     else if (name == onbeforeloadAttr)
-        setAttributeEventListener(eventNames().beforeloadEvent, createAttributeEventListener(this, name, value));
+        setAttributeEventListener(EventTypeNames::beforeload, createAttributeEventListener(this, name, value));
     else
         HTMLElement::parseAttribute(name, value);
 }
@@ -76,25 +75,25 @@ void HTMLScriptElement::parseAttribute(const QualifiedName& name, const AtomicSt
 Node::InsertionNotificationRequest HTMLScriptElement::insertedInto(ContainerNode* insertionPoint)
 {
     HTMLElement::insertedInto(insertionPoint);
-    m_loader->insertedInto(insertionPoint);
-    return InsertionDone;
+    return InsertionShouldCallDidNotifySubtreeInsertions;
+}
+
+void HTMLScriptElement::didNotifySubtreeInsertionsToDocument()
+{
+    m_loader->didNotifySubtreeInsertionsToDocument();
 }
 
 void HTMLScriptElement::setText(const String &value)
 {
     RefPtr<Node> protectFromMutationEvents(this);
 
-    int numChildren = childNodeCount();
-
-    if (numChildren == 1 && firstChild()->isTextNode()) {
+    if (hasOneTextChild()) {
         toText(firstChild())->setData(value);
         return;
     }
 
-    if (numChildren > 0)
-        removeChildren();
-
-    appendChild(document()->createTextNode(value.impl()), IGNORE_EXCEPTION);
+    removeChildren();
+    appendChild(document().createTextNode(value.impl()), IGNORE_EXCEPTION);
 }
 
 void HTMLScriptElement::setAsync(bool async)
@@ -110,7 +109,7 @@ bool HTMLScriptElement::async() const
 
 KURL HTMLScriptElement::src() const
 {
-    return document()->completeURL(sourceAttributeValue());
+    return document().completeURL(sourceAttributeValue());
 }
 
 void HTMLScriptElement::addSubresourceAttributeURLs(ListHashSet<KURL>& urls) const
@@ -168,12 +167,12 @@ bool HTMLScriptElement::hasSourceAttribute() const
 void HTMLScriptElement::dispatchLoadEvent()
 {
     ASSERT(!m_loader->haveFiredLoadEvent());
-    dispatchEvent(Event::create(eventNames().loadEvent, false, false));
+    dispatchEvent(Event::create(EventTypeNames::load));
 }
 
 PassRefPtr<Element> HTMLScriptElement::cloneElementWithoutAttributesAndChildren()
 {
-    return adoptRef(new HTMLScriptElement(tagQName(), document(), false, m_loader->alreadyStarted()));
+    return adoptRef(new HTMLScriptElement(document(), false, m_loader->alreadyStarted()));
 }
 
 }

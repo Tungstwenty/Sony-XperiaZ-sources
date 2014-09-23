@@ -27,10 +27,11 @@
 #ifndef SVGImage_h
 #define SVGImage_h
 
-#include "core/platform/graphics/Image.h"
+#include "platform/graphics/Image.h"
 
 namespace WebCore {
 
+class Element;
 class FrameView;
 class ImageBuffer;
 class Page;
@@ -45,11 +46,14 @@ public:
         return adoptRef(new SVGImage(observer));
     }
 
+    static bool isInSVGImage(const Element*);
+
     RenderBox* embeddedContentBox() const;
-    FrameView* frameView() const;
 
     virtual bool isSVGImage() const OVERRIDE { return true; }
     virtual IntSize size() const OVERRIDE { return m_intrinsicSize; }
+
+    virtual bool currentFrameHasSingleSecurityOrigin() const OVERRIDE;
 
     virtual bool hasRelativeWidth() const OVERRIDE;
     virtual bool hasRelativeHeight() const OVERRIDE;
@@ -61,10 +65,14 @@ public:
     virtual PassRefPtr<NativeImageSkia> nativeImageForCurrentFrame() OVERRIDE;
 
 private:
+    friend class AXRenderObject;
     friend class SVGImageChromeClient;
     friend class SVGImageForContainer;
 
     virtual ~SVGImage();
+
+    // Returns the SVG image document's frame.
+    FrameView* frameView() const;
 
     virtual String filenameExtension() const OVERRIDE;
 
@@ -78,21 +86,43 @@ private:
     // FIXME: SVGImages are underreporting decoded sizes and will be unable
     // to prune because these functions are not implemented yet.
     virtual void destroyDecodedData(bool) OVERRIDE { }
-    virtual unsigned decodedSize() const OVERRIDE { return 0; }
 
     // FIXME: Implement this to be less conservative.
     virtual bool currentFrameKnownToBeOpaque() OVERRIDE { return false; }
 
     SVGImage(ImageObserver*);
-    virtual void draw(GraphicsContext*, const FloatRect& fromRect, const FloatRect& toRect, CompositeOperator, BlendMode) OVERRIDE;
-    void drawForContainer(GraphicsContext*, const FloatSize, float, const FloatRect&, const FloatRect&, CompositeOperator, BlendMode);
+    virtual void draw(GraphicsContext*, const FloatRect& fromRect, const FloatRect& toRect, CompositeOperator, blink::WebBlendMode) OVERRIDE;
+    void drawForContainer(GraphicsContext*, const FloatSize, float, const FloatRect&, const FloatRect&, CompositeOperator, blink::WebBlendMode);
     void drawPatternForContainer(GraphicsContext*, const FloatSize, float, const FloatRect&, const FloatSize&, const FloatPoint&,
-        CompositeOperator, const FloatRect&, BlendMode);
+        CompositeOperator, const FloatRect&, blink::WebBlendMode, const IntSize& repeatSpacing);
 
     OwnPtr<SVGImageChromeClient> m_chromeClient;
     OwnPtr<Page> m_page;
     IntSize m_intrinsicSize;
 };
+
+DEFINE_IMAGE_TYPE_CASTS(SVGImage);
+
+class ImageObserverDisabler {
+    WTF_MAKE_NONCOPYABLE(ImageObserverDisabler);
+public:
+    ImageObserverDisabler(Image* image)
+        : m_image(image)
+    {
+        ASSERT(m_image->imageObserver());
+        m_observer = m_image->imageObserver();
+        m_image->setImageObserver(0);
+    }
+
+    ~ImageObserverDisabler()
+    {
+        m_image->setImageObserver(m_observer);
+    }
+private:
+    Image* m_image;
+    ImageObserver* m_observer;
+};
+
 }
 
 #endif // SVGImage_h

@@ -40,12 +40,12 @@ namespace WebCore {
     V(attributeListener) \
     V(callback) \
     V(condition) \
+    V(customElementAttached) \
     V(customElementAttributeChanged) \
     V(customElementCreated) \
+    V(customElementDetached) \
     V(customElementDocument) \
-    V(customElementEnteredDocument) \
     V(customElementIsInterfacePrototypeObject) \
-    V(customElementLeftDocument) \
     V(customElementNamespaceURI) \
     V(customElementTagName) \
     V(customElementType) \
@@ -59,19 +59,20 @@ namespace WebCore {
     V(sleepFunction) \
     V(state) \
     V(toStringString) \
-    V(typedArrayHiddenCopyMethod)
+    V(typedArrayHiddenCopyMethod) \
+    V(thenableHiddenPromise)
 
 class V8HiddenPropertyName {
 public:
     V8HiddenPropertyName() { }
-#define V8_DECLARE_PROPERTY(name) static v8::Handle<v8::String> name();
+#define V8_DECLARE_PROPERTY(name) static v8::Handle<v8::String> name(v8::Isolate*);
     V8_HIDDEN_PROPERTIES(V8_DECLARE_PROPERTY);
 #undef V8_DECLARE_PROPERTY
 
     static void setNamedHiddenReference(v8::Handle<v8::Object> parent, const char* name, v8::Handle<v8::Value> child);
 
 private:
-    static void createString(const char* key, v8::Persistent<v8::String>* handle);
+    static void createString(const char* key, v8::Persistent<v8::String>* handle, v8::Isolate*);
 #define V8_DECLARE_FIELD(name) v8::Persistent<v8::String> m_##name;
     V8_HIDDEN_PROPERTIES(V8_DECLARE_FIELD);
 #undef V8_DECLARE_FIELD

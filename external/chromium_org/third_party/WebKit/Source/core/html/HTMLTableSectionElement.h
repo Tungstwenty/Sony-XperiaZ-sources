@@ -34,32 +34,39 @@ class ExceptionState;
 
 class HTMLTableSectionElement FINAL : public HTMLTablePartElement {
 public:
-    static PassRefPtr<HTMLTableSectionElement> create(const QualifiedName&, Document*);
+    static PassRefPtr<HTMLTableSectionElement> create(const QualifiedName&, Document&);
 
     PassRefPtr<HTMLElement> insertRow(int index, ExceptionState&);
     void deleteRow(int index, ExceptionState&);
 
     int numRows() const;
 
-    String align() const;
-    void setAlign(const String&);
+    const AtomicString& align() const;
+    void setAlign(const AtomicString&);
 
-    String ch() const;
-    void setCh(const String&);
+    const AtomicString& ch() const;
+    void setCh(const AtomicString&);
 
-    String chOff() const;
-    void setChOff(const String&);
+    const AtomicString& chOff() const;
+    void setChOff(const AtomicString&);
 
-    String vAlign() const;
-    void setVAlign(const String&);
+    const AtomicString& vAlign() const;
+    void setVAlign(const AtomicString&);
 
     PassRefPtr<HTMLCollection> rows();
 
 private:
-    HTMLTableSectionElement(const QualifiedName& tagName, Document*);
+    HTMLTableSectionElement(const QualifiedName& tagName, Document&);
 
     virtual const StylePropertySet* additionalPresentationAttributeStyle() OVERRIDE;
 };
+
+inline bool isHTMLTableSectionElement(const Node& node)
+{
+    return node.hasTagName(HTMLNames::tbodyTag) || node.hasTagName(HTMLNames::tfootTag) || node.hasTagName(HTMLNames::theadTag);
+}
+
+DEFINE_NODE_TYPE_CASTS_WITH_FUNCTION(HTMLTableSectionElement);
 
 } //namespace
 

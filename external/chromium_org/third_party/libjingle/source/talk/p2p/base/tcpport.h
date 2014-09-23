@@ -82,7 +82,9 @@ class TCPPort : public Port {
 
   // Handles sending using the local TCP socket.
   virtual int SendTo(const void* data, size_t size,
-                     const talk_base::SocketAddress& addr, bool payload);
+                     const talk_base::SocketAddress& addr,
+                     talk_base::DiffServCodePoint dscp,
+                     bool payload);
 
   // Accepts incoming TCP connection.
   void OnNewConnection(talk_base::AsyncPacketSocket* socket,
@@ -100,7 +102,8 @@ class TCPPort : public Port {
   // Receives packet signal from the local TCP Socket.
   void OnReadPacket(talk_base::AsyncPacketSocket* socket,
                     const char* data, size_t size,
-                    const talk_base::SocketAddress& remote_addr);
+                    const talk_base::SocketAddress& remote_addr,
+                    const talk_base::PacketTime& packet_time);
 
   void OnReadyToSend(talk_base::AsyncPacketSocket* socket);
 
@@ -124,7 +127,8 @@ class TCPConnection : public Connection {
                 talk_base::AsyncPacketSocket* socket = 0);
   virtual ~TCPConnection();
 
-  virtual int Send(const void* data, size_t size);
+  virtual int Send(const void* data, size_t size,
+                   talk_base::DiffServCodePoint dscp);
   virtual int GetError();
 
   talk_base::AsyncPacketSocket* socket() { return socket_; }
@@ -134,7 +138,8 @@ class TCPConnection : public Connection {
   void OnClose(talk_base::AsyncPacketSocket* socket, int error);
   void OnReadPacket(talk_base::AsyncPacketSocket* socket,
                     const char* data, size_t size,
-                    const talk_base::SocketAddress& remote_addr);
+                    const talk_base::SocketAddress& remote_addr,
+                    const talk_base::PacketTime& packet_time);
   void OnReadyToSend(talk_base::AsyncPacketSocket* socket);
 
   talk_base::AsyncPacketSocket* socket_;

@@ -36,12 +36,13 @@
 #include "WebFrameImpl.h"
 #include "WebView.h"
 #include "core/loader/FrameLoader.h"
-#include "weborigin/KURL.h"
+#include "platform/weborigin/KURL.h"
+#include "wtf/text/CString.h"
 #include "wtf/text/WTFString.h"
 
 #include <gtest/gtest.h>
 
-using namespace WebKit;
+using namespace blink;
 
 namespace {
 
@@ -69,14 +70,15 @@ public:
     void SetUp()
     {
         m_webView = WebView::create(0);
-        m_webView->initializeMainFrame(&m_webFrameClient);
-        WebFrameImpl* frame = static_cast<WebFrameImpl*>(m_webView->mainFrame());
-        m_frameLoaderClientImpl = static_cast<FrameLoaderClientImpl*>(frame->frame()->loader()->client());
+        m_mainFrame = WebFrame::create(&m_webFrameClient);
+        m_webView->setMainFrame(m_mainFrame);
+        m_frameLoaderClientImpl = toFrameLoaderClientImpl(toWebFrameImpl(m_webView->mainFrame())->frame()->loader().client());
     }
 
     void TearDown()
     {
         m_webView->close();
+        m_mainFrame->close();
     }
 
     void setUserAgentOverride(const WebString& userAgent)
@@ -96,6 +98,7 @@ protected:
     TestWebFrameClient m_webFrameClient;
     FrameLoaderClientImpl* m_frameLoaderClientImpl;
     WebView* m_webView;
+    WebFrame* m_mainFrame;
 };
 
 TEST_F(FrameLoaderClientImplTest, UserAgentOverride)

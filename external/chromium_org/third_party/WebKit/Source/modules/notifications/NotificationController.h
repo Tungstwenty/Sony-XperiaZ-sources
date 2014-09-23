@@ -26,8 +26,6 @@
 #ifndef NotificationController_h
 #define NotificationController_h
 
-#if ENABLE(NOTIFICATIONS) || ENABLE(LEGACY_NOTIFICATIONS)
-
 #include "core/page/Page.h"
 #include "wtf/Forward.h"
 #include "wtf/Noncopyable.h"
@@ -54,8 +52,8 @@ private:
     NotificationClient* m_client;
 };
 
-} // namespace WebCore
+void provideNotification(Page*, NotificationClient*);
 
-#endif // ENABLE(NOTIFICATIONS) || ENABLE(LEGACY_NOTIFICATIONS)
+} // namespace WebCore
 
 #endif // NotificationController_h

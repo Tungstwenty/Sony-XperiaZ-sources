@@ -40,35 +40,21 @@ class TemplateContentDocumentFragment;
 
 class HTMLTemplateElement FINAL : public HTMLElement {
 public:
-    static PassRefPtr<HTMLTemplateElement> create(const QualifiedName&, Document*);
+    static PassRefPtr<HTMLTemplateElement> create(Document&);
     virtual ~HTMLTemplateElement();
 
     DocumentFragment* content() const;
 
 private:
     virtual PassRefPtr<Node> cloneNode(bool deep = true) OVERRIDE;
-    virtual void didMoveToNewDocument(Document* oldDocument) OVERRIDE;
+    virtual void didMoveToNewDocument(Document& oldDocument) OVERRIDE;
 
-    HTMLTemplateElement(const QualifiedName&, Document*);
+    explicit HTMLTemplateElement(Document&);
 
     mutable RefPtr<TemplateContentDocumentFragment> m_content;
 };
 
-const HTMLTemplateElement* toHTMLTemplateElement(const Node*);
-
-inline HTMLTemplateElement* toHTMLTemplateElement(Node* node)
-{
-    return const_cast<HTMLTemplateElement*>(toHTMLTemplateElement(static_cast<const Node*>(node)));
-}
-
-#ifdef NDEBUG
-
-// The debug version of this, with assertions, is not inlined.
-inline const HTMLTemplateElement* toHTMLTemplateElement(const Node* node)
-{
-    return static_cast<const HTMLTemplateElement*>(node);
-}
-#endif // NDEBUG
+DEFINE_NODE_TYPE_CASTS(HTMLTemplateElement, hasTagName(HTMLNames::templateTag));
 
 } // namespace WebCore
 

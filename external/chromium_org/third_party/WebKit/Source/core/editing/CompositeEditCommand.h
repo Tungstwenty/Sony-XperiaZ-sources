@@ -42,6 +42,7 @@ class EditCommandComposition : public UndoStep {
 public:
     static PassRefPtr<EditCommandComposition> create(Document*, const VisibleSelection&, const VisibleSelection&, EditAction);
 
+    virtual bool belongsTo(const Frame&) const OVERRIDE;
     virtual void unapply() OVERRIDE;
     virtual void reapply() OVERRIDE;
     EditAction editingAction() const OVERRIDE { return m_editAction; }
@@ -54,10 +55,6 @@ public:
     void setEndingSelection(const VisibleSelection&);
     Element* startingRootEditableElement() const { return m_startingRootEditableElement.get(); }
     Element* endingRootEditableElement() const { return m_endingRootEditableElement.get(); }
-
-#ifndef NDEBUG
-    virtual void getNodesInCommand(HashSet<Node*>&);
-#endif
 
 private:
     EditCommandComposition(Document*, const VisibleSelection& startingSelection, const VisibleSelection& endingSelection, EditAction);
@@ -88,7 +85,7 @@ public:
     virtual bool shouldStopCaretBlinking() const { return false; }
 
 protected:
-    explicit CompositeEditCommand(Document*);
+    explicit CompositeEditCommand(Document&);
 
     //
     // sugary-sweet convenience functions to help create and apply edit commands in composite commands
@@ -116,6 +113,7 @@ protected:
     void rebalanceWhitespaceAt(const Position&);
     void rebalanceWhitespaceOnTextSubstring(PassRefPtr<Text>, int startOffset, int endOffset);
     void prepareWhitespaceAtPositionForSplit(Position&);
+    void replaceCollapsibleWhitespaceWithNonBreakingSpaceIfNeeded(const VisiblePosition&);
     bool canRebalance(const Position&) const;
     bool shouldRebalanceLeadingWhitespaceFor(const String&) const;
     void removeCSSProperty(PassRefPtr<Element>, CSSPropertyID);
@@ -175,14 +173,7 @@ private:
     RefPtr<EditCommandComposition> m_composition;
 };
 
-void applyCommand(PassRefPtr<CompositeEditCommand>);
-
-inline CompositeEditCommand* toCompositeEditCommand(EditCommand* command)
-{
-    ASSERT(command);
-    ASSERT(command->isCompositeEditCommand());
-    return static_cast<CompositeEditCommand*>(command);
-}
+DEFINE_TYPE_CASTS(CompositeEditCommand, EditCommand, command, command->isCompositeEditCommand(), command.isCompositeEditCommand());
 
 } // namespace WebCore
 

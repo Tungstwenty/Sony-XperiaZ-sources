@@ -99,8 +99,12 @@ void CSSSelectorList::deleteSelectors()
     if (!m_selectorArray)
         return;
 
-    for (CSSSelector* s = m_selectorArray; !s->isLastInSelectorList(); ++s)
+    bool finished = false;
+    for (CSSSelector* s = m_selectorArray; !finished; ++s) {
+        finished = s->isLastInSelectorList();
         s->~CSSSelector();
+    }
+
     fastFree(m_selectorArray);
 }
 
@@ -165,20 +169,6 @@ bool CSSSelectorList::selectorsNeedNamespaceResolution()
     return forEachSelector(functor, this);
 }
 
-class SelectorHasInvalidSelectorFunctor {
-public:
-    bool operator()(const CSSSelector* selector)
-    {
-        return selector->isUnknownPseudoElement() || selector->isCustomPseudoElement();
-    }
-};
-
-bool CSSSelectorList::hasInvalidSelector() const
-{
-    SelectorHasInvalidSelectorFunctor functor;
-    return forEachSelector(functor, this);
-}
-
 class SelectorHasShadowDistributed {
 public:
     bool operator()(const CSSSelector* selector)
@@ -190,6 +180,20 @@ public:
 bool CSSSelectorList::hasShadowDistributedAt(size_t index) const
 {
     SelectorHasShadowDistributed functor;
+    return forEachTagSelector(functor, selectorAt(index));
+}
+
+class SelectorHasCombinatorCrossingTreeBoundary {
+public:
+    bool operator()(const CSSSelector* selector)
+    {
+        return selector->relation() == CSSSelector::ChildTree || selector->relation() == CSSSelector::DescendantTree;
+    }
+};
+
+bool CSSSelectorList::hasCombinatorCrossingTreeBoundaryAt(size_t index) const
+{
+    SelectorHasCombinatorCrossingTreeBoundary functor;
     return forEachTagSelector(functor, selectorAt(index));
 }
 

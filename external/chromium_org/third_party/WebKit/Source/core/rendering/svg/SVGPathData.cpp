@@ -21,7 +21,6 @@
 #include "core/rendering/svg/SVGPathData.h"
 
 #include "SVGNames.h"
-#include "core/platform/graphics/Path.h"
 #include "core/svg/SVGCircleElement.h"
 #include "core/svg/SVGEllipseElement.h"
 #include "core/svg/SVGLineElement.h"
@@ -30,14 +29,14 @@
 #include "core/svg/SVGPolygonElement.h"
 #include "core/svg/SVGPolylineElement.h"
 #include "core/svg/SVGRectElement.h"
+#include "platform/graphics/Path.h"
 #include "wtf/HashMap.h"
 
 namespace WebCore {
 
 static void updatePathFromCircleElement(SVGElement* element, Path& path)
 {
-    ASSERT(element->hasTagName(SVGNames::circleTag));
-    SVGCircleElement* circle = static_cast<SVGCircleElement*>(element);
+    SVGCircleElement* circle = toSVGCircleElement(element);
 
     SVGLengthContext lengthContext(element);
     float r = circle->rCurrentValue().value(lengthContext);
@@ -47,8 +46,7 @@ static void updatePathFromCircleElement(SVGElement* element, Path& path)
 
 static void updatePathFromEllipseElement(SVGElement* element, Path& path)
 {
-    ASSERT(element->hasTagName(SVGNames::ellipseTag));
-    SVGEllipseElement* ellipse = static_cast<SVGEllipseElement*>(element);
+    SVGEllipseElement* ellipse = toSVGEllipseElement(element);
 
     SVGLengthContext lengthContext(element);
     float rx = ellipse->rxCurrentValue().value(lengthContext);
@@ -62,8 +60,7 @@ static void updatePathFromEllipseElement(SVGElement* element, Path& path)
 
 static void updatePathFromLineElement(SVGElement* element, Path& path)
 {
-    ASSERT(element->hasTagName(SVGNames::lineTag));
-    SVGLineElement* line = static_cast<SVGLineElement*>(element);
+    SVGLineElement* line = toSVGLineElement(element);
 
     SVGLengthContext lengthContext(element);
     path.moveTo(FloatPoint(line->x1CurrentValue().value(lengthContext), line->y1CurrentValue().value(lengthContext)));
@@ -77,10 +74,7 @@ static void updatePathFromPathElement(SVGElement* element, Path& path)
 
 static void updatePathFromPolygonElement(SVGElement* element, Path& path)
 {
-    ASSERT(element->hasTagName(SVGNames::polygonTag));
-    SVGPolygonElement* polygon = static_cast<SVGPolygonElement*>(element);
-
-    SVGPointList& points = polygon->pointList();
+    SVGPointList& points = toSVGPolygonElement(element)->pointsCurrentValue();
     if (points.isEmpty())
         return;
 
@@ -95,10 +89,7 @@ static void updatePathFromPolygonElement(SVGElement* element, Path& path)
 
 static void updatePathFromPolylineElement(SVGElement* element, Path& path)
 {
-    ASSERT(element->hasTagName(SVGNames::polylineTag));
-    SVGPolylineElement* polyline = static_cast<SVGPolylineElement*>(element);
-
-    SVGPointList& points = polyline->pointList();
+    SVGPointList& points = toSVGPolylineElement(element)->pointsCurrentValue();
     if (points.isEmpty())
         return;
 

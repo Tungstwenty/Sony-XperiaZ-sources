@@ -29,9 +29,7 @@
 #include "bindings/v8/ScriptState.h"
 #include "core/dom/ContainerNode.h"
 #include "core/dom/ExceptionCode.h"
-#include "core/dom/NodeFilter.h"
 #include "core/dom/NodeTraversal.h"
-#include "wtf/PassRefPtr.h"
 
 namespace WebCore {
 
@@ -42,10 +40,10 @@ TreeWalker::TreeWalker(PassRefPtr<Node> rootNode, unsigned whatToShow, PassRefPt
     ScriptWrappable::init(this);
 }
 
-void TreeWalker::setCurrentNode(PassRefPtr<Node> node, ExceptionState& es)
+void TreeWalker::setCurrentNode(PassRefPtr<Node> node, ExceptionState& exceptionState)
 {
     if (!node) {
-        es.throwDOMException(NotSupportedError);
+        exceptionState.throwDOMException(NotSupportedError, "The Node provided is invalid.");
         return;
     }
     m_current = node;
@@ -266,7 +264,7 @@ Children:
         if (acceptNodeResult == NodeFilter::FILTER_REJECT)
             break;
     }
-    while (Node* nextSibling = NodeTraversal::nextSkippingChildren(node.get(), root())) {
+    while (Node* nextSibling = NodeTraversal::nextSkippingChildren(*node, root())) {
         node = nextSibling;
         short acceptNodeResult = acceptNode(state, node.get());
         if (state && state->hadException())

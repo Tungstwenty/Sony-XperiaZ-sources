@@ -31,25 +31,28 @@
 #include "core/inspector/InspectorDebuggerAgent.h"
 #include "core/inspector/JavaScriptCallFrame.h"
 
-#include "InspectorFrontend.h"
 #include "bindings/v8/ScriptDebugServer.h"
 #include "bindings/v8/ScriptObject.h"
+#include "bindings/v8/ScriptRegexp.h"
+#include "bindings/v8/ScriptSourceCode.h"
+#include "core/dom/Document.h"
+#include "core/fetch/Resource.h"
 #include "core/inspector/ContentSearchUtils.h"
-#include "core/inspector/InjectedScript.h"
 #include "core/inspector/InjectedScriptManager.h"
 #include "core/inspector/InspectorPageAgent.h"
 #include "core/inspector/InspectorState.h"
 #include "core/inspector/InstrumentingAgents.h"
 #include "core/inspector/ScriptArguments.h"
 #include "core/inspector/ScriptCallStack.h"
-#include "core/loader/cache/Resource.h"
-#include "core/platform/JSONValues.h"
-#include "core/platform/text/RegularExpression.h"
+#include "platform/JSONValues.h"
 #include "wtf/text/WTFString.h"
 
 using WebCore::TypeBuilder::Array;
+using WebCore::TypeBuilder::Debugger::BreakpointId;
+using WebCore::TypeBuilder::Debugger::CallFrame;
 using WebCore::TypeBuilder::Debugger::FunctionDetails;
 using WebCore::TypeBuilder::Debugger::ScriptId;
+using WebCore::TypeBuilder::Debugger::StackTrace;
 using WebCore::TypeBuilder::Runtime::RemoteObject;
 
 namespace WebCore {
@@ -58,6 +61,7 @@ namespace DebuggerAgentState {
 static const char debuggerEnabled[] = "debuggerEnabled";
 static const char javaScriptBreakpoints[] = "javaScriptBreakopints";
 static const char pauseOnExceptionsState[] = "pauseOnExceptionsState";
+static const char asyncCallStackDepth[] = "asyncCallStackDepth";
 
 // Breakpoint properties.
 static const char url[] = "url";
@@ -67,11 +71,14 @@ static const char columnNumber[] = "columnNumber";
 static const char condition[] = "condition";
 static const char isAnti[] = "isAnti";
 static const char skipStackPattern[] = "skipStackPattern";
+static const char skipAllPauses[] = "skipAllPauses";
+static const char skipAllPausesExpiresOnReload[] = "skipAllPausesExpiresOnReload";
+
 };
 
 static const int numberOfStepsBeforeStepOut = 10;
 
-const char* InspectorDebuggerAgent::backtraceObjectGroup = "backtrace";
+const char InspectorDebuggerAgent::backtraceObjectGroup[] = "backtrace";
 
 static String breakpointIdSuffix(InspectorDebuggerAgent::BreakpointSource source)
 {
@@ -99,6 +106,7 @@ InspectorDebuggerAgent::InspectorDebuggerAgent(InstrumentingAgents* instrumentin
     , m_javaScriptPauseScheduled(false)
     , m_listener(0)
     , m_skipStepInCount(numberOfStepsBeforeStepOut)
+    , m_skipAllPauses(false)
 {
     // FIXME: make breakReason optional so that there was no need to init it with "other".
     clearBreakDetails();
@@ -127,6 +135,7 @@ void InspectorDebuggerAgent::disable()
     m_state->setObject(DebuggerAgentState::javaScriptBreakpoints, JSONObject::create());
     m_state->setLong(DebuggerAgentState::pauseOnExceptionsState, ScriptDebugServer::DontPauseOnExceptions);
     m_state->setString(DebuggerAgentState::skipStackPattern, "");
+    m_state->setLong(DebuggerAgentState::asyncCallStackDepth, 0);
     m_instrumentingAgents->setInspectorDebuggerAgent(0);
 
     stopListeningScriptDebugServer();
@@ -136,6 +145,8 @@ void InspectorDebuggerAgent::disable()
 
     if (m_listener)
         m_listener->debuggerWasDisabled();
+
+    m_skipAllPauses = false;
 }
 
 bool InspectorDebuggerAgent::enabled()
@@ -163,11 +174,11 @@ void InspectorDebuggerAgent::disable(ErrorString*)
     m_state->setBoolean(DebuggerAgentState::debuggerEnabled, false);
 }
 
-static PassOwnPtr<RegularExpression> compileSkipCallFramePattern(String patternText)
+static PassOwnPtr<ScriptRegexp> compileSkipCallFramePattern(String patternText)
 {
     if (patternText.isEmpty())
         return nullptr;
-    OwnPtr<RegularExpression> result = adoptPtr(new RegularExpression(patternText, TextCaseSensitive));
+    OwnPtr<ScriptRegexp> result = adoptPtr(new ScriptRegexp(patternText, TextCaseSensitive));
     if (!result->isValid())
         result.clear();
     return result.release();
@@ -182,6 +193,12 @@ void InspectorDebuggerAgent::restore()
         String error;
         setPauseOnExceptionsImpl(&error, pauseState);
         m_cachedSkipStackRegExp = compileSkipCallFramePattern(m_state->getString(DebuggerAgentState::skipStackPattern));
+        m_skipAllPauses = m_state->getBoolean(DebuggerAgentState::skipAllPauses);
+        if (m_skipAllPauses && m_state->getBoolean(DebuggerAgentState::skipAllPausesExpiresOnReload)) {
+            m_skipAllPauses = false;
+            m_state->setBoolean(DebuggerAgentState::skipAllPauses, false);
+        }
+        m_asyncCallStackTracker.setAsyncCallStackDepth(m_state->getLong(DebuggerAgentState::asyncCallStackDepth));
     }
 }
 
@@ -210,6 +227,22 @@ void InspectorDebuggerAgent::setBreakpointsActive(ErrorString*, bool active)
     scriptDebugServer().setBreakpointsActivated(active);
 }
 
+void InspectorDebuggerAgent::setSkipAllPauses(ErrorString*, bool skipped, const bool* untilReload)
+{
+    m_skipAllPauses = skipped;
+    bool untilReloadValue = untilReload && *untilReload;
+    m_state->setBoolean(DebuggerAgentState::skipAllPauses, m_skipAllPauses);
+    m_state->setBoolean(DebuggerAgentState::skipAllPausesExpiresOnReload, untilReloadValue);
+}
+
+void InspectorDebuggerAgent::pageDidCommitLoad()
+{
+    if (m_state->getBoolean(DebuggerAgentState::skipAllPausesExpiresOnReload)) {
+        m_skipAllPauses = false;
+        m_state->setBoolean(DebuggerAgentState::skipAllPauses, m_skipAllPauses);
+    }
+}
+
 bool InspectorDebuggerAgent::isPaused()
 {
     return scriptDebugServer().isPaused();
@@ -236,6 +269,15 @@ void InspectorDebuggerAgent::addMessageToConsole(MessageSource source, MessageTy
     addMessageToConsole(source, type);
 }
 
+String InspectorDebuggerAgent::preprocessEventListener(Frame* frame, const String& source, const String& url, const String& functionName)
+{
+    return scriptDebugServer().preprocessEventListener(frame, source, url, functionName);
+}
+
+PassOwnPtr<ScriptSourceCode> InspectorDebuggerAgent::preprocess(Frame* frame, const ScriptSourceCode& sourceCode)
+{
+    return scriptDebugServer().preprocess(frame, sourceCode);
+}
 
 static PassRefPtr<JSONObject> buildObjectForBreakpointCookie(const String& url, int lineNumber, int columnNumber, const String& condition, bool isRegex, bool isAnti)
 {
@@ -252,13 +294,13 @@ static PassRefPtr<JSONObject> buildObjectForBreakpointCookie(const String& url, 
 static bool matches(const String& url, const String& pattern, bool isRegex)
 {
     if (isRegex) {
-        RegularExpression regex(pattern, TextCaseSensitive);
+        ScriptRegexp regex(pattern, TextCaseSensitive);
         return regex.match(url) != -1;
     }
     return url == pattern;
 }
 
-void InspectorDebuggerAgent::setBreakpointByUrl(ErrorString* errorString, int lineNumber, const String* const optionalURL, const String* const optionalURLRegex, const int* const optionalColumnNumber, const String* const optionalCondition, const bool* isAntiBreakpoint, TypeBuilder::Debugger::BreakpointId* outBreakpointId, RefPtr<TypeBuilder::Array<TypeBuilder::Debugger::Location> >& locations)
+void InspectorDebuggerAgent::setBreakpointByUrl(ErrorString* errorString, int lineNumber, const String* const optionalURL, const String* const optionalURLRegex, const int* const optionalColumnNumber, const String* const optionalCondition, const bool* isAntiBreakpoint, BreakpointId* outBreakpointId, RefPtr<Array<TypeBuilder::Debugger::Location> >& locations)
 {
     locations = Array<TypeBuilder::Debugger::Location>::create();
     if (!optionalURL == !optionalURLRegex) {
@@ -317,7 +359,7 @@ static bool parseLocation(ErrorString* errorString, PassRefPtr<JSONObject> locat
     return true;
 }
 
-void InspectorDebuggerAgent::setBreakpoint(ErrorString* errorString, const RefPtr<JSONObject>& location, const String* const optionalCondition, TypeBuilder::Debugger::BreakpointId* outBreakpointId, RefPtr<TypeBuilder::Debugger::Location>& actualLocation)
+void InspectorDebuggerAgent::setBreakpoint(ErrorString* errorString, const RefPtr<JSONObject>& location, const String* const optionalCondition, BreakpointId* outBreakpointId, RefPtr<TypeBuilder::Debugger::Location>& actualLocation)
 {
     String scriptId;
     int lineNumber;
@@ -392,7 +434,7 @@ void InspectorDebuggerAgent::continueToLocation(ErrorString* errorString, const 
 
 void InspectorDebuggerAgent::getStepInPositions(ErrorString* errorString, const String& callFrameId, RefPtr<Array<TypeBuilder::Debugger::Location> >& positions)
 {
-    if (!isPaused() || m_currentCallStack.isNull()) {
+    if (!isPaused() || m_currentCallStack.hasNoValue()) {
         *errorString = "Attempt to access callframe when debugger is not on pause";
         return;
     }
@@ -405,12 +447,13 @@ void InspectorDebuggerAgent::getStepInPositions(ErrorString* errorString, const 
     injectedScript.getStepInPositions(errorString, m_currentCallStack, callFrameId, positions);
 }
 
-void InspectorDebuggerAgent::getBacktrace(ErrorString* errorString, RefPtr<Array<TypeBuilder::Debugger::CallFrame> >& callFrames)
+void InspectorDebuggerAgent::getBacktrace(ErrorString* errorString, RefPtr<Array<CallFrame> >& callFrames, RefPtr<StackTrace>& asyncStackTrace)
 {
     if (!assertPaused(errorString))
         return;
-    scriptDebugServer().updateCallStack(&m_currentCallStack);
+    m_currentCallStack = scriptDebugServer().currentCallFrames();
     callFrames = currentCallFrames();
+    asyncStackTrace = currentAsyncStackTrace();
 }
 
 String InspectorDebuggerAgent::scriptURL(JavaScriptCallFrame* frame)
@@ -424,17 +467,22 @@ String InspectorDebuggerAgent::scriptURL(JavaScriptCallFrame* frame)
 
 ScriptDebugListener::SkipPauseRequest InspectorDebuggerAgent::shouldSkipExceptionPause(RefPtr<JavaScriptCallFrame>& topFrame)
 {
+    if (m_skipAllPauses)
+        return ScriptDebugListener::Continue;
+    if (!topFrame)
+        return ScriptDebugListener::NoSkip;
+
     String topFrameScriptUrl = scriptURL(topFrame.get());
     if (m_cachedSkipStackRegExp && !topFrameScriptUrl.isEmpty() && m_cachedSkipStackRegExp->match(topFrameScriptUrl) != -1)
         return ScriptDebugListener::Continue;
 
-    // Prepare top frame parameters;
-    int topFrameLineNumber = topFrame->line();
-    int topFrameColumnNumber = topFrame->column();
-
     // Match against breakpoints.
     if (topFrameScriptUrl.isEmpty())
         return ScriptDebugListener::NoSkip;
+
+    // Prepare top frame parameters.
+    int topFrameLineNumber = topFrame->line();
+    int topFrameColumnNumber = topFrame->column();
 
     RefPtr<JSONObject> breakpointsCookie = m_state->getObject(DebuggerAgentState::javaScriptBreakpoints);
     for (JSONObject::iterator it = breakpointsCookie->begin(); it != breakpointsCookie->end(); ++it) {
@@ -470,11 +518,20 @@ ScriptDebugListener::SkipPauseRequest InspectorDebuggerAgent::shouldSkipExceptio
 
 ScriptDebugListener::SkipPauseRequest InspectorDebuggerAgent::shouldSkipBreakpointPause(RefPtr<JavaScriptCallFrame>& topFrame)
 {
+    if (m_skipAllPauses)
+        return ScriptDebugListener::Continue;
+    if (!topFrame)
+        return ScriptDebugListener::NoSkip;
     return ScriptDebugListener::NoSkip;
 }
 
 ScriptDebugListener::SkipPauseRequest InspectorDebuggerAgent::shouldSkipStepPause(RefPtr<JavaScriptCallFrame>& topFrame)
 {
+    if (m_skipAllPauses)
+        return ScriptDebugListener::Continue;
+    if (!topFrame)
+        return ScriptDebugListener::NoSkip;
+
     if (m_cachedSkipStackRegExp) {
         String scriptUrl = scriptURL(topFrame.get());
         if (!scriptUrl.isEmpty() && m_cachedSkipStackRegExp->match(scriptUrl) != -1) {
@@ -539,20 +596,22 @@ void InspectorDebuggerAgent::searchInContent(ErrorString* error, const String& s
         *error = "No script for id: " + scriptId;
 }
 
-void InspectorDebuggerAgent::setScriptSource(ErrorString* error, RefPtr<TypeBuilder::Debugger::SetScriptSourceError>& errorData, const String& scriptId, const String& newContent, const bool* const preview, RefPtr<Array<TypeBuilder::Debugger::CallFrame> >& newCallFrames, RefPtr<JSONObject>& result)
+void InspectorDebuggerAgent::setScriptSource(ErrorString* error, RefPtr<TypeBuilder::Debugger::SetScriptSourceError>& errorData, const String& scriptId, const String& newContent, const bool* const preview, RefPtr<Array<CallFrame> >& newCallFrames, RefPtr<JSONObject>& result, RefPtr<StackTrace>& asyncStackTrace)
 {
     bool previewOnly = preview && *preview;
     ScriptObject resultObject;
     if (!scriptDebugServer().setScriptSource(scriptId, newContent, previewOnly, error, errorData, &m_currentCallStack, &resultObject))
         return;
     newCallFrames = currentCallFrames();
+    asyncStackTrace = currentAsyncStackTrace();
     RefPtr<JSONObject> object = scriptToInspectorObject(resultObject);
     if (object)
         result = object;
 }
-void InspectorDebuggerAgent::restartFrame(ErrorString* errorString, const String& callFrameId, RefPtr<Array<TypeBuilder::Debugger::CallFrame> >& newCallFrames, RefPtr<JSONObject>& result)
+
+void InspectorDebuggerAgent::restartFrame(ErrorString* errorString, const String& callFrameId, RefPtr<Array<CallFrame> >& newCallFrames, RefPtr<JSONObject>& result, RefPtr<StackTrace>& asyncStackTrace)
 {
-    if (!isPaused() || m_currentCallStack.isNull()) {
+    if (!isPaused() || m_currentCallStack.hasNoValue()) {
         *errorString = "Attempt to access callframe when debugger is not on pause";
         return;
     }
@@ -563,8 +622,9 @@ void InspectorDebuggerAgent::restartFrame(ErrorString* errorString, const String
     }
 
     injectedScript.restartFrame(errorString, m_currentCallStack, callFrameId, &result);
-    scriptDebugServer().updateCallStack(&m_currentCallStack);
+    m_currentCallStack = scriptDebugServer().currentCallFrames();
     newCallFrames = currentCallFrames();
+    asyncStackTrace = currentAsyncStackTrace();
 }
 
 void InspectorDebuggerAgent::getScriptSource(ErrorString* error, const String& scriptId, String* scriptSource)
@@ -576,7 +636,7 @@ void InspectorDebuggerAgent::getScriptSource(ErrorString* error, const String& s
         *error = "No script for id: " + scriptId;
 }
 
-void InspectorDebuggerAgent::getFunctionDetails(ErrorString* errorString, const String& functionId, RefPtr<TypeBuilder::Debugger::FunctionDetails>& details)
+void InspectorDebuggerAgent::getFunctionDetails(ErrorString* errorString, const String& functionId, RefPtr<FunctionDetails>& details)
 {
     InjectedScript injectedScript = m_injectedScriptManager->injectedScriptForObjectId(functionId);
     if (injectedScript.hasNoValue()) {
@@ -603,9 +663,49 @@ void InspectorDebuggerAgent::cancelPauseOnNextStatement()
     scriptDebugServer().setPauseOnNextStatement(false);
 }
 
+void InspectorDebuggerAgent::didInstallTimer(ExecutionContext* context, int timerId, int timeout, bool singleShot)
+{
+    if (m_asyncCallStackTracker.isEnabled())
+        m_asyncCallStackTracker.didInstallTimer(context, timerId, singleShot, scriptDebugServer().currentCallFrames());
+}
+
+void InspectorDebuggerAgent::didRemoveTimer(ExecutionContext* context, int timerId)
+{
+    m_asyncCallStackTracker.didRemoveTimer(context, timerId);
+}
+
+bool InspectorDebuggerAgent::willFireTimer(ExecutionContext* context, int timerId)
+{
+    m_asyncCallStackTracker.willFireTimer(context, timerId);
+    return true;
+}
+
 void InspectorDebuggerAgent::didFireTimer()
 {
+    m_asyncCallStackTracker.didFireAsyncCall();
     cancelPauseOnNextStatement();
+}
+
+void InspectorDebuggerAgent::didRequestAnimationFrame(Document* document, int callbackId)
+{
+    if (m_asyncCallStackTracker.isEnabled())
+        m_asyncCallStackTracker.didRequestAnimationFrame(document, callbackId, scriptDebugServer().currentCallFrames());
+}
+
+void InspectorDebuggerAgent::didCancelAnimationFrame(Document* document, int callbackId)
+{
+    m_asyncCallStackTracker.didCancelAnimationFrame(document, callbackId);
+}
+
+bool InspectorDebuggerAgent::willFireAnimationFrame(Document* document, int callbackId)
+{
+    m_asyncCallStackTracker.willFireAnimationFrame(document, callbackId);
+    return true;
+}
+
+void InspectorDebuggerAgent::didFireAnimationFrame()
+{
+    m_asyncCallStackTracker.didFireAsyncCall();
 }
 
 void InspectorDebuggerAgent::didHandleEvent()
@@ -630,12 +730,31 @@ void InspectorDebuggerAgent::resume(ErrorString* errorString)
     scriptDebugServer().continueProgram();
 }
 
-void InspectorDebuggerAgent::stepOver(ErrorString* errorString)
+ScriptValue InspectorDebuggerAgent::resolveCallFrame(ErrorString* errorString, const String* callFrameId)
+{
+    if (!callFrameId)
+        return ScriptValue();
+    if (!isPaused() || m_currentCallStack.hasNoValue()) {
+        *errorString = "Attempt to access callframe when debugger is not on pause";
+        return ScriptValue();
+    }
+    InjectedScript injectedScript = m_injectedScriptManager->injectedScriptForObjectId(*callFrameId);
+    if (injectedScript.hasNoValue()) {
+        *errorString = "Inspected frame has gone";
+        return ScriptValue();
+    }
+    return injectedScript.findCallFrameById(errorString, m_currentCallStack, *callFrameId);
+}
+
+void InspectorDebuggerAgent::stepOver(ErrorString* errorString, const String* callFrameId)
 {
     if (!assertPaused(errorString))
         return;
+    ScriptValue frame = resolveCallFrame(errorString, callFrameId);
+    if (!errorString->isEmpty())
+        return;
     m_injectedScriptManager->releaseObjectGroup(InspectorDebuggerAgent::backtraceObjectGroup);
-    scriptDebugServer().stepOverStatement();
+    scriptDebugServer().stepOverStatement(frame);
 }
 
 void InspectorDebuggerAgent::stepInto(ErrorString* errorString)
@@ -648,12 +767,15 @@ void InspectorDebuggerAgent::stepInto(ErrorString* errorString)
         m_listener->stepInto();
 }
 
-void InspectorDebuggerAgent::stepOut(ErrorString* errorString)
+void InspectorDebuggerAgent::stepOut(ErrorString* errorString, const String* callFrameId)
 {
     if (!assertPaused(errorString))
         return;
+    ScriptValue frame = resolveCallFrame(errorString, callFrameId);
+    if (!errorString->isEmpty())
+        return;
     m_injectedScriptManager->releaseObjectGroup(InspectorDebuggerAgent::backtraceObjectGroup);
-    scriptDebugServer().stepOutOfFunction();
+    scriptDebugServer().stepOutOfFunction(frame);
 }
 
 void InspectorDebuggerAgent::setPauseOnExceptions(ErrorString* errorString, const String& stringPauseState)
@@ -681,9 +803,9 @@ void InspectorDebuggerAgent::setPauseOnExceptionsImpl(ErrorString* errorString, 
         m_state->setLong(DebuggerAgentState::pauseOnExceptionsState, pauseState);
 }
 
-void InspectorDebuggerAgent::evaluateOnCallFrame(ErrorString* errorString, const String& callFrameId, const String& expression, const String* const objectGroup, const bool* const includeCommandLineAPI, const bool* const doNotPauseOnExceptionsAndMuteConsole, const bool* const returnByValue, const bool* generatePreview, RefPtr<TypeBuilder::Runtime::RemoteObject>& result, TypeBuilder::OptOutput<bool>* wasThrown)
+void InspectorDebuggerAgent::evaluateOnCallFrame(ErrorString* errorString, const String& callFrameId, const String& expression, const String* const objectGroup, const bool* const includeCommandLineAPI, const bool* const doNotPauseOnExceptionsAndMuteConsole, const bool* const returnByValue, const bool* generatePreview, RefPtr<RemoteObject>& result, TypeBuilder::OptOutput<bool>* wasThrown)
 {
-    if (!isPaused() || m_currentCallStack.isNull()) {
+    if (!isPaused() || m_currentCallStack.hasNoValue()) {
         *errorString = "Attempt to access callframe when debugger is not on pause";
         return;
     }
@@ -728,7 +850,7 @@ void InspectorDebuggerAgent::compileScript(ErrorString* errorString, const Strin
     *scriptId = scriptIdValue;
 }
 
-void InspectorDebuggerAgent::runScript(ErrorString* errorString, const ScriptId& scriptId, const int* executionContextId, const String* const objectGroup, const bool* const doNotPauseOnExceptionsAndMuteConsole, RefPtr<TypeBuilder::Runtime::RemoteObject>& result, TypeBuilder::OptOutput<bool>* wasThrown)
+void InspectorDebuggerAgent::runScript(ErrorString* errorString, const ScriptId& scriptId, const int* executionContextId, const String* const objectGroup, const bool* const doNotPauseOnExceptionsAndMuteConsole, RefPtr<RemoteObject>& result, TypeBuilder::OptOutput<bool>* wasThrown)
 {
     InjectedScript injectedScript = injectedScriptForEval(errorString, executionContextId);
     if (injectedScript.hasNoValue()) {
@@ -771,7 +893,7 @@ void InspectorDebuggerAgent::setVariableValue(ErrorString* errorString, int scop
 {
     InjectedScript injectedScript;
     if (callFrameId) {
-        if (!isPaused() || m_currentCallStack.isNull()) {
+        if (!isPaused() || m_currentCallStack.hasNoValue()) {
             *errorString = "Attempt to access callframe when debugger is not on pause";
             return;
         }
@@ -797,7 +919,7 @@ void InspectorDebuggerAgent::setVariableValue(ErrorString* errorString, int scop
 
 void InspectorDebuggerAgent::skipStackFrames(ErrorString* errorString, const String* pattern)
 {
-    OwnPtr<RegularExpression> compiled;
+    OwnPtr<ScriptRegexp> compiled;
     String patternValue = pattern ? *pattern : "";
     if (!patternValue.isEmpty()) {
         compiled = compileSkipCallFramePattern(patternValue);
@@ -810,6 +932,12 @@ void InspectorDebuggerAgent::skipStackFrames(ErrorString* errorString, const Str
     m_cachedSkipStackRegExp = compiled.release();
 }
 
+void InspectorDebuggerAgent::setAsyncCallStackDepth(ErrorString*, int depth)
+{
+    m_state->setLong(DebuggerAgentState::asyncCallStackDepth, depth);
+    m_asyncCallStackTracker.setAsyncCallStackDepth(depth);
+}
+
 void InspectorDebuggerAgent::scriptExecutionBlockedByCSP(const String& directiveText)
 {
     if (scriptDebugServer().pauseOnExceptionsState() != ScriptDebugServer::DontPauseOnExceptions) {
@@ -819,16 +947,44 @@ void InspectorDebuggerAgent::scriptExecutionBlockedByCSP(const String& directive
     }
 }
 
-PassRefPtr<Array<TypeBuilder::Debugger::CallFrame> > InspectorDebuggerAgent::currentCallFrames()
+PassRefPtr<Array<CallFrame> > InspectorDebuggerAgent::currentCallFrames()
 {
-    if (!m_pausedScriptState)
-        return Array<TypeBuilder::Debugger::CallFrame>::create();
+    if (!m_pausedScriptState || m_currentCallStack.hasNoValue())
+        return Array<CallFrame>::create();
     InjectedScript injectedScript = m_injectedScriptManager->injectedScriptFor(m_pausedScriptState);
     if (injectedScript.hasNoValue()) {
         ASSERT_NOT_REACHED();
-        return Array<TypeBuilder::Debugger::CallFrame>::create();
+        return Array<CallFrame>::create();
     }
     return injectedScript.wrapCallFrames(m_currentCallStack);
+}
+
+PassRefPtr<StackTrace> InspectorDebuggerAgent::currentAsyncStackTrace()
+{
+    if (!m_pausedScriptState || !m_asyncCallStackTracker.isEnabled())
+        return 0;
+    InjectedScript injectedScript = m_injectedScriptManager->injectedScriptFor(m_pausedScriptState);
+    if (injectedScript.hasNoValue()) {
+        ASSERT_NOT_REACHED();
+        return 0;
+    }
+    const AsyncCallStackTracker::AsyncCallChain* chain = m_asyncCallStackTracker.currentAsyncCallChain();
+    if (!chain)
+        return 0;
+    const AsyncCallStackTracker::AsyncCallStackVector& callStacks = chain->callStacks();
+    if (callStacks.isEmpty())
+        return 0;
+    RefPtr<StackTrace> result;
+    for (AsyncCallStackTracker::AsyncCallStackVector::const_reverse_iterator it = callStacks.rbegin(); it != callStacks.rend(); ++it) {
+        RefPtr<StackTrace> next = StackTrace::create()
+            .setCallFrames(injectedScript.wrapCallFrames((*it)->callFrames()))
+            .release();
+        next->setDescription((*it)->description());
+        if (result)
+            next->setAsyncStackTrace(result.release());
+        result.swap(next);
+    }
+    return result.release();
 }
 
 String InspectorDebuggerAgent::sourceMapURLForScript(const Script& script)
@@ -913,7 +1069,7 @@ void InspectorDebuggerAgent::didPause(ScriptState* scriptState, const ScriptValu
         InjectedScript injectedScript = m_injectedScriptManager->injectedScriptFor(scriptState);
         if (!injectedScript.hasNoValue()) {
             m_breakReason = InspectorFrontend::Debugger::Reason::Exception;
-            m_breakAuxData = injectedScript.wrapObject(exception, "backtrace")->openAccessors();
+            m_breakAuxData = injectedScript.wrapObject(exception, InspectorDebuggerAgent::backtraceObjectGroup)->openAccessors();
             // m_breakAuxData might be null after this.
         }
     }
@@ -932,7 +1088,7 @@ void InspectorDebuggerAgent::didPause(ScriptState* scriptState, const ScriptValu
         }
     }
 
-    m_frontend->paused(currentCallFrames(), m_breakReason, m_breakAuxData, hitBreakpointIds);
+    m_frontend->paused(currentCallFrames(), m_breakReason, m_breakAuxData, hitBreakpointIds, currentAsyncStackTrace());
     m_javaScriptPauseScheduled = false;
 
     if (!m_continueToLocationBreakpointId.isEmpty()) {
@@ -958,6 +1114,8 @@ bool InspectorDebuggerAgent::canBreakProgram()
 
 void InspectorDebuggerAgent::breakProgram(InspectorFrontend::Debugger::Reason::Enum breakReason, PassRefPtr<JSONObject> data)
 {
+    if (m_skipAllPauses)
+        return;
     m_breakReason = breakReason;
     m_breakAuxData = data;
     scriptDebugServer().breakProgram();
@@ -969,6 +1127,7 @@ void InspectorDebuggerAgent::clear()
     m_currentCallStack = ScriptValue();
     m_scripts.clear();
     m_breakpointIdToDebugServerBreakpointIds.clear();
+    m_asyncCallStackTracker.clear();
     m_continueToLocationBreakpointId = String();
     clearBreakDetails();
     m_javaScriptPauseScheduled = false;
@@ -1007,6 +1166,7 @@ void InspectorDebuggerAgent::reset()
 {
     m_scripts.clear();
     m_breakpointIdToDebugServerBreakpointIds.clear();
+    m_asyncCallStackTracker.clear();
     if (m_frontend)
         m_frontend->globalObjectCleared();
 }

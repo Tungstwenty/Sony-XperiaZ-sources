@@ -33,9 +33,9 @@
 
 namespace WebCore {
 
-static void makeWeakCallback(v8::Isolate*, v8::Persistent<v8::Value>*, GCObservation* observation)
+static void setWeakCallback(const v8::WeakCallbackData<v8::Value, GCObservation>& data)
 {
-    observation->setWasCollected();
+    data.GetParameter()->setWasCollected();
 }
 
 void GCObservation::setWasCollected()
@@ -46,11 +46,10 @@ void GCObservation::setWasCollected()
 }
 
 GCObservation::GCObservation(v8::Handle<v8::Value> observedValue)
-    : m_observed(observedValue)
+    : m_observed(v8::Isolate::GetCurrent(), observedValue)
     , m_collected(false)
 {
-    m_observed.makeWeak(this, makeWeakCallback);
+    m_observed.setWeak(this, setWeakCallback);
 }
 
 } // namespace WebCore
-

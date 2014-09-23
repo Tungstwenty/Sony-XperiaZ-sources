@@ -37,7 +37,7 @@
 
 using namespace WebCore;
 
-namespace WebKit {
+namespace blink {
 
 WebString WebDocumentType::name() const
 {
@@ -57,7 +57,7 @@ WebDocumentType& WebDocumentType::operator=(const PassRefPtr<DocumentType>& elem
 
 WebDocumentType::operator PassRefPtr<DocumentType>() const
 {
-    return static_cast<DocumentType*>(m_private.get());
+    return toDocumentType(m_private.get());
 }
 
-} // namespace WebKit
+} // namespace blink

@@ -1,5 +1,6 @@
 /*
  * Copyright 2010, The Android Open Source Project
+ * Copyright (C) 2014, Sony Mobile Communications AB
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -524,7 +525,7 @@ void GLUtils::createTextureWithBitmap(GLuint texture, const SkBitmap& bitmap, GL
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glBindTexture(GL_TEXTURE_2D, texture);
     GLUtils::checkGlError("glBindTexture");
-    SkBitmap::Config config = bitmap.getConfig();
+    SkBitmap::Config config = bitmap.config();
     int internalformat = getInternalFormat(config);
     int type = getType(config);
     bitmap.lockPixels();
@@ -551,7 +552,7 @@ void GLUtils::updateTextureWithBitmap(GLuint texture, const SkBitmap& bitmap,
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glBindTexture(GL_TEXTURE_2D, texture);
     GLUtils::checkGlError("glBindTexture");
-    SkBitmap::Config config = bitmap.getConfig();
+    SkBitmap::Config config = bitmap.config();
     int internalformat = getInternalFormat(config);
     int type = getType(config);
     bitmap.lockPixels();

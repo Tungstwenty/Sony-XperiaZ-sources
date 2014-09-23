@@ -91,7 +91,7 @@ void String::append(const String& string)
     // FIXME: This is extremely inefficient. So much so that we might want to take this
     // out of String's API. We can make it better by optimizing the case where exactly
     // one String is pointing at this StringImpl, but even then it's going to require a
-    // call to fastMalloc every single time.
+    // call into the allocator every single time.
 
     if (m_impl->is8Bit() && string.m_impl->is8Bit()) {
         LChar* data;
@@ -126,7 +126,7 @@ inline void String::appendInternal(CharacterType c)
     // FIXME: This is extremely inefficient. So much so that we might want to take this
     // out of String's API. We can make it better by optimizing the case where exactly
     // one String is pointing at this StringImpl, but even then it's going to require a
-    // call to fastMalloc every single time.
+    // call into the allocator every single time.
     if (!m_impl) {
         m_impl = StringImpl::create(&c, 1);
         return;
@@ -363,6 +363,20 @@ String String::upper() const
     return m_impl->upper();
 }
 
+String String::lower(const AtomicString& localeIdentifier) const
+{
+    if (!m_impl)
+        return String();
+    return m_impl->lower(localeIdentifier);
+}
+
+String String::upper(const AtomicString& localeIdentifier) const
+{
+    if (!m_impl)
+        return String();
+    return m_impl->upper(localeIdentifier);
+}
+
 String String::stripWhiteSpace() const
 {
     if (!m_impl)
@@ -377,18 +391,18 @@ String String::stripWhiteSpace(IsWhiteSpaceFunctionPtr isWhiteSpace) const
     return m_impl->stripWhiteSpace(isWhiteSpace);
 }
 
-String String::simplifyWhiteSpace() const
+String String::simplifyWhiteSpace(StripBehavior stripBehavior) const
 {
     if (!m_impl)
         return String();
-    return m_impl->simplifyWhiteSpace();
+    return m_impl->simplifyWhiteSpace(stripBehavior);
 }
 
-String String::simplifyWhiteSpace(IsWhiteSpaceFunctionPtr isWhiteSpace) const
+String String::simplifyWhiteSpace(IsWhiteSpaceFunctionPtr isWhiteSpace, StripBehavior stripBehavior) const
 {
     if (!m_impl)
         return String();
-    return m_impl->simplifyWhiteSpace(isWhiteSpace);
+    return m_impl->simplifyWhiteSpace(isWhiteSpace, stripBehavior);
 }
 
 String String::removeCharacters(CharacterMatchFunctionPtr findMatch) const
@@ -681,7 +695,7 @@ void String::split(const String& separator, bool allowEmptyEntries, Vector<Strin
 
     unsigned startPos = 0;
     size_t endPos;
-    while ((endPos = find(separator, startPos)) != notFound) {
+    while ((endPos = find(separator, startPos)) != kNotFound) {
         if (allowEmptyEntries || startPos != endPos)
             result.append(substring(startPos, endPos - startPos));
         startPos = endPos + separator.length();
@@ -696,7 +710,7 @@ void String::split(UChar separator, bool allowEmptyEntries, Vector<String>& resu
 
     unsigned startPos = 0;
     size_t endPos;
-    while ((endPos = find(separator, startPos)) != notFound) {
+    while ((endPos = find(separator, startPos)) != kNotFound) {
         if (allowEmptyEntries || startPos != endPos)
             result.append(substring(startPos, endPos - startPos));
         startPos = endPos + 1;

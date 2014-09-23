@@ -30,89 +30,119 @@
 
 #include "config.h"
 #include "core/animation/TimedItem.h"
+
+#include "core/animation/Player.h"
 #include "core/animation/TimedItemCalculations.h"
 
 namespace WebCore {
 
-TimedItem::TimedItem(const Timing& timing, PassOwnPtr<TimedItemEventDelegate> eventDelegate)
+TimedItem::TimedItem(const Timing& timing, PassOwnPtr<EventDelegate> eventDelegate)
     : m_parent(0)
-    , m_player(0)
     , m_startTime(0)
+    , m_player(0)
     , m_specified(timing)
-    , m_calculated()
     , m_eventDelegate(eventDelegate)
+    , m_calculated()
+    , m_isFirstSample(true)
+    , m_needsUpdate(true)
+    , m_lastUpdateTime(nullValue())
 {
-    timing.assertValid();
+    m_specified.assertValid();
 }
 
-void TimedItem::updateInheritedTime(double inheritedTime) const
+bool TimedItem::updateInheritedTime(double inheritedTime) const
 {
+    bool needsUpdate = m_needsUpdate || (m_lastUpdateTime != inheritedTime && !(isNull(m_lastUpdateTime) && isNull(inheritedTime)));
+    m_needsUpdate = false;
+    m_lastUpdateTime = inheritedTime;
+
+    const double previousIteration = m_calculated.currentIteration;
+    const Phase previousPhase = m_calculated.phase;
+
     const double localTime = inheritedTime - m_startTime;
-    const double iterationDuration = m_specified.hasIterationDuration
-        ? m_specified.iterationDuration
-        : intrinsicIterationDuration();
+    double timeToNextIteration = std::numeric_limits<double>::infinity();
+    if (needsUpdate) {
+        const double iterationDuration = m_specified.hasIterationDuration
+            ? m_specified.iterationDuration
+            : intrinsicIterationDuration();
+        ASSERT(iterationDuration >= 0);
 
-    const double repeatedDuration = iterationDuration * m_specified.iterationCount;
-    const double activeDuration = m_specified.playbackRate
-        ? repeatedDuration / abs(m_specified.playbackRate)
-        : std::numeric_limits<double>::infinity();
+        // When iterationDuration = 0 and iterationCount = infinity, or vice-
+        // versa, repeatedDuration should be 0, not NaN as operator*() would give.
+        // FIXME: The spec is unclear about this.
+        const double repeatedDuration = multiplyZeroAlwaysGivesZero(iterationDuration, m_specified.iterationCount);
+        ASSERT(repeatedDuration >= 0);
+        const double activeDuration = m_specified.playbackRate
+            ? repeatedDuration / abs(m_specified.playbackRate)
+            : std::numeric_limits<double>::infinity();
+        ASSERT(activeDuration >= 0);
 
-    const TimedItem::Phase phase = calculatePhase(activeDuration, localTime, m_specified);
-    // FIXME: parentPhase depends on groups being implemented.
-    const TimedItem::Phase parentPhase = TimedItem::PhaseActive;
-    const double activeTime = calculateActiveTime(activeDuration, localTime, parentPhase, phase, m_specified);
+        const Phase currentPhase = calculatePhase(activeDuration, localTime, m_specified);
+        // FIXME: parentPhase depends on groups being implemented.
+        const TimedItem::Phase parentPhase = TimedItem::PhaseActive;
+        const double activeTime = calculateActiveTime(activeDuration, localTime, parentPhase, currentPhase, m_specified);
 
-    double currentIteration = nullValue();
-    double timeFraction = nullValue();
-    ASSERT(iterationDuration >= 0);
-    if (iterationDuration) {
-        const double startOffset = m_specified.iterationStart * iterationDuration;
-        const double scaledActiveTime = calculateScaledActiveTime(activeDuration, activeTime, startOffset, m_specified);
-        const double iterationTime = calculateIterationTime(iterationDuration, repeatedDuration, scaledActiveTime, startOffset, m_specified);
+        double currentIteration;
+        double timeFraction;
+        if (iterationDuration) {
+            const double startOffset = multiplyZeroAlwaysGivesZero(m_specified.iterationStart, iterationDuration);
+            ASSERT(startOffset >= 0);
+            const double scaledActiveTime = calculateScaledActiveTime(activeDuration, activeTime, startOffset, m_specified);
+            const double iterationTime = calculateIterationTime(iterationDuration, repeatedDuration, scaledActiveTime, startOffset, m_specified);
 
-        currentIteration = calculateCurrentIteration(iterationDuration, iterationTime, scaledActiveTime, m_specified);
-        timeFraction = calculateTransformedTime(currentIteration, iterationDuration, iterationTime, m_specified) / iterationDuration;
-    } else {
-        const double iterationDuration = 1;
-        const double repeatedDuration = iterationDuration * m_specified.iterationCount;
-        const double activeDuration = m_specified.playbackRate ? repeatedDuration / abs(m_specified.playbackRate) : std::numeric_limits<double>::infinity();
-        const double newLocalTime = localTime < m_specified.startDelay ? m_specified.startDelay - 1 : activeDuration + m_specified.startDelay;
-        const TimedItem::Phase phase = calculatePhase(activeDuration, newLocalTime, m_specified);
-        const double activeTime = calculateActiveTime(activeDuration, newLocalTime, parentPhase, phase, m_specified);
-        const double startOffset = m_specified.iterationStart * iterationDuration;
-        const double scaledActiveTime = calculateScaledActiveTime(activeDuration, activeTime, startOffset, m_specified);
-        const double iterationTime = calculateIterationTime(iterationDuration, repeatedDuration, scaledActiveTime, startOffset, m_specified);
+            currentIteration = calculateCurrentIteration(iterationDuration, iterationTime, scaledActiveTime, m_specified);
+            timeFraction = calculateTransformedTime(currentIteration, iterationDuration, iterationTime, m_specified) / iterationDuration;
 
-        currentIteration = calculateCurrentIteration(iterationDuration, iterationTime, scaledActiveTime, m_specified);
-        timeFraction = calculateTransformedTime(currentIteration, iterationDuration, iterationTime, m_specified);
+            if (!isNull(iterationTime)) {
+                timeToNextIteration = (iterationDuration - iterationTime) / abs(m_specified.playbackRate);
+                if (activeDuration - activeTime < timeToNextIteration)
+                    timeToNextIteration = std::numeric_limits<double>::infinity();
+            }
+        } else {
+            const double localIterationDuration = 1;
+            const double localRepeatedDuration = localIterationDuration * m_specified.iterationCount;
+            ASSERT(localRepeatedDuration >= 0);
+            const double localActiveDuration = m_specified.playbackRate ? localRepeatedDuration / abs(m_specified.playbackRate) : std::numeric_limits<double>::infinity();
+            ASSERT(localActiveDuration >= 0);
+            const double localLocalTime = localTime < m_specified.startDelay ? localTime : localActiveDuration + m_specified.startDelay;
+            const TimedItem::Phase localCurrentPhase = calculatePhase(localActiveDuration, localLocalTime, m_specified);
+            const double localActiveTime = calculateActiveTime(localActiveDuration, localLocalTime, parentPhase, localCurrentPhase, m_specified);
+            const double startOffset = m_specified.iterationStart * localIterationDuration;
+            ASSERT(startOffset >= 0);
+            const double scaledActiveTime = calculateScaledActiveTime(localActiveDuration, localActiveTime, startOffset, m_specified);
+            const double iterationTime = calculateIterationTime(localIterationDuration, localRepeatedDuration, scaledActiveTime, startOffset, m_specified);
+
+            currentIteration = calculateCurrentIteration(localIterationDuration, iterationTime, scaledActiveTime, m_specified);
+            timeFraction = calculateTransformedTime(currentIteration, localIterationDuration, iterationTime, m_specified);
+        }
+
+        m_calculated.currentIteration = currentIteration;
+        m_calculated.activeDuration = activeDuration;
+        m_calculated.timeFraction = timeFraction;
+
+        m_calculated.phase = currentPhase;
+        m_calculated.isInEffect = !isNull(activeTime);
+        m_calculated.isInPlay = phase() == PhaseActive && (!m_parent || m_parent->isInPlay());
+        m_calculated.isCurrent = phase() == PhaseBefore || isInPlay() || (m_parent && m_parent->isCurrent());
     }
 
-    const double lastIteration = m_calculated.currentIteration;
-    m_calculated.currentIteration = currentIteration;
-    m_calculated.activeDuration = activeDuration;
-    m_calculated.timeFraction = timeFraction;
+    // Test for events even if timing didn't need an update as the player may have gained a start time.
+    // FIXME: Refactor so that we can ASSERT(m_player) here, this is currently required to be nullable for testing.
+    if (!m_player || m_player->hasStartTime()) {
+        // This logic is specific to CSS animation events and assumes that all
+        // animations start after the DocumentTimeline has started.
+        if (m_eventDelegate && (m_isFirstSample || previousPhase != phase() || (phase() == PhaseActive && previousIteration != m_calculated.currentIteration)))
+            m_eventDelegate->onEventCondition(this, m_isFirstSample, previousPhase, previousIteration);
+        m_isFirstSample = false;
+    }
 
-    const bool wasInEffect = m_calculated.isInEffect;
-    const bool wasInPlay = m_calculated.isInPlay;
-    m_calculated.isInEffect = !isNull(activeTime);
-    m_calculated.isInPlay = phase == PhaseActive && (!m_parent || m_parent->isInPlay());
-    m_calculated.isCurrent = phase == PhaseBefore || isInPlay() || (m_parent && m_parent->isCurrent());
-
-    if (m_eventDelegate && (isInPlay() != wasInPlay || (isInPlay() && lastIteration != currentIteration)))
-        m_eventDelegate->onEventCondition(wasInPlay, isInPlay(), lastIteration, currentIteration);
-
-    // FIXME: This probably shouldn't be recursive.
-    updateChildrenAndEffects(wasInEffect);
-}
-
-TimedItem::CalculatedTiming::CalculatedTiming()
-    : activeDuration(nullValue())
-    , currentIteration(nullValue())
-    , timeFraction(nullValue())
-    , isCurrent(false)
-    , isInEffect(false)
-    , isInPlay(false)
-{
+    bool didTriggerStyleRecalc = false;
+    if (needsUpdate)  {
+        // FIXME: This probably shouldn't be recursive.
+        didTriggerStyleRecalc = updateChildrenAndEffects();
+        m_calculated.timeToEffectChange = calculateTimeToEffectChange(localTime, timeToNextIteration);
+    }
+    return didTriggerStyleRecalc;
 }
 
 } // namespace WebCore

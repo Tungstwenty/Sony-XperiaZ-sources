@@ -23,16 +23,16 @@
 
 #include "core/rendering/svg/RenderSVGResourceMarker.h"
 
-#include "core/platform/graphics/GraphicsContextStateSaver.h"
+#include "core/rendering/LayoutRectRecorder.h"
 #include "core/rendering/svg/RenderSVGContainer.h"
-#include "core/rendering/svg/RenderSVGRoot.h"
 #include "core/rendering/svg/SVGRenderSupport.h"
-#include "core/svg/SVGElement.h"
-#include "core/svg/SVGMarkerElement.h"
+#include "platform/graphics/GraphicsContextStateSaver.h"
+
+#include "wtf/TemporaryChange.h"
 
 namespace WebCore {
 
-RenderSVGResourceType RenderSVGResourceMarker::s_resourceType = MarkerResourceType;
+const RenderSVGResourceType RenderSVGResourceMarker::s_resourceType = MarkerResourceType;
 
 RenderSVGResourceMarker::RenderSVGResourceMarker(SVGMarkerElement* node)
     : RenderSVGResourceContainer(node)
@@ -45,15 +45,23 @@ RenderSVGResourceMarker::~RenderSVGResourceMarker()
 
 void RenderSVGResourceMarker::layout()
 {
-    StackStats::LayoutCheckPoint layoutCheckPoint;
+    ASSERT(needsLayout());
+    if (m_isInLayout)
+        return;
+
+    LayoutRectRecorder recorder(*this);
+    TemporaryChange<bool> inLayoutChange(m_isInLayout, true);
+
     // Invalidate all resources if our layout changed.
     if (everHadLayout() && selfNeedsLayout())
-        RenderSVGRoot::addResourceForClientInvalidation(this);
+        removeAllClientsFromCache();
 
     // RenderSVGHiddenContainer overwrites layout(). We need the
     // layouting of RenderSVGContainer for calculating  local
     // transformations and repaint.
     RenderSVGContainer::layout();
+
+    clearInvalidationMask();
 }
 
 void RenderSVGResourceMarker::removeAllClientsFromCache(bool markForInvalidation)
@@ -93,7 +101,7 @@ const AffineTransform& RenderSVGResourceMarker::localToParentTransform() const
 
 FloatPoint RenderSVGResourceMarker::referencePoint() const
 {
-    SVGMarkerElement* marker = toSVGMarkerElement(node());
+    SVGMarkerElement* marker = toSVGMarkerElement(element());
     ASSERT(marker);
 
     SVGLengthContext lengthContext(marker);
@@ -102,7 +110,7 @@ FloatPoint RenderSVGResourceMarker::referencePoint() const
 
 float RenderSVGResourceMarker::angle() const
 {
-    SVGMarkerElement* marker = toSVGMarkerElement(node());
+    SVGMarkerElement* marker = toSVGMarkerElement(element());
     ASSERT(marker);
 
     float angle = -1;
@@ -114,7 +122,7 @@ float RenderSVGResourceMarker::angle() const
 
 AffineTransform RenderSVGResourceMarker::markerTransformation(const FloatPoint& origin, float autoAngle, float strokeWidth) const
 {
-    SVGMarkerElement* marker = toSVGMarkerElement(node());
+    SVGMarkerElement* marker = toSVGMarkerElement(element());
     ASSERT(marker);
 
     float markerAngle = angle();
@@ -129,10 +137,12 @@ AffineTransform RenderSVGResourceMarker::markerTransformation(const FloatPoint& 
 
 void RenderSVGResourceMarker::draw(PaintInfo& paintInfo, const AffineTransform& transform)
 {
+    clearInvalidationMask();
+
     // An empty viewBox disables rendering.
-    SVGMarkerElement* marker = toSVGMarkerElement(toSVGElement(node()));
+    SVGMarkerElement* marker = toSVGMarkerElement(element());
     ASSERT(marker);
-    if (marker->hasAttribute(SVGNames::viewBoxAttr) && marker->viewBoxIsValid() && marker->viewBoxCurrentValue().isEmpty())
+    if (marker->hasAttribute(SVGNames::viewBoxAttr) && marker->viewBoxCurrentValue().isValid() && marker->viewBoxCurrentValue().isEmpty())
         return;
 
     PaintInfo info(paintInfo);
@@ -156,7 +166,7 @@ AffineTransform RenderSVGResourceMarker::markerContentTransformation(const Affin
 
 AffineTransform RenderSVGResourceMarker::viewportTransform() const
 {
-    SVGMarkerElement* marker = toSVGMarkerElement(node());
+    SVGMarkerElement* marker = toSVGMarkerElement(element());
     ASSERT(marker);
 
     return marker->viewBoxToViewTransform(m_viewport.width(), m_viewport.height());
@@ -167,7 +177,7 @@ void RenderSVGResourceMarker::calcViewport()
     if (!selfNeedsLayout())
         return;
 
-    SVGMarkerElement* marker = toSVGMarkerElement(node());
+    SVGMarkerElement* marker = toSVGMarkerElement(element());
     ASSERT(marker);
 
     SVGLengthContext lengthContext(marker);

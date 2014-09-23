@@ -33,10 +33,9 @@
 
 #include "URLTestHelpers.h"
 #include "wtf/StdLibExtras.h"
-#include "WebFrame.h"
 #include "WebFrameClient.h"
+#include "WebFrameImpl.h"
 #include "WebSettings.h"
-#include "WebView.h"
 #include "WebViewClient.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebString.h"
@@ -45,8 +44,41 @@
 #include "public/platform/WebURLResponse.h"
 #include "public/platform/WebUnitTestSupport.h"
 
-namespace WebKit {
+namespace blink {
 namespace FrameTestHelpers {
+
+namespace {
+
+class QuitTask : public WebThread::Task {
+public:
+    void PostThis(WebCore::Timer<QuitTask>*)
+    {
+        // We don't just quit here because the SharedTimer may be part-way
+        // through the current queue of tasks when runPendingTasks was called,
+        // and we can't miss the tasks that were behind it.
+        // Takes ownership of |this|.
+        Platform::current()->currentThread()->postTask(this);
+    }
+
+    virtual void run()
+    {
+        Platform::current()->currentThread()->exitRunLoop();
+    }
+};
+
+WebFrameClient* defaultWebFrameClient()
+{
+    DEFINE_STATIC_LOCAL(WebFrameClient, client, ());
+    return &client;
+}
+
+WebViewClient* defaultWebViewClient()
+{
+    DEFINE_STATIC_LOCAL(WebViewClient,  client, ());
+    return &client;
+}
+
+} // namespace
 
 void loadFrame(WebFrame* frame, const std::string& url)
 {
@@ -56,62 +88,69 @@ void loadFrame(WebFrame* frame, const std::string& url)
     frame->loadRequest(urlRequest);
 }
 
-class TestWebFrameClient : public WebFrameClient {
-};
-
-static WebFrameClient* defaultWebFrameClient()
+void runPendingTasks()
 {
-    DEFINE_STATIC_LOCAL(TestWebFrameClient, client, ());
-    return &client;
+    // Pending tasks include Timers that have been scheduled.
+    WebCore::Timer<QuitTask> quitOnTimeout(new QuitTask, &QuitTask::PostThis);
+    quitOnTimeout.startOneShot(0);
+    Platform::current()->currentThread()->enterRunLoop();
 }
 
-class TestWebViewClient : public WebViewClient {
-};
-
-static WebViewClient* defaultWebViewClient()
+WebViewHelper::WebViewHelper()
+    : m_mainFrame(0)
+    , m_webView(0)
 {
-    DEFINE_STATIC_LOCAL(TestWebViewClient,  client, ());
-    return &client;
 }
 
-WebView* createWebView(bool enableJavascript, WebFrameClient* webFrameClient, WebViewClient* webViewClient)
+WebViewHelper::~WebViewHelper()
 {
+    reset();
+}
+
+WebViewImpl* WebViewHelper::initialize(bool enableJavascript, WebFrameClient* webFrameClient, WebViewClient* webViewClient, void (*updateSettingsFunc)(WebSettings*))
+{
+    reset();
+
     if (!webFrameClient)
         webFrameClient = defaultWebFrameClient();
     if (!webViewClient)
         webViewClient = defaultWebViewClient();
-    WebView* webView = WebView::create(webViewClient);
-    webView->settings()->setJavaScriptEnabled(enableJavascript);
-    webView->settings()->setDeviceSupportsMouse(false);
-    webView->settings()->setForceCompositingMode(true);
-    webView->initializeMainFrame(webFrameClient);
+    m_webView = WebViewImpl::create(webViewClient);
+    m_webView->settings()->setJavaScriptEnabled(enableJavascript);
+    if (updateSettingsFunc) {
+        updateSettingsFunc(m_webView->settings());
+    } else {
+        m_webView->settings()->setDeviceSupportsMouse(false);
+        m_webView->settings()->setForceCompositingMode(true);
+    }
 
-    return webView;
+    m_mainFrame = WebFrameImpl::create(webFrameClient);
+    m_webView->setMainFrame(m_mainFrame);
+
+    return m_webView;
 }
 
-WebView* createWebViewAndLoad(const std::string& url, bool enableJavascript, WebFrameClient* webFrameClient, WebViewClient* webViewClient)
+WebViewImpl* WebViewHelper::initializeAndLoad(const std::string& url, bool enableJavascript, WebFrameClient* webFrameClient, WebViewClient* webViewClient, void (*updateSettingsFunc)(WebSettings*))
 {
-    WebView* webView = createWebView(enableJavascript, webFrameClient, webViewClient);
+    initialize(enableJavascript, webFrameClient, webViewClient, updateSettingsFunc);
 
-    loadFrame(webView->mainFrame(), url);
+    loadFrame(webView()->mainFrame(), url);
     Platform::current()->unitTestSupport()->serveAsynchronousMockedRequests();
 
-    return webView;
+    return webViewImpl();
 }
 
-class QuitTask : public WebThread::Task {
-public:
-    virtual void run()
-    {
-        Platform::current()->currentThread()->exitRunLoop();
-    }
-};
-
-void runPendingTasks()
+void WebViewHelper::reset()
 {
-    Platform::current()->currentThread()->postTask(new QuitTask);
-    Platform::current()->currentThread()->enterRunLoop();
+    if (m_webView) {
+        m_webView->close();
+        m_webView = 0;
+    }
+    if (m_mainFrame) {
+        m_mainFrame->close();
+        m_mainFrame = 0;
+    }
 }
 
 } // namespace FrameTestHelpers
-} // namespace WebKit
+} // namespace blink

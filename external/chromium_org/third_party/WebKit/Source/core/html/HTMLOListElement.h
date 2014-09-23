@@ -29,8 +29,7 @@ namespace WebCore {
 
 class HTMLOListElement FINAL : public HTMLElement {
 public:
-    static PassRefPtr<HTMLOListElement> create(Document*);
-    static PassRefPtr<HTMLOListElement> create(const QualifiedName&, Document*);
+    static PassRefPtr<HTMLOListElement> create(Document&);
 
     int start() const { return m_hasExplicitStart ? m_start : (m_isReversed ? itemCount() : 1); }
     void setStart(int);
@@ -40,7 +39,7 @@ public:
     void itemCountChanged() { m_shouldRecalculateItemCount = true; }
 
 private:
-    HTMLOListElement(const QualifiedName&, Document*);
+    explicit HTMLOListElement(Document&);
 
     void updateItemValues();
 
@@ -65,6 +64,7 @@ private:
     bool m_shouldRecalculateItemCount : 1;
 };
 
+DEFINE_NODE_TYPE_CASTS(HTMLOListElement, hasTagName(HTMLNames::olTag));
 
 } //namespace
 

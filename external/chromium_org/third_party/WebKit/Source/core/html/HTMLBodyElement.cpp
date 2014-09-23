@@ -31,31 +31,25 @@
 #include "core/css/CSSParser.h"
 #include "core/css/StylePropertySet.h"
 #include "core/dom/Attribute.h"
-#include "core/dom/EventNames.h"
+#include "core/events/ThreadLocalEventNames.h"
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/parser/HTMLParserIdioms.h"
-#include "core/page/Frame.h"
-#include "core/page/FrameView.h"
+#include "core/frame/Frame.h"
+#include "core/frame/FrameView.h"
 
 namespace WebCore {
 
 using namespace HTMLNames;
 
-HTMLBodyElement::HTMLBodyElement(const QualifiedName& tagName, Document* document)
-    : HTMLElement(tagName, document)
+HTMLBodyElement::HTMLBodyElement(Document& document)
+    : HTMLElement(bodyTag, document)
 {
-    ASSERT(hasTagName(bodyTag));
     ScriptWrappable::init(this);
 }
 
-PassRefPtr<HTMLBodyElement> HTMLBodyElement::create(Document* document)
+PassRefPtr<HTMLBodyElement> HTMLBodyElement::create(Document& document)
 {
-    return adoptRef(new HTMLBodyElement(bodyTag, document));
-}
-
-PassRefPtr<HTMLBodyElement> HTMLBodyElement::create(const QualifiedName& tagName, Document* document)
-{
-    return adoptRef(new HTMLBodyElement(tagName, document));
+    return adoptRef(new HTMLBodyElement(document));
 }
 
 HTMLBodyElement::~HTMLBodyElement()
@@ -74,7 +68,7 @@ void HTMLBodyElement::collectStyleForPresentationAttribute(const QualifiedName& 
     if (name == backgroundAttr) {
         String url = stripLeadingAndTrailingHTMLSpaces(value);
         if (!url.isEmpty()) {
-            RefPtr<CSSImageValue> imageValue = CSSImageValue::create(document()->completeURL(url).string());
+            RefPtr<CSSImageValue> imageValue = CSSImageValue::create(document().completeURL(url).string());
             imageValue->setInitiator(localName());
             style->setProperty(CSSProperty(CSSPropertyBackgroundImage, imageValue.release()));
         }
@@ -100,58 +94,62 @@ void HTMLBodyElement::parseAttribute(const QualifiedName& name, const AtomicStri
     if (name == vlinkAttr || name == alinkAttr || name == linkAttr) {
         if (value.isNull()) {
             if (name == linkAttr)
-                document()->textLinkColors().resetLinkColor();
+                document().textLinkColors().resetLinkColor();
             else if (name == vlinkAttr)
-                document()->textLinkColors().resetVisitedLinkColor();
+                document().textLinkColors().resetVisitedLinkColor();
             else
-                document()->textLinkColors().resetActiveLinkColor();
+                document().textLinkColors().resetActiveLinkColor();
         } else {
             RGBA32 color;
-            if (CSSParser::parseColor(color, value, !document()->inQuirksMode())) {
+            if (CSSParser::parseColor(color, value, !document().inQuirksMode())) {
                 if (name == linkAttr)
-                    document()->textLinkColors().setLinkColor(color);
+                    document().textLinkColors().setLinkColor(color);
                 else if (name == vlinkAttr)
-                    document()->textLinkColors().setVisitedLinkColor(color);
+                    document().textLinkColors().setVisitedLinkColor(color);
                 else
-                    document()->textLinkColors().setActiveLinkColor(color);
+                    document().textLinkColors().setActiveLinkColor(color);
             }
         }
 
         setNeedsStyleRecalc();
     } else if (name == onloadAttr)
-        document()->setWindowAttributeEventListener(eventNames().loadEvent, createAttributeEventListener(document()->frame(), name, value));
+        document().setWindowAttributeEventListener(EventTypeNames::load, createAttributeEventListener(document().frame(), name, value));
     else if (name == onbeforeunloadAttr)
-        document()->setWindowAttributeEventListener(eventNames().beforeunloadEvent, createAttributeEventListener(document()->frame(), name, value));
+        document().setWindowAttributeEventListener(EventTypeNames::beforeunload, createAttributeEventListener(document().frame(), name, value));
     else if (name == onunloadAttr)
-        document()->setWindowAttributeEventListener(eventNames().unloadEvent, createAttributeEventListener(document()->frame(), name, value));
+        document().setWindowAttributeEventListener(EventTypeNames::unload, createAttributeEventListener(document().frame(), name, value));
     else if (name == onpagehideAttr)
-        document()->setWindowAttributeEventListener(eventNames().pagehideEvent, createAttributeEventListener(document()->frame(), name, value));
+        document().setWindowAttributeEventListener(EventTypeNames::pagehide, createAttributeEventListener(document().frame(), name, value));
     else if (name == onpageshowAttr)
-        document()->setWindowAttributeEventListener(eventNames().pageshowEvent, createAttributeEventListener(document()->frame(), name, value));
+        document().setWindowAttributeEventListener(EventTypeNames::pageshow, createAttributeEventListener(document().frame(), name, value));
     else if (name == onpopstateAttr)
-        document()->setWindowAttributeEventListener(eventNames().popstateEvent, createAttributeEventListener(document()->frame(), name, value));
+        document().setWindowAttributeEventListener(EventTypeNames::popstate, createAttributeEventListener(document().frame(), name, value));
     else if (name == onblurAttr)
-        document()->setWindowAttributeEventListener(eventNames().blurEvent, createAttributeEventListener(document()->frame(), name, value));
+        document().setWindowAttributeEventListener(EventTypeNames::blur, createAttributeEventListener(document().frame(), name, value));
+    else if (name == onerrorAttr)
+        document().setWindowAttributeEventListener(EventTypeNames::error, createAttributeEventListener(document().frame(), name, value));
     else if (name == onfocusAttr)
-        document()->setWindowAttributeEventListener(eventNames().focusEvent, createAttributeEventListener(document()->frame(), name, value));
+        document().setWindowAttributeEventListener(EventTypeNames::focus, createAttributeEventListener(document().frame(), name, value));
 #if ENABLE(ORIENTATION_EVENTS)
     else if (name == onorientationchangeAttr)
-        document()->setWindowAttributeEventListener(eventNames().orientationchangeEvent, createAttributeEventListener(document()->frame(), name, value));
+        document().setWindowAttributeEventListener(EventTypeNames::orientationchange, createAttributeEventListener(document().frame(), name, value));
 #endif
     else if (name == onhashchangeAttr)
-        document()->setWindowAttributeEventListener(eventNames().hashchangeEvent, createAttributeEventListener(document()->frame(), name, value));
+        document().setWindowAttributeEventListener(EventTypeNames::hashchange, createAttributeEventListener(document().frame(), name, value));
+    else if (name == onmessageAttr)
+        document().setWindowAttributeEventListener(EventTypeNames::message, createAttributeEventListener(document().frame(), name, value));
     else if (name == onresizeAttr)
-        document()->setWindowAttributeEventListener(eventNames().resizeEvent, createAttributeEventListener(document()->frame(), name, value));
+        document().setWindowAttributeEventListener(EventTypeNames::resize, createAttributeEventListener(document().frame(), name, value));
     else if (name == onscrollAttr)
-        document()->setWindowAttributeEventListener(eventNames().scrollEvent, createAttributeEventListener(document()->frame(), name, value));
+        document().setWindowAttributeEventListener(EventTypeNames::scroll, createAttributeEventListener(document().frame(), name, value));
     else if (name == onselectionchangeAttr)
-        document()->setAttributeEventListener(eventNames().selectionchangeEvent, createAttributeEventListener(document()->frame(), name, value));
+        document().setAttributeEventListener(EventTypeNames::selectionchange, createAttributeEventListener(document().frame(), name, value));
     else if (name == onstorageAttr)
-        document()->setWindowAttributeEventListener(eventNames().storageEvent, createAttributeEventListener(document()->frame(), name, value));
+        document().setWindowAttributeEventListener(EventTypeNames::storage, createAttributeEventListener(document().frame(), name, value));
     else if (name == ononlineAttr)
-        document()->setWindowAttributeEventListener(eventNames().onlineEvent, createAttributeEventListener(document()->frame(), name, value));
+        document().setWindowAttributeEventListener(EventTypeNames::online, createAttributeEventListener(document().frame(), name, value));
     else if (name == onofflineAttr)
-        document()->setWindowAttributeEventListener(eventNames().offlineEvent, createAttributeEventListener(document()->frame(), name, value));
+        document().setWindowAttributeEventListener(EventTypeNames::offline, createAttributeEventListener(document().frame(), name, value));
     else
         HTMLElement::parseAttribute(name, value);
 }
@@ -159,32 +157,22 @@ void HTMLBodyElement::parseAttribute(const QualifiedName& name, const AtomicStri
 Node::InsertionNotificationRequest HTMLBodyElement::insertedInto(ContainerNode* insertionPoint)
 {
     HTMLElement::insertedInto(insertionPoint);
-    if (insertionPoint->inDocument())
-        return InsertionShouldCallDidNotifySubtreeInsertions;
-    return InsertionDone;
-}
-
-void HTMLBodyElement::didNotifySubtreeInsertions(ContainerNode* insertionPoint)
-{
-    ASSERT_UNUSED(insertionPoint, insertionPoint->inDocument());
-    ASSERT(document());
-
-    // FIXME: Perhaps this code should be in attach() instead of here.
-    Element* ownerElement = document()->ownerElement();
-    if (ownerElement && (ownerElement->hasTagName(frameTag) || ownerElement->hasTagName(iframeTag))) {
-        HTMLFrameElementBase* ownerFrameElement = static_cast<HTMLFrameElementBase*>(ownerElement);
-        int marginWidth = ownerFrameElement->marginWidth();
-        if (marginWidth != -1)
-            setAttribute(marginwidthAttr, String::number(marginWidth));
-        int marginHeight = ownerFrameElement->marginHeight();
-        if (marginHeight != -1)
-            setAttribute(marginheightAttr, String::number(marginHeight));
+    if (insertionPoint->inDocument()) {
+        // FIXME: It's surprising this is web compatible since it means a marginwidth
+        // and marginheight attribute can magically appear on the <body> of all documents
+        // embedded through <iframe> or <frame>.
+        Element* ownerElement = document().ownerElement();
+        if (ownerElement && ownerElement->isFrameElementBase()) {
+            HTMLFrameElementBase* ownerFrameElement = toHTMLFrameElementBase(ownerElement);
+            int marginWidth = ownerFrameElement->marginWidth();
+            if (marginWidth != -1)
+                setIntegralAttribute(marginwidthAttr, marginWidth);
+            int marginHeight = ownerFrameElement->marginHeight();
+            if (marginHeight != -1)
+                setIntegralAttribute(marginheightAttr, marginHeight);
+        }
     }
-
-    // FIXME: This call to scheduleRelayout should not be needed here.
-    // But without it we hang during WebKit tests; need to fix that and remove this.
-    if (FrameView* view = document()->view())
-        view->scheduleRelayout();
+    return InsertionDone;
 }
 
 bool HTMLBodyElement::isURLAttribute(const Attribute& attribute) const
@@ -199,56 +187,6 @@ bool HTMLBodyElement::supportsFocus() const
     return rendererIsEditable() || HTMLElement::supportsFocus();
 }
 
-String HTMLBodyElement::aLink() const
-{
-    return getAttribute(alinkAttr);
-}
-
-void HTMLBodyElement::setALink(const String& value)
-{
-    setAttribute(alinkAttr, value);
-}
-
-String HTMLBodyElement::bgColor() const
-{
-    return getAttribute(bgcolorAttr);
-}
-
-void HTMLBodyElement::setBgColor(const String& value)
-{
-    setAttribute(bgcolorAttr, value);
-}
-
-String HTMLBodyElement::link() const
-{
-    return getAttribute(linkAttr);
-}
-
-void HTMLBodyElement::setLink(const String& value)
-{
-    setAttribute(linkAttr, value);
-}
-
-String HTMLBodyElement::text() const
-{
-    return getAttribute(textAttr);
-}
-
-void HTMLBodyElement::setText(const String& value)
-{
-    setAttribute(textAttr, value);
-}
-
-String HTMLBodyElement::vLink() const
-{
-    return getAttribute(vlinkAttr);
-}
-
-void HTMLBodyElement::setVLink(const String& value)
-{
-    setAttribute(vlinkAttr, value);
-}
-
 static int adjustForZoom(int value, Document* document)
 {
     Frame* frame = document->frame();
@@ -261,20 +199,36 @@ static int adjustForZoom(int value, Document* document)
     return static_cast<int>(value / zoomFactor);
 }
 
+// FIXME: There are cases where body.scrollLeft is allowed to return
+// non-zero values in both quirks and strict mode. It happens when
+// <body> has an overflow that is not the Frame overflow.
+// http://dev.w3.org/csswg/cssom-view/#dom-element-scrollleft
+// http://code.google.com/p/chromium/issues/detail?id=312435
 int HTMLBodyElement::scrollLeft()
 {
-    // Update the document's layout.
-    Document* document = this->document();
-    document->updateLayoutIgnorePendingStylesheets();
-    FrameView* view = document->view();
-    return view ? adjustForZoom(view->scrollX(), document) : 0;
+    Document& document = this->document();
+    document.updateLayoutIgnorePendingStylesheets();
+
+    if (RuntimeEnabledFeatures::scrollTopLeftInteropEnabled()) {
+        if (!document.inQuirksMode())
+            return 0;
+    }
+
+    FrameView* view = document.view();
+    return view ? adjustForZoom(view->scrollX(), &document) : 0;
 }
 
 void HTMLBodyElement::setScrollLeft(int scrollLeft)
 {
-    Document* document = this->document();
-    document->updateLayoutIgnorePendingStylesheets();
-    Frame* frame = document->frame();
+    Document& document = this->document();
+    document.updateLayoutIgnorePendingStylesheets();
+
+    if (RuntimeEnabledFeatures::scrollTopLeftInteropEnabled()) {
+        if (!document.inQuirksMode())
+            return;
+    }
+
+    Frame* frame = document.frame();
     if (!frame)
         return;
     FrameView* view = frame->view();
@@ -285,18 +239,29 @@ void HTMLBodyElement::setScrollLeft(int scrollLeft)
 
 int HTMLBodyElement::scrollTop()
 {
-    // Update the document's layout.
-    Document* document = this->document();
-    document->updateLayoutIgnorePendingStylesheets();
-    FrameView* view = document->view();
-    return view ? adjustForZoom(view->scrollY(), document) : 0;
+    Document& document = this->document();
+    document.updateLayoutIgnorePendingStylesheets();
+
+    if (RuntimeEnabledFeatures::scrollTopLeftInteropEnabled()) {
+        if (!document.inQuirksMode())
+            return 0;
+    }
+
+    FrameView* view = document.view();
+    return view ? adjustForZoom(view->scrollY(), &document) : 0;
 }
 
 void HTMLBodyElement::setScrollTop(int scrollTop)
 {
-    Document* document = this->document();
-    document->updateLayoutIgnorePendingStylesheets();
-    Frame* frame = document->frame();
+    Document& document = this->document();
+    document.updateLayoutIgnorePendingStylesheets();
+
+    if (RuntimeEnabledFeatures::scrollTopLeftInteropEnabled()) {
+        if (!document.inQuirksMode())
+            return;
+    }
+
+    Frame* frame = document.frame();
     if (!frame)
         return;
     FrameView* view = frame->view();
@@ -308,26 +273,26 @@ void HTMLBodyElement::setScrollTop(int scrollTop)
 int HTMLBodyElement::scrollHeight()
 {
     // Update the document's layout.
-    Document* document = this->document();
-    document->updateLayoutIgnorePendingStylesheets();
-    FrameView* view = document->view();
-    return view ? adjustForZoom(view->contentsHeight(), document) : 0;
+    Document& document = this->document();
+    document.updateLayoutIgnorePendingStylesheets();
+    FrameView* view = document.view();
+    return view ? adjustForZoom(view->contentsHeight(), &document) : 0;
 }
 
 int HTMLBodyElement::scrollWidth()
 {
     // Update the document's layout.
-    Document* document = this->document();
-    document->updateLayoutIgnorePendingStylesheets();
-    FrameView* view = document->view();
-    return view ? adjustForZoom(view->contentsWidth(), document) : 0;
+    Document& document = this->document();
+    document.updateLayoutIgnorePendingStylesheets();
+    FrameView* view = document.view();
+    return view ? adjustForZoom(view->contentsWidth(), &document) : 0;
 }
 
 void HTMLBodyElement::addSubresourceAttributeURLs(ListHashSet<KURL>& urls) const
 {
     HTMLElement::addSubresourceAttributeURLs(urls);
 
-    addSubresourceURL(urls, document()->completeURL(getAttribute(backgroundAttr)));
+    addSubresourceURL(urls, document().completeURL(getAttribute(backgroundAttr)));
 }
 
 } // namespace WebCore

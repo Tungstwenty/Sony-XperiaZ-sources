@@ -30,8 +30,9 @@
 #include "core/inspector/InspectorBaseAgent.h"
 #include "core/inspector/InspectorDOMAgent.h"
 #include "core/inspector/InspectorStyleSheet.h"
-#include "core/page/ContentSecurityPolicy.h"
-#include "core/platform/JSONValues.h"
+#include "core/frame/ContentSecurityPolicy.h"
+#include "platform/JSONValues.h"
+#include "wtf/HashCountedSet.h"
 #include "wtf/HashMap.h"
 #include "wtf/HashSet.h"
 #include "wtf/PassRefPtr.h"
@@ -50,10 +51,13 @@ class CSSStyleSheet;
 class Document;
 class Element;
 class InspectorFrontend;
+class InspectorResourceAgent;
 class InstrumentingAgents;
 class MediaList;
 class Node;
 class NodeList;
+class PlatformFontUsage;
+class RenderText;
 class StyleResolver;
 class UpdateRegionLayoutTask;
 
@@ -92,11 +96,10 @@ public:
     };
 
     static CSSStyleRule* asCSSStyleRule(CSSRule*);
-    static bool cssErrorFilter(const CSSParserString& content, int propertyId, int errorType);
 
-    static PassOwnPtr<InspectorCSSAgent> create(InstrumentingAgents* instrumentingAgents, InspectorCompositeState* state, InspectorDOMAgent* domAgent, InspectorPageAgent* pageAgent)
+    static PassOwnPtr<InspectorCSSAgent> create(InstrumentingAgents* instrumentingAgents, InspectorCompositeState* state, InspectorDOMAgent* domAgent, InspectorPageAgent* pageAgent, InspectorResourceAgent* resourceAgent)
     {
-        return adoptPtr(new InspectorCSSAgent(instrumentingAgents, state, domAgent, pageAgent));
+        return adoptPtr(new InspectorCSSAgent(instrumentingAgents, state, domAgent, pageAgent, resourceAgent));
     }
     ~InspectorCSSAgent();
 
@@ -105,13 +108,17 @@ public:
     virtual void clearFrontend();
     virtual void discardAgent();
     virtual void restore();
-    virtual void enable(ErrorString*);
+    virtual void enable(ErrorString*, PassRefPtr<EnableCallback>);
     virtual void disable(ErrorString*);
     void reset();
     void didCommitLoad(Frame*, DocumentLoader*);
     void mediaQueryResultChanged();
     void didCreateNamedFlow(Document*, NamedFlow*);
     void willRemoveNamedFlow(Document*, NamedFlow*);
+    void willMutateRules();
+    void didMutateRules(CSSStyleSheet*);
+    void willMutateStyle();
+    void didMutateStyle(CSSStyleDeclaration*, bool);
 
 private:
     void regionLayoutUpdated(NamedFlow*, int documentNodeId);
@@ -125,6 +132,7 @@ public:
     void frameDetachedFromParent(Frame*);
 
     virtual void getComputedStyleForNode(ErrorString*, int nodeId, RefPtr<TypeBuilder::Array<TypeBuilder::CSS::CSSComputedStyleProperty> >&);
+    virtual void getPlatformFontsForNode(ErrorString*, int nodeId, String* cssFamilyName, RefPtr<TypeBuilder::Array<TypeBuilder::CSS::PlatformFontUsage> >&);
     virtual void getInlineStylesForNode(ErrorString*, int nodeId, RefPtr<TypeBuilder::CSS::CSSStyle>& inlineStyle, RefPtr<TypeBuilder::CSS::CSSStyle>& attributes);
     virtual void getMatchedStylesForNode(ErrorString*, int nodeId, const bool* includePseudo, const bool* includeInherited, RefPtr<TypeBuilder::Array<TypeBuilder::CSS::RuleMatch> >& matchedCSSRules, RefPtr<TypeBuilder::Array<TypeBuilder::CSS::PseudoIdMatches> >& pseudoIdMatches, RefPtr<TypeBuilder::Array<TypeBuilder::CSS::InheritedStyleEntry> >& inheritedEntries);
     virtual void getAllStyleSheets(ErrorString*, RefPtr<TypeBuilder::Array<TypeBuilder::CSS::CSSStyleSheetHeader> >& styleSheetInfos);
@@ -151,14 +159,16 @@ private:
     class TogglePropertyAction;
     class SetRuleSelectorAction;
     class AddRuleAction;
+    class EnableResourceClient;
 
-    InspectorCSSAgent(InstrumentingAgents*, InspectorCompositeState*, InspectorDOMAgent*, InspectorPageAgent*);
+    InspectorCSSAgent(InstrumentingAgents*, InspectorCompositeState*, InspectorDOMAgent*, InspectorPageAgent*, InspectorResourceAgent*);
 
     typedef HashMap<String, RefPtr<InspectorStyleSheet> > IdToInspectorStyleSheet;
     typedef HashMap<Node*, RefPtr<InspectorStyleSheetForInlineStyle> > NodeToInspectorStyleSheet; // bogus "stylesheets" with elements' inline styles
     typedef HashMap<RefPtr<Document>, RefPtr<InspectorStyleSheet> > DocumentToViaInspectorStyleSheet; // "via inspector" stylesheets
     typedef HashMap<int, unsigned> NodeIdToForcedPseudoState;
 
+    void wasEnabled(PassRefPtr<EnableCallback>);
     void resetNonPersistentData();
     InspectorStyleSheetForInlineStyle* asInspectorStyleSheet(Element* element);
     Element* elementForId(ErrorString*, int nodeId);
@@ -166,15 +176,18 @@ private:
     void collectAllStyleSheets(Vector<InspectorStyleSheet*>&);
     void collectStyleSheets(CSSStyleSheet*, Vector<InspectorStyleSheet*>&);
 
+    void collectPlatformFontsForRenderer(RenderText*, HashCountedSet<String>*);
+
     InspectorStyleSheet* bindStyleSheet(CSSStyleSheet*);
     String unbindStyleSheet(InspectorStyleSheet*);
     InspectorStyleSheet* viaInspectorStyleSheet(Document*, bool createIfAbsent);
     InspectorStyleSheet* assertStyleSheetForId(ErrorString*, const String&);
     TypeBuilder::CSS::StyleSheetOrigin::Enum detectOrigin(CSSStyleSheet* pageStyleSheet, Document* ownerDocument);
+    bool styleSheetEditInProgress() const { return m_styleSheetsPendingMutation || m_styleDeclarationPendingMutation || m_isSettingStyleSheetText; }
 
-    PassRefPtr<TypeBuilder::CSS::CSSRule> buildObjectForRule(CSSStyleRule*, StyleResolver*);
-    PassRefPtr<TypeBuilder::Array<TypeBuilder::CSS::CSSRule> > buildArrayForRuleList(CSSRuleList*, StyleResolver*);
-    PassRefPtr<TypeBuilder::Array<TypeBuilder::CSS::RuleMatch> > buildArrayForMatchedRuleList(CSSRuleList*, StyleResolver*, Element*);
+    PassRefPtr<TypeBuilder::CSS::CSSRule> buildObjectForRule(CSSStyleRule*, StyleResolver&);
+    PassRefPtr<TypeBuilder::Array<TypeBuilder::CSS::CSSRule> > buildArrayForRuleList(CSSRuleList*, StyleResolver&);
+    PassRefPtr<TypeBuilder::Array<TypeBuilder::CSS::RuleMatch> > buildArrayForMatchedRuleList(CSSRuleList*, StyleResolver&, Element*);
     PassRefPtr<TypeBuilder::CSS::CSSStyle> buildObjectForAttributesStyle(Element*);
     PassRefPtr<TypeBuilder::Array<TypeBuilder::CSS::Region> > buildArrayForRegions(ErrorString*, PassRefPtr<NodeList>, int documentNodeId);
     PassRefPtr<TypeBuilder::CSS::NamedFlow> buildObjectForNamedFlow(ErrorString*, NamedFlow*, int documentNodeId);
@@ -184,7 +197,7 @@ private:
     virtual void didRemoveDOMNode(Node*);
     virtual void didModifyDOMAttr(Element*);
 
-    // InspectorCSSAgent::Listener implementation
+    // InspectorStyleSheet::Listener implementation
     virtual void styleSheetChanged(InspectorStyleSheet*) OVERRIDE;
     virtual void willReparseStyleSheet() OVERRIDE;
     virtual void didReparseStyleSheet() OVERRIDE;
@@ -194,6 +207,7 @@ private:
     InspectorFrontend::CSS* m_frontend;
     InspectorDOMAgent* m_domAgent;
     InspectorPageAgent* m_pageAgent;
+    InspectorResourceAgent* m_resourceAgent;
 
     IdToInspectorStyleSheet m_idToInspectorStyleSheet;
     CSSStyleSheetToInspectorStyleSheet m_cssStyleSheetToInspectorStyleSheet;
@@ -205,10 +219,13 @@ private:
     OwnPtr<ChangeRegionOversetTask> m_changeRegionOversetTask;
 
     int m_lastStyleSheetId;
+    int m_styleSheetsPendingMutation;
+    bool m_styleDeclarationPendingMutation;
     bool m_creatingViaInspectorStyleSheet;
     bool m_isSettingStyleSheetText;
 
     friend class ChangeRegionOversetTask;
+    friend class EnableResourceClient;
     friend class StyleSheetBinder;
     friend class UpdateRegionLayoutTask;
 };

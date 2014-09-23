@@ -23,8 +23,8 @@
 #define StyleRuleImport_h
 
 #include "core/css/StyleRule.h"
-#include "core/loader/cache/ResourcePtr.h"
-#include "core/loader/cache/StyleSheetResourceClient.h"
+#include "core/fetch/ResourcePtr.h"
+#include "core/fetch/StyleSheetResourceClient.h"
 
 namespace WebCore {
 
@@ -80,6 +80,8 @@ private:
     ResourcePtr<CSSStyleSheetResource> m_resource;
     bool m_loading;
 };
+
+DEFINE_STYLE_RULE_TYPE_CASTS(Import);
 
 } // namespace WebCore
 

@@ -61,6 +61,8 @@ public:
 protected:
     virtual void computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidth, LayoutUnit& maxLogicalWidth) const OVERRIDE;
 
+    virtual bool supportsPartialLayout() const OVERRIDE { return false; }
+
     virtual void styleDidChange(StyleDifference, const RenderStyle* oldStyle);
 
 private:
@@ -159,20 +161,7 @@ private:
     int m_numberOfInFlowChildrenOnFirstLine;
 };
 
-inline RenderFlexibleBox* toRenderFlexibleBox(RenderObject* object)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!object || object->isFlexibleBox());
-    return static_cast<RenderFlexibleBox*>(object);
-}
-
-inline const RenderFlexibleBox* toRenderFlexibleBox(const RenderObject* object)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!object || object->isFlexibleBox());
-    return static_cast<const RenderFlexibleBox*>(object);
-}
-
-// This will catch anyone doing an unnecessary cast.
-void toRenderFlexibleBox(const RenderFlexibleBox*);
+DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderFlexibleBox, isFlexibleBox());
 
 } // namespace WebCore
 

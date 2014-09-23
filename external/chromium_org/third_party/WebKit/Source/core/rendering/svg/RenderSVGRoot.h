@@ -23,9 +23,9 @@
 #ifndef RenderSVGRoot_h
 #define RenderSVGRoot_h
 
-#include "core/platform/graphics/FloatRect.h"
 #include "core/rendering/RenderReplaced.h"
 #include "core/rendering/svg/SVGRenderSupport.h"
+#include "platform/geometry/FloatRect.h"
 
 namespace WebCore {
 
@@ -63,10 +63,6 @@ public:
     // localToBorderBoxTransform maps local SVG viewport coordinates to local CSS box coordinates.
     const AffineTransform& localToBorderBoxTransform() const { return m_localToBorderBoxTransform; }
 
-    // The flag is cleared at the beginning of each layout() pass. Elements then call this
-    // method during layout when they are invalidated by a filter.
-    static void addResourceForClientInvalidation(RenderSVGResourceContainer*);
-
 private:
     virtual RenderObjectChildList* virtualChildren() { return children(); }
     virtual const RenderObjectChildList* virtualChildren() const { return children(); }
@@ -80,15 +76,14 @@ private:
     virtual void paintReplaced(PaintInfo&, const LayoutPoint&);
 
     virtual void willBeDestroyed();
-    virtual void styleWillChange(StyleDifference, const RenderStyle* newStyle);
     virtual void styleDidChange(StyleDifference, const RenderStyle* oldStyle);
     virtual void addChild(RenderObject* child, RenderObject* beforeChild = 0) OVERRIDE;
     virtual void removeChild(RenderObject*) OVERRIDE;
 
-    virtual const AffineTransform& localToParentTransform() const;
+    virtual void insertedIntoTree() OVERRIDE;
+    virtual void willBeRemovedFromTree() OVERRIDE;
 
-    bool fillContains(const FloatPoint&) const;
-    bool strokeContains(const FloatPoint&) const;
+    virtual const AffineTransform& localToParentTransform() const;
 
     virtual FloatRect objectBoundingBox() const { return m_objectBoundingBox; }
     virtual FloatRect strokeBoundingBox() const { return m_strokeBoundingBox; }
@@ -116,25 +111,11 @@ private:
     FloatRect m_repaintBoundingBox;
     mutable AffineTransform m_localToParentTransform;
     AffineTransform m_localToBorderBoxTransform;
-    HashSet<RenderSVGResourceContainer*> m_resourcesNeedingToInvalidateClients;
     bool m_isLayoutSizeChanged : 1;
     bool m_needsBoundariesOrTransformUpdate : 1;
 };
 
-inline RenderSVGRoot* toRenderSVGRoot(RenderObject* object)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!object || object->isSVGRoot());
-    return static_cast<RenderSVGRoot*>(object);
-}
-
-inline const RenderSVGRoot* toRenderSVGRoot(const RenderObject* object)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!object || object->isSVGRoot());
-    return static_cast<const RenderSVGRoot*>(object);
-}
-
-// This will catch anyone doing an unnecessary cast.
-void toRenderSVGRoot(const RenderSVGRoot*);
+DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderSVGRoot, isSVGRoot());
 
 } // namespace WebCore
 

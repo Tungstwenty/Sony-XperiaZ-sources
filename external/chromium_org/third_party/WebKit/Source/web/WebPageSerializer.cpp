@@ -45,15 +45,15 @@
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLTableElement.h"
 #include "core/loader/DocumentLoader.h"
-#include "core/loader/archive/MHTMLArchive.h"
-#include "core/page/Frame.h"
+#include "core/frame/Frame.h"
 #include "core/page/PageSerializer.h"
-#include "core/platform/SerializedResource.h"
+#include "platform/SerializedResource.h"
+#include "platform/mhtml/MHTMLArchive.h"
+#include "platform/weborigin/KURL.h"
 #include "public/platform/WebCString.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
 #include "public/platform/WebVector.h"
-#include "weborigin/KURL.h"
 #include "wtf/Vector.h"
 #include "wtf/text/StringConcatenate.h"
 
@@ -100,7 +100,7 @@ KURL getSubResourceURLFromElement(Element* element)
     if (value.isEmpty() || value.stripWhiteSpace().startsWith("javascript:", false))
         return KURL();
 
-    return element->document()->completeURL(value);
+    return element->document().completeURL(value);
 }
 
 void retrieveResourcesForElement(Element* element,
@@ -113,8 +113,7 @@ void retrieveResourcesForElement(Element* element,
     if ((element->hasTagName(HTMLNames::iframeTag) || element->hasTagName(HTMLNames::frameTag)
         || element->hasTagName(HTMLNames::objectTag) || element->hasTagName(HTMLNames::embedTag))
             && element->isFrameOwnerElement()) {
-        Frame* frame = static_cast<HTMLFrameOwnerElement*>(element)->contentFrame();
-        if (frame) {
+        if (Frame* frame = toHTMLFrameOwnerElement(element)->contentFrame()) {
             if (!visitedFrames->contains(frame))
                 framesToVisit->append(frame);
             return;
@@ -135,13 +134,13 @@ void retrieveResourcesForElement(Element* element,
 }
 
 void retrieveResourcesForFrame(Frame* frame,
-                               const WebKit::WebVector<WebKit::WebCString>& supportedSchemes,
+                               const blink::WebVector<blink::WebCString>& supportedSchemes,
                                Vector<Frame*>* visitedFrames,
                                Vector<Frame*>* framesToVisit,
                                Vector<KURL>* frameURLs,
                                Vector<KURL>* resourceURLs)
 {
-    KURL frameURL = frame->loader()->documentLoader()->request().url();
+    KURL frameURL = frame->loader().documentLoader()->request().url();
 
     // If the frame's URL is invalid, ignore it, it is not retrievable.
     if (!frameURL.isValid())
@@ -180,13 +179,13 @@ void retrieveResourcesForFrame(Frame* frame,
 
 } // namespace
 
-namespace WebKit {
+namespace blink {
 
 void WebPageSerializer::serialize(WebView* view, WebVector<WebPageSerializer::Resource>* resourcesParam)
 {
     Vector<SerializedResource> resources;
     PageSerializer serializer(&resources);
-    serializer.serialize(static_cast<WebViewImpl*>(view)->page());
+    serializer.serialize(toWebViewImpl(view)->page());
 
     Vector<Resource> result;
     for (Vector<SerializedResource>::const_iterator iter = resources.begin(); iter != resources.end(); ++iter) {
@@ -212,14 +211,14 @@ static PassRefPtr<SharedBuffer> serializePageToMHTML(Page* page, MHTMLArchive::E
 
 WebCString WebPageSerializer::serializeToMHTML(WebView* view)
 {
-    RefPtr<SharedBuffer> mhtml = serializePageToMHTML(static_cast<WebViewImpl*>(view)->page(), MHTMLArchive::UseDefaultEncoding);
+    RefPtr<SharedBuffer> mhtml = serializePageToMHTML(toWebViewImpl(view)->page(), MHTMLArchive::UseDefaultEncoding);
     // FIXME: we are copying all the data here. Idealy we would have a WebSharedData().
     return WebCString(mhtml->data(), mhtml->size());
 }
 
 WebCString WebPageSerializer::serializeToMHTMLUsingBinaryEncoding(WebView* view)
 {
-    RefPtr<SharedBuffer> mhtml = serializePageToMHTML(static_cast<WebViewImpl*>(view)->page(), MHTMLArchive::UseBinaryEncoding);
+    RefPtr<SharedBuffer> mhtml = serializePageToMHTML(toWebViewImpl(view)->page(), MHTMLArchive::UseBinaryEncoding);
     // FIXME: we are copying all the data here. Idealy we would have a WebSharedData().
     return WebCString(mhtml->data(), mhtml->size());
 }
@@ -240,7 +239,7 @@ bool WebPageSerializer::retrieveAllResources(WebView* view,
                                              const WebVector<WebCString>& supportedSchemes,
                                              WebVector<WebURL>* resourceURLs,
                                              WebVector<WebURL>* frameURLs) {
-    WebFrameImpl* mainFrame = static_cast<WebFrameImpl*>(view->mainFrame());
+    WebFrameImpl* mainFrame = toWebFrameImpl(view->mainFrame());
     if (!mainFrame)
         return false;
 
@@ -266,7 +265,7 @@ bool WebPageSerializer::retrieveAllResources(WebView* view,
         // A frame's src can point to the same URL as another resource, keep the
         // resource URL only in such cases.
         size_t index = frameKURLs.find(resourceKURLs[i]);
-        if (index != notFound)
+        if (index != kNotFound)
             frameKURLs.remove(index);
     }
     *resourceURLs = resultResourceURLs;
@@ -299,4 +298,4 @@ WebString WebPageSerializer::generateBaseTagDeclaration(const WebString& baseTar
     return baseString;
 }
 
-} // namespace WebKit
+} // namespace blink

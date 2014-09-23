@@ -46,8 +46,8 @@ void SVGResourcesCache::addResourcesFromRenderObject(RenderObject* object, const
     ASSERT(svgStyle);
 
     // Build a list of all resources associated with the passed RenderObject
-    OwnPtr<SVGResources> newResources = adoptPtr(new SVGResources);
-    if (!newResources->buildResources(object, svgStyle))
+    OwnPtr<SVGResources> newResources = SVGResources::buildResources(object, svgStyle);
+    if (!newResources)
         return;
 
     // Put object in cache.
@@ -68,10 +68,9 @@ void SVGResourcesCache::addResourcesFromRenderObject(RenderObject* object, const
 
 void SVGResourcesCache::removeResourcesFromRenderObject(RenderObject* object)
 {
-    if (!m_cache.contains(object))
-        return;
-
     OwnPtr<SVGResources> resources = m_cache.take(object);
+    if (!resources)
+        return;
 
     // Walk resources and register the render object at each resources.
     HashSet<RenderSVGResourceContainer*> resourceSet;
@@ -84,10 +83,9 @@ void SVGResourcesCache::removeResourcesFromRenderObject(RenderObject* object)
 
 static inline SVGResourcesCache* resourcesCacheFromRenderObject(const RenderObject* renderer)
 {
-    Document* document = renderer->document();
-    ASSERT(document);
+    Document& document = renderer->document();
 
-    SVGDocumentExtensions* extensions = document->accessSVGExtensions();
+    SVGDocumentExtensions* extensions = document.accessSVGExtensions();
     ASSERT(extensions);
 
     SVGResourcesCache* cache = extensions->resourcesCache();
@@ -123,11 +121,14 @@ static inline bool rendererCanHaveResources(RenderObject* renderer)
 void SVGResourcesCache::clientStyleChanged(RenderObject* renderer, StyleDifference diff, const RenderStyle* newStyle)
 {
     ASSERT(renderer);
+    ASSERT(renderer->node());
+    ASSERT(renderer->node()->isSVGElement());
+
     if (diff == StyleDifferenceEqual || !renderer->parent())
         return;
 
     // In this case the proper SVGFE*Element will decide whether the modified CSS properties require a relayout or repaint.
-    if (renderer->isSVGResourceFilterPrimitive() && (diff == StyleDifferenceRepaint || diff == StyleDifferenceRepaintIfText))
+    if (renderer->isSVGResourceFilterPrimitive() && (diff == StyleDifferenceRepaint || diff == StyleDifferenceRepaintIfTextOrColorChange))
         return;
 
     // Dynamic changes of CSS properties like 'clip-path' may require us to recompute the associated resources for a renderer.
@@ -140,12 +141,6 @@ void SVGResourcesCache::clientStyleChanged(RenderObject* renderer, StyleDifferen
     }
 
     RenderSVGResource::markForLayoutAndParentResourceInvalidation(renderer, false);
-
-    // FIXME: This doesn't look right, we often go through here in styleDidChange which means
-    // we're changing the needsStyleRecalc bits in the middle of recalcStyle on ourself which
-    // makes no sense. It's also not clear why we'd go through here for non-SVG elements.
-    if (renderer->node() && !renderer->node()->isSVGElement())
-        renderer->node()->setNeedsStyleRecalc(LocalStyleChange, StyleChangeFromRenderer);
 }
 
 void SVGResourcesCache::clientWasAddedToTree(RenderObject* renderer, const RenderStyle* newStyle)
@@ -197,9 +192,9 @@ void SVGResourcesCache::resourceDestroyed(RenderSVGResourceContainer* resource)
         it->value->resourceDestroyed(resource);
 
         // Mark users of destroyed resources as pending resolution based on the id of the old resource.
-        Element* resourceElement = toElement(resource->node());
+        Element* resourceElement = resource->element();
         Element* clientElement = toElement(it->key->node());
-        SVGDocumentExtensions* extensions = clientElement->document()->accessSVGExtensions();
+        SVGDocumentExtensions* extensions = clientElement->document().accessSVGExtensions();
 
         extensions->addPendingResource(resourceElement->fastGetAttribute(HTMLNames::idAttr), clientElement);
     }

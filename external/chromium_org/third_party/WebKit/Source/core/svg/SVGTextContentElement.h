@@ -95,7 +95,7 @@ public:
     static const SVGPropertyInfo* textLengthPropertyInfo();
 
 protected:
-    SVGTextContentElement(const QualifiedName&, Document*);
+    SVGTextContentElement(const QualifiedName&, Document&);
 
     virtual bool isValid() const { return SVGTests::isValid(); }
 
@@ -122,11 +122,12 @@ private:
     END_DECLARE_ANIMATED_PROPERTIES
 };
 
-inline SVGTextContentElement* toSVGTextContentElement(SVGElement* element)
+inline bool isSVGTextContentElement(const Node& node)
 {
-    ASSERT_WITH_SECURITY_IMPLICATION(!element || element->isTextContent());
-    return static_cast<SVGTextContentElement*>(element);
+    return node.isSVGElement() && toSVGElement(node).isTextContent();
 }
+
+DEFINE_NODE_TYPE_CASTS_WITH_FUNCTION(SVGTextContentElement);
 
 } // namespace WebCore
 

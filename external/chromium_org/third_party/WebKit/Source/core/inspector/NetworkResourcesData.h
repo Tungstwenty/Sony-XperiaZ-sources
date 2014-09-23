@@ -29,10 +29,10 @@
 #ifndef NetworkResourcesData_h
 #define NetworkResourcesData_h
 
+#include "core/fetch/TextResourceDecoder.h"
 #include "core/inspector/InspectorPageAgent.h"
-#include "core/loader/TextResourceDecoder.h"
-#include "core/platform/network/HTTPHeaderMap.h"
-#include "weborigin/KURL.h"
+#include "platform/network/HTTPHeaderMap.h"
+#include "platform/weborigin/KURL.h"
 #include "wtf/Deque.h"
 #include "wtf/HashMap.h"
 #include "wtf/RefCounted.h"
@@ -49,10 +49,10 @@ class TextResourceDecoder;
 
 class XHRReplayData : public RefCounted<XHRReplayData> {
 public:
-    static PassRefPtr<XHRReplayData> create(const String &method, const KURL&, bool async, PassRefPtr<FormData>, bool includeCredentials);
+    static PassRefPtr<XHRReplayData> create(const AtomicString& method, const KURL&, bool async, PassRefPtr<FormData>, bool includeCredentials);
 
-    void addHeader(const AtomicString& key, const String& value);
-    const String& method() const { return m_method; }
+    void addHeader(const AtomicString& key, const AtomicString& value);
+    const AtomicString& method() const { return m_method; }
     const KURL& url() const { return m_url; }
     bool async() const { return m_async; }
     PassRefPtr<FormData> formData() const { return m_formData; }
@@ -60,9 +60,9 @@ public:
     bool includeCredentials() const { return m_includeCredentials; }
 
 private:
-    XHRReplayData(const String &method, const KURL&, bool async, PassRefPtr<FormData>, bool includeCredentials);
+    XHRReplayData(const AtomicString& method, const KURL&, bool async, PassRefPtr<FormData>, bool includeCredentials);
 
-    String m_method;
+    AtomicString m_method;
     KURL m_url;
     bool m_async;
     RefPtr<FormData> m_formData;
@@ -85,8 +85,8 @@ public:
         String frameId() const { return m_frameId; }
         void setFrameId(const String& frameId) { m_frameId = frameId; }
 
-        String url() const { return m_url; }
-        void setUrl(const String& url) { m_url = url; }
+        KURL url() const { return m_url; }
+        void setUrl(const KURL& url) { m_url = url; }
 
         bool hasContent() const { return !m_content.isNull(); }
         String content() const { return m_content; }
@@ -107,8 +107,8 @@ public:
         String textEncodingName() const { return m_textEncodingName; }
         void setTextEncodingName(const String& textEncodingName) { m_textEncodingName = textEncodingName; }
 
-        PassRefPtr<TextResourceDecoder> decoder() const { return m_decoder; }
-        void setDecoder(PassRefPtr<TextResourceDecoder> decoder) { m_decoder = decoder; }
+        TextResourceDecoder* decoder() const { return m_decoder.get(); }
+        void setDecoder(PassOwnPtr<TextResourceDecoder> decoder) { m_decoder = decoder; }
 
         PassRefPtr<SharedBuffer> buffer() const { return m_buffer; }
         void setBuffer(PassRefPtr<SharedBuffer> buffer) { m_buffer = buffer; }
@@ -128,7 +128,7 @@ public:
         String m_requestId;
         String m_loaderId;
         String m_frameId;
-        String m_url;
+        KURL m_url;
         String m_content;
         RefPtr<XHRReplayData> m_xhrReplayData;
         bool m_base64Encoded;
@@ -138,7 +138,7 @@ public:
         int m_httpStatusCode;
 
         String m_textEncodingName;
-        RefPtr<TextResourceDecoder> m_decoder;
+        OwnPtr<TextResourceDecoder> m_decoder;
 
         RefPtr<SharedBuffer> m_buffer;
         Resource* m_cachedResource;
@@ -165,6 +165,7 @@ public:
     void setXHRReplayData(const String& requestId, XHRReplayData*);
     void reuseXHRReplayData(const String& requestId, const String& reusedRequestId);
     XHRReplayData* xhrReplayData(const String& requestId);
+    Vector<ResourceData*> resources();
 
 private:
     ResourceData* resourceDataForRequestId(const String& requestId);

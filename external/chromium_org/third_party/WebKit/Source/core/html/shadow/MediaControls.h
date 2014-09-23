@@ -27,17 +27,15 @@
 #ifndef MediaControls_h
 #define MediaControls_h
 
-#include "core/dom/MouseEvent.h"
+#include "core/events/MouseEvent.h"
 #include "core/html/HTMLDivElement.h"
 #include "core/html/shadow/MediaControlElements.h"
-#include "core/page/Page.h"
 #include "core/rendering/RenderTheme.h"
 
 namespace WebCore {
 
 class Document;
 class Event;
-class Page;
 class MediaPlayer;
 
 class RenderBox;
@@ -50,7 +48,7 @@ class MediaControls : public HTMLDivElement {
 
     // This function is to be implemented in your port-specific media
     // controls implementation since it will return a child instance.
-    static PassRefPtr<MediaControls> create(Document*);
+    static PassRefPtr<MediaControls> create(Document&);
 
     virtual void setMediaController(MediaControllerInterface*);
 
@@ -95,7 +93,7 @@ class MediaControls : public HTMLDivElement {
     virtual void updateTextTrackDisplay();
 
 protected:
-    explicit MediaControls(Document*);
+    explicit MediaControls(Document&);
 
     virtual void defaultEventHandler(Event*);
 
@@ -125,17 +123,10 @@ protected:
 private:
     virtual bool isMediaControls() const { return true; }
 
-    virtual const AtomicString& part() const;
+    virtual const AtomicString& pseudo() const;
 };
 
-inline MediaControls* toMediaControls(Node* node)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!node || node->isMediaControls());
-    return static_cast<MediaControls*>(node);
-}
-
-// This will catch anyone doing an unneccessary cast.
-void toMediaControls(const MediaControls*);
+DEFINE_NODE_TYPE_CASTS(MediaControls, isMediaControls());
 
 }
 

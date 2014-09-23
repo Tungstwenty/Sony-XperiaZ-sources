@@ -27,20 +27,22 @@
 
 namespace WebCore {
 
-class ScriptExecutionContext;
+class ExecutionContext;
 
 class Comment FINAL : public CharacterData {
 public:
-    static PassRefPtr<Comment> create(Document*, const String&);
+    static PassRefPtr<Comment> create(Document&, const String&);
 
 private:
-    Comment(Document*, const String&);
+    Comment(Document&, const String&);
 
     virtual String nodeName() const;
     virtual NodeType nodeType() const;
     virtual PassRefPtr<Node> cloneNode(bool deep = true);
     virtual bool childTypeAllowed(NodeType) const;
 };
+
+DEFINE_NODE_TYPE_CASTS(Comment, nodeType() == Node::COMMENT_NODE);
 
 } // namespace WebCore
 

@@ -30,10 +30,10 @@
 #include "core/editing/Caret.h"
 #include "core/editing/EditingStyle.h"
 #include "core/editing/VisibleSelection.h"
-#include "core/platform/Timer.h"
-#include "core/platform/graphics/IntRect.h"
-#include "core/platform/graphics/LayoutRect.h"
 #include "core/rendering/ScrollBehavior.h"
+#include "platform/Timer.h"
+#include "platform/geometry/IntRect.h"
+#include "platform/geometry/LayoutRect.h"
 #include "wtf/Noncopyable.h"
 
 namespace WebCore {
@@ -46,6 +46,7 @@ class MutableStylePropertySet;
 class RenderObject;
 class RenderView;
 class Settings;
+class Text;
 class VisiblePosition;
 
 enum EUserTriggered { NotUserTriggered = 0, UserTriggered = 1 };
@@ -81,7 +82,6 @@ public:
     Element* rootEditableElement() const { return m_selection.rootEditableElement(); }
     Element* rootEditableElementOrDocumentElement() const;
     Node* rootEditableElementOrTreeScopeRootNode() const;
-    Element* rootEditableElementRespectingShadowTree() const;
 
     bool rendererIsEditable() const { return m_selection.rendererIsEditable(); }
     bool isContentEditable() const { return m_selection.isContentEditable(); }
@@ -106,7 +106,7 @@ public:
 
     bool contains(const LayoutPoint&);
 
-    VisibleSelection::SelectionType selectionType() const { return m_selection.selectionType(); }
+    SelectionType selectionType() const { return m_selection.selectionType(); }
 
     EAffinity affinity() const { return m_selection.affinity(); }
 
@@ -151,10 +151,10 @@ public:
 
     PassRefPtr<Range> toNormalizedRange() const { return m_selection.toNormalizedRange(); }
 
-    void debugRenderer(RenderObject*, bool selected) const;
-
-    void nodeWillBeRemoved(Node*);
-    void textWasReplaced(CharacterData*, unsigned offset, unsigned oldLength, unsigned newLength);
+    void nodeWillBeRemoved(Node&);
+    void didUpdateCharacterData(CharacterData*, unsigned offset, unsigned oldLength, unsigned newLength);
+    void didMergeTextNodes(const Text& oldNode, unsigned offset);
+    void didSplitTextNode(const Text& oldNode);
 
     void setCaretVisible(bool caretIsVisible) { setCaretVisibility(caretIsVisible ? Visible : Hidden); }
     bool recomputeCaretRect();
@@ -181,8 +181,6 @@ public:
     void showTreeForThis() const;
 #endif
 
-    bool shouldChangeSelection(const VisibleSelection&) const;
-    bool shouldDeleteSelection(const VisibleSelection&) const;
     enum EndPointsAdjustmentMode { AdjustEndpointsAtBidiBoundary, DoNotAdjsutEndpoints };
     void setNonDirectionalSelectionIfNeeded(const VisibleSelection&, TextGranularity, EndPointsAdjustmentMode = DoNotAdjsutEndpoints);
     void setFocusedNodeIfNeeded();
@@ -200,8 +198,6 @@ public:
 
     FloatRect bounds(bool clipToVisibleContent = true) const;
 
-    void getClippedVisibleTextRectangles(Vector<FloatRect>&) const;
-
     HTMLFormElement* currentForm() const;
 
     void revealSelection(const ScrollAlignment& = ScrollAlignment::alignCenterIfNeeded, RevealExtentOption = DoNotRevealExtent);
@@ -213,7 +209,7 @@ public:
 private:
     enum EPositionType { START, END, BASE, EXTENT };
 
-    void respondToNodeModification(Node*, bool baseRemoved, bool extentRemoved, bool startRemoved, bool endRemoved);
+    void respondToNodeModification(Node&, bool baseRemoved, bool extentRemoved, bool startRemoved, bool endRemoved);
     TextDirection directionOfEnclosingBlock();
     TextDirection directionOfSelection();
 
@@ -246,7 +242,7 @@ private:
 
     bool dispatchSelectStart();
 
-    bool visualWordMovementEnabled() const;
+    void updateSelectionIfNeeded(const Position& base, const Position& extent, const Position& start, const Position& end);
 
     Frame* m_frame;
 

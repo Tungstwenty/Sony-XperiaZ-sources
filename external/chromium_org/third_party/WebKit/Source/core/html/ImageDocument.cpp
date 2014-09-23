@@ -27,10 +27,11 @@
 
 #include "HTMLNames.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "core/dom/EventListener.h"
-#include "core/dom/EventNames.h"
-#include "core/dom/MouseEvent.h"
 #include "core/dom/RawDataDocumentParser.h"
+#include "core/events/EventListener.h"
+#include "core/events/MouseEvent.h"
+#include "core/events/ThreadLocalEventNames.h"
+#include "core/fetch/ImageResource.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/html/HTMLHeadElement.h"
 #include "core/html/HTMLHtmlElement.h"
@@ -39,12 +40,10 @@
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
-#include "core/loader/cache/ImageResource.h"
-#include "core/page/Frame.h"
-#include "core/page/FrameView.h"
-#include "core/page/Page.h"
-#include "core/page/Settings.h"
-#include "core/platform/LocalizedStrings.h"
+#include "core/frame/Frame.h"
+#include "core/frame/FrameView.h"
+#include "core/frame/Settings.h"
+#include "wtf/text/StringBuilder.h"
 
 using std::min;
 
@@ -71,7 +70,7 @@ private:
     {
     }
 
-    virtual void handleEvent(ScriptExecutionContext*, Event*);
+    virtual void handleEvent(ExecutionContext*, Event*);
 
     ImageDocument* m_doc;
 };
@@ -94,7 +93,7 @@ private:
     {
     }
 
-    virtual size_t appendBytes(const char*, size_t) OVERRIDE;
+    virtual void appendBytes(const char*, size_t) OVERRIDE;
     virtual void finish();
 };
 
@@ -106,19 +105,32 @@ static float pageZoomFactor(const Document* document)
     return frame ? frame->pageZoomFactor() : 1;
 }
 
-size_t ImageDocumentParser::appendBytes(const char* data, size_t length)
+static String imageTitle(const String& filename, const IntSize& size)
+{
+    StringBuilder result;
+    result.append(filename);
+    result.append(" (");
+    // FIXME: Localize numbers. Safari/OSX shows localized numbers with group
+    // separaters. For example, "1,920x1,080".
+    result.append(String::number(size.width()));
+    result.append(static_cast<UChar>(0xD7)); // U+00D7 (multiplication sign)
+    result.append(String::number(size.height()));
+    result.append(')');
+    return result.toString();
+}
+
+void ImageDocumentParser::appendBytes(const char* data, size_t length)
 {
     if (!length)
-        return 0;
+        return;
 
     Frame* frame = document()->frame();
     Settings* settings = frame->settings();
-    if (!frame->loader()->client()->allowImage(!settings || settings->areImagesEnabled(), document()->url()))
-        return 0;
+    if (!frame->loader().client()->allowImage(!settings || settings->imagesEnabled(), document()->url()))
+        return;
 
     document()->cachedImage()->appendData(data, length);
     document()->imageUpdated();
-    return 0;
 }
 
 void ImageDocumentParser::finish()
@@ -126,7 +138,7 @@ void ImageDocumentParser::finish()
     if (!isStopped() && document()->imageElement()) {
         ImageResource* cachedImage = document()->cachedImage();
         cachedImage->finish();
-        cachedImage->setResponse(document()->frame()->loader()->documentLoader()->response());
+        cachedImage->setResponse(document()->frame()->loader().documentLoader()->response());
 
         // Report the natural image size in the page title, regardless of zoom level.
         // At a zoom level of 1 the image is guaranteed to have an integer size.
@@ -166,27 +178,27 @@ PassRefPtr<DocumentParser> ImageDocument::createParser()
 
 void ImageDocument::createDocumentStructure()
 {
-    RefPtr<HTMLHtmlElement> rootElement = HTMLHtmlElement::create(this);
-    appendChild(rootElement, ASSERT_NO_EXCEPTION, AttachLazily);
+    RefPtr<HTMLHtmlElement> rootElement = HTMLHtmlElement::create(*this);
+    appendChild(rootElement);
     rootElement->insertedByParser();
 
-    if (frame() && frame()->loader())
-        frame()->loader()->dispatchDocumentElementAvailable();
+    if (frame())
+        frame()->loader().dispatchDocumentElementAvailable();
 
-    RefPtr<HTMLHeadElement> head = HTMLHeadElement::create(this);
-    RefPtr<HTMLMetaElement> meta = HTMLMetaElement::create(this);
+    RefPtr<HTMLHeadElement> head = HTMLHeadElement::create(*this);
+    RefPtr<HTMLMetaElement> meta = HTMLMetaElement::create(*this);
     meta->setAttribute(nameAttr, "viewport");
     meta->setAttribute(contentAttr, "width=device-width");
-    head->appendChild(meta, ASSERT_NO_EXCEPTION, AttachLazily);
+    head->appendChild(meta);
 
-    RefPtr<HTMLBodyElement> body = HTMLBodyElement::create(this);
+    RefPtr<HTMLBodyElement> body = HTMLBodyElement::create(*this);
     body->setAttribute(styleAttr, "margin: 0px;");
 
-    m_imageElement = HTMLImageElement::create(this);
+    m_imageElement = HTMLImageElement::create(*this);
     m_imageElement->setAttribute(styleAttr, "-webkit-user-select: none");
     m_imageElement->setLoadManually(true);
     m_imageElement->setSrc(url().string());
-    body->appendChild(m_imageElement.get(), ASSERT_NO_EXCEPTION, AttachLazily);
+    body->appendChild(m_imageElement.get());
 
     if (shouldShrinkToFit()) {
         // Add event listeners
@@ -196,8 +208,8 @@ void ImageDocument::createDocumentStructure()
         m_imageElement->addEventListener("click", listener.release(), false);
     }
 
-    rootElement->appendChild(head, ASSERT_NO_EXCEPTION, AttachLazily);
-    rootElement->appendChild(body, ASSERT_NO_EXCEPTION, AttachLazily);
+    rootElement->appendChild(head);
+    rootElement->appendChild(body);
 }
 
 float ImageDocument::scale() const
@@ -220,7 +232,7 @@ float ImageDocument::scale() const
 
 void ImageDocument::resizeImageToFit()
 {
-    if (!m_imageElement || m_imageElement->document() != this)
+    if (!m_imageElement || m_imageElement->document() != this || pageZoomFactor(this) > 1)
         return;
 
     LayoutSize imageSize = m_imageElement->cachedImage()->imageSizeForRenderer(m_imageElement->renderer(), pageZoomFactor(this));
@@ -275,7 +287,7 @@ void ImageDocument::imageUpdated()
 
 void ImageDocument::restoreImageSize()
 {
-    if (!m_imageElement || !m_imageSizeIsKnown || m_imageElement->document() != this)
+    if (!m_imageElement || !m_imageSizeIsKnown || m_imageElement->document() != this || pageZoomFactor(this) < 1)
         return;
 
     LayoutSize imageSize = m_imageElement->cachedImage()->imageSizeForRenderer(m_imageElement->renderer(), 1.0f);
@@ -348,8 +360,7 @@ ImageResource* ImageDocument::cachedImage()
 
 bool ImageDocument::shouldShrinkToFit() const
 {
-    return frame()->page()->settings()->shrinksStandaloneImagesToFit() &&
-        frame()->page()->mainFrame() == frame();
+    return frame()->settings()->shrinksStandaloneImagesToFit() && frame()->isMainFrame();
 }
 
 void ImageDocument::dispose()
@@ -360,11 +371,11 @@ void ImageDocument::dispose()
 
 // --------
 
-void ImageEventListener::handleEvent(ScriptExecutionContext*, Event* event)
+void ImageEventListener::handleEvent(ExecutionContext*, Event* event)
 {
-    if (event->type() == eventNames().resizeEvent)
+    if (event->type() == EventTypeNames::resize)
         m_doc->windowSizeChanged();
-    else if (event->type() == eventNames().clickEvent && event->isMouseEvent()) {
+    else if (event->type() == EventTypeNames::click && event->isMouseEvent()) {
         MouseEvent* mouseEvent = toMouseEvent(event);
         m_doc->imageClicked(mouseEvent->x(), mouseEvent->y());
     }

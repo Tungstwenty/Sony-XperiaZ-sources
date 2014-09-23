@@ -27,9 +27,10 @@
 #include "core/page/PageGroup.h"
 
 #include "core/dom/Document.h"
-#include "core/dom/DocumentStyleSheetCollection.h"
-#include "core/page/Frame.h"
+#include "core/dom/StyleEngine.h"
+#include "core/frame/Frame.h"
 #include "core/page/Page.h"
+#include "wtf/StdLibExtras.h"
 
 namespace WebCore {
 
@@ -39,19 +40,13 @@ PageGroup::PageGroup()
 
 PageGroup::~PageGroup()
 {
-    removeAllUserContent();
+    removeInjectedStyleSheets();
 }
 
 PageGroup* PageGroup::sharedGroup()
 {
-    static PageGroup* staticSharedGroup = create().leakRef();
+    DEFINE_STATIC_REF(PageGroup, staticSharedGroup, (create()));
     return staticSharedGroup;
-}
-
-PageGroup* PageGroup::inspectorGroup()
-{
-    static PageGroup* staticInspectorGroup = create().leakRef();
-    return staticInspectorGroup;
 }
 
 void PageGroup::addPage(Page* page)
@@ -68,21 +63,15 @@ void PageGroup::removePage(Page* page)
     m_pages.remove(page);
 }
 
-void PageGroup::addUserStyleSheet(const String& source, const KURL& url,
-                                  const Vector<String>& whitelist, const Vector<String>& blacklist,
-                                  UserContentInjectedFrames injectedFrames,
-                                  UserStyleLevel level,
-                                  UserStyleInjectionTime injectionTime)
+void PageGroup::injectStyleSheet(const String& source, const Vector<String>& whitelist, StyleInjectionTarget injectIn)
 {
-    m_userStyleSheets.append(adoptPtr(new UserStyleSheet(source, url, whitelist, blacklist, injectedFrames, level)));
-
-    if (injectionTime == InjectInExistingDocuments)
-        invalidatedInjectedStyleSheetCacheInAllFrames();
+    m_injectedStyleSheets.append(adoptPtr(new InjectedStyleSheet(source, whitelist, injectIn)));
+    invalidatedInjectedStyleSheetCacheInAllFrames();
 }
 
-void PageGroup::removeAllUserContent()
+void PageGroup::removeInjectedStyleSheets()
 {
-    m_userStyleSheets.clear();
+    m_injectedStyleSheets.clear();
     invalidatedInjectedStyleSheetCacheInAllFrames();
 }
 
@@ -91,8 +80,8 @@ void PageGroup::invalidatedInjectedStyleSheetCacheInAllFrames()
     // Clear our cached sheets and have them just reparse.
     HashSet<Page*>::const_iterator end = m_pages.end();
     for (HashSet<Page*>::const_iterator it = m_pages.begin(); it != end; ++it) {
-        for (Frame* frame = (*it)->mainFrame(); frame; frame = frame->tree()->traverseNext())
-            frame->document()->styleSheetCollection()->invalidateInjectedStyleSheetCache();
+        for (Frame* frame = (*it)->mainFrame(); frame; frame = frame->tree().traverseNext())
+            frame->document()->styleEngine()->invalidateInjectedStyleSheetCache();
     }
 }
 

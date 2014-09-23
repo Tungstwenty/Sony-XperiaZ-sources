@@ -29,10 +29,10 @@
  */
 
 #include "config.h"
-#include "core/platform/text/win/LocaleWin.h"
+#include "platform/text/LocaleWin.h"
 
 #include <gtest/gtest.h>
-#include "core/platform/DateComponents.h"
+#include "platform/DateComponents.h"
 #include "wtf/DateMath.h"
 #include "wtf/MathExtras.h"
 #include "wtf/PassOwnPtr.h"
@@ -86,70 +86,68 @@ protected:
 
     String formatDate(LCID lcid, int year, int month, int day)
     {
-        OwnPtr<LocaleWin> locale = LocaleWin::create(lcid);
+        OwnPtr<LocaleWin> locale = LocaleWin::create(lcid, true /* defaultsForLocale */);
         return locale->formatDateTime(dateComponents(year, month, day));
     }
 
-#if ENABLE(CALENDAR_PICKER)
     unsigned firstDayOfWeek(LCID lcid)
     {
-        OwnPtr<LocaleWin> locale = LocaleWin::create(lcid);
+        OwnPtr<LocaleWin> locale = LocaleWin::create(lcid, true /* defaultsForLocale */);
         return locale->firstDayOfWeek();
     }
 
     String monthLabel(LCID lcid, unsigned index)
     {
-        OwnPtr<LocaleWin> locale = LocaleWin::create(lcid);
+        OwnPtr<LocaleWin> locale = LocaleWin::create(lcid, true /* defaultsForLocale */);
         return locale->monthLabels()[index];
     }
 
     String weekDayShortLabel(LCID lcid, unsigned index)
     {
-        OwnPtr<LocaleWin> locale = LocaleWin::create(lcid);
+        OwnPtr<LocaleWin> locale = LocaleWin::create(lcid, true /* defaultsForLocale */);
         return locale->weekDayShortLabels()[index];
     }
 
     bool isRTL(LCID lcid)
     {
-        OwnPtr<LocaleWin> locale = LocaleWin::create(lcid);
+        OwnPtr<LocaleWin> locale = LocaleWin::create(lcid, true /* defaultsForLocale */);
         return locale->isRTL();
     }
-#endif
 
 #if ENABLE(INPUT_MULTIPLE_FIELDS_UI)
     String monthFormat(LCID lcid)
     {
-        OwnPtr<LocaleWin> locale = LocaleWin::create(lcid);
+        OwnPtr<LocaleWin> locale = LocaleWin::create(lcid, true /* defaultsForLocale */);
         return locale->monthFormat();
     }
 
     String timeFormat(LCID lcid)
     {
-        OwnPtr<LocaleWin> locale = LocaleWin::create(lcid);
+        OwnPtr<LocaleWin> locale = LocaleWin::create(lcid, true /* defaultsForLocale */);
         return locale->timeFormat();
     }
 
     String shortTimeFormat(LCID lcid)
     {
-        OwnPtr<LocaleWin> locale = LocaleWin::create(lcid);
+        OwnPtr<LocaleWin> locale = LocaleWin::create(lcid, true /* defaultsForLocale */);
         return locale->shortTimeFormat();
     }
 
     String shortMonthLabel(LCID lcid, unsigned index)
     {
-        OwnPtr<LocaleWin> locale = LocaleWin::create(lcid);
+        OwnPtr<LocaleWin> locale = LocaleWin::create(lcid, true /* defaultsForLocale */);
         return locale->shortMonthLabels()[index];
     }
 
     String timeAMPMLabel(LCID lcid, unsigned index)
     {
-        OwnPtr<LocaleWin> locale = LocaleWin::create(lcid);
+        OwnPtr<LocaleWin> locale = LocaleWin::create(lcid, true /* defaultsForLocale */);
         return locale->timeAMPMLabels()[index];
     }
 
     String decimalSeparator(LCID lcid)
     {
-        OwnPtr<LocaleWin> locale = LocaleWin::create(lcid);
+        OwnPtr<LocaleWin> locale = LocaleWin::create(lcid, true /* defaultsForLocale */);
         return locale->localizedDecimalSeparator();
     }
 #endif
@@ -162,7 +160,6 @@ TEST_F(LocaleWinTest, formatDate)
     EXPECT_STREQ("2005/04/27", formatDate(JapaneseJP, 2005, April, 27).utf8().data());
 }
 
-#if ENABLE(CALENDAR_PICKER)
 TEST_F(LocaleWinTest, firstDayOfWeek)
 {
     EXPECT_EQ(Sunday, firstDayOfWeek(EnglishUS));
@@ -205,8 +202,6 @@ TEST_F(LocaleWinTest, isRTL)
     EXPECT_TRUE(isRTL(ArabicEG));
     EXPECT_FALSE(isRTL(EnglishUS));
 }
-
-#endif
 
 #if ENABLE(INPUT_MULTIPLE_FIELDS_UI)
 TEST_F(LocaleWinTest, dateFormat)
@@ -269,7 +264,7 @@ TEST_F(LocaleWinTest, decimalSeparator)
 
 static void testNumberIsReversible(LCID lcid, const char* original, const char* shouldHave = 0)
 {
-    OwnPtr<LocaleWin> locale = LocaleWin::create(lcid);
+    OwnPtr<LocaleWin> locale = LocaleWin::create(lcid, true /* defaultsForLocale */);
     String localized = locale->convertToLocalizedNumber(original);
     if (shouldHave)
         EXPECT_TRUE(localized.contains(shouldHave));

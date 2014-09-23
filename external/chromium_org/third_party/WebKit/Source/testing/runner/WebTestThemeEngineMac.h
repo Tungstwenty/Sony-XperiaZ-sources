@@ -30,32 +30,35 @@
 #ifndef WebTestThemeEngineMac_h
 #define WebTestThemeEngineMac_h
 
+#include "public/platform/WebNonCopyable.h"
 #include "public/platform/mac/WebThemeEngine.h"
 
 namespace WebTestRunner {
 
-class WebTestThemeEngineMac : public WebKit::WebThemeEngine {
+class WebTestThemeEngineMac : public blink::WebThemeEngine, public blink::WebNonCopyable {
 public:
+    virtual ~WebTestThemeEngineMac() { }
+
     virtual void paintScrollbarThumb(
-        WebKit::WebCanvas*,
-        WebKit::WebThemeEngine::State,
-        WebKit::WebThemeEngine::Size,
-        const WebKit::WebRect&,
-        const WebKit::WebThemeEngine::ScrollbarInfo&);
+        blink::WebCanvas*,
+        blink::WebThemeEngine::State,
+        blink::WebThemeEngine::Size,
+        const blink::WebRect&,
+        const blink::WebThemeEngine::ScrollbarInfo&);
 
 private:
     virtual void paintHIThemeScrollbarThumb(
-        WebKit::WebCanvas*,
-        WebKit::WebThemeEngine::State,
-        WebKit::WebThemeEngine::Size,
-        const WebKit::WebRect&,
-        const WebKit::WebThemeEngine::ScrollbarInfo&);
+        blink::WebCanvas*,
+        blink::WebThemeEngine::State,
+        blink::WebThemeEngine::Size,
+        const blink::WebRect&,
+        const blink::WebThemeEngine::ScrollbarInfo&);
     virtual void paintNSScrollerScrollbarThumb(
-        WebKit::WebCanvas*,
-        WebKit::WebThemeEngine::State,
-        WebKit::WebThemeEngine::Size,
-        const WebKit::WebRect&,
-        const WebKit::WebThemeEngine::ScrollbarInfo&);
+        blink::WebCanvas*,
+        blink::WebThemeEngine::State,
+        blink::WebThemeEngine::Size,
+        const blink::WebRect&,
+        const blink::WebThemeEngine::ScrollbarInfo&);
 };
 
 }

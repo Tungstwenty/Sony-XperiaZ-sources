@@ -29,7 +29,7 @@
 #include "config.h"
 #include "core/loader/NavigationAction.h"
 
-#include "core/dom/MouseEvent.h"
+#include "core/events/MouseEvent.h"
 #include "core/loader/FrameLoader.h"
 
 namespace WebCore {
@@ -54,51 +54,20 @@ NavigationAction::NavigationAction()
 {
 }
 
-NavigationAction::NavigationAction(const ResourceRequest& resourceRequest)
-    : m_resourceRequest(resourceRequest)
-    , m_type(NavigationTypeOther)
-{
-}
-
-NavigationAction::NavigationAction(const ResourceRequest& resourceRequest, NavigationType type)
-    : m_resourceRequest(resourceRequest)
-    , m_type(type)
-{
-}
-
-NavigationAction::NavigationAction(const ResourceRequest& resourceRequest, FrameLoadType frameLoadType,
-        bool isFormSubmission)
-    : m_resourceRequest(resourceRequest)
-    , m_type(navigationType(frameLoadType, isFormSubmission, 0))
-{
-}
-
-NavigationAction::NavigationAction(const ResourceRequest& resourceRequest, NavigationType type, PassRefPtr<Event> event)
-    : m_resourceRequest(resourceRequest)
-    , m_type(type)
-    , m_event(event)
-{
-}
-
 NavigationAction::NavigationAction(const ResourceRequest& resourceRequest, FrameLoadType frameLoadType,
         bool isFormSubmission, PassRefPtr<Event> event)
     : m_resourceRequest(resourceRequest)
     , m_type(navigationType(frameLoadType, isFormSubmission, event))
     , m_event(event)
 {
-}
-
-bool NavigationAction::specifiesNavigationPolicy(NavigationPolicy* policy) const
-{
-    const MouseEvent* event = 0;
+    const MouseEvent* mouseEvent = 0;
     if (m_type == NavigationTypeLinkClicked && m_event->isMouseEvent())
-        event = toMouseEvent(m_event.get());
+        mouseEvent = toMouseEvent(m_event.get());
     else if (m_type == NavigationTypeFormSubmitted && m_event && m_event->underlyingEvent() && m_event->underlyingEvent()->isMouseEvent())
-        event = toMouseEvent(m_event->underlyingEvent());
+        mouseEvent = toMouseEvent(m_event->underlyingEvent());
 
-    if (!event)
-        return false;
-    return navigationPolicyFromMouseEvent(event->button(), event->ctrlKey(), event->shiftKey(), event->altKey(), event->metaKey(), policy);
+    if (!mouseEvent || !navigationPolicyFromMouseEvent(mouseEvent->button(), mouseEvent->ctrlKey(), mouseEvent->shiftKey(), mouseEvent->altKey(), mouseEvent->metaKey(), &m_policy))
+        m_policy = NavigationPolicyCurrentTab;
 }
 
 }

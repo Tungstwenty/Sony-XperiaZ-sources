@@ -31,16 +31,18 @@
 #include "core/css/resolver/ViewportStyleResolver.h"
 
 #include "CSSValueKeywords.h"
+#include "core/css/CSSToLengthConversionData.h"
 #include "core/css/StylePropertySet.h"
 #include "core/css/StyleRule.h"
 #include "core/dom/Document.h"
 #include "core/dom/NodeRenderStyle.h"
-#include "core/dom/ViewportArguments.h"
+#include "core/dom/ViewportDescription.h"
 
 namespace WebCore {
 
 ViewportStyleResolver::ViewportStyleResolver(Document* document)
-    : m_document(document)
+    : m_document(document),
+    m_hasAuthorStyle(false)
 {
     ASSERT(m_document);
 }
@@ -49,13 +51,25 @@ ViewportStyleResolver::~ViewportStyleResolver()
 {
 }
 
-void ViewportStyleResolver::addViewportRule(StyleRuleViewport* viewportRule)
+void ViewportStyleResolver::collectViewportRules(RuleSet* rules, Origin origin)
+{
+    rules->compactRulesIfNeeded();
+
+    const Vector<StyleRuleViewport*>& viewportRules = rules->viewportRules();
+    for (size_t i = 0; i < viewportRules.size(); ++i)
+        addViewportRule(viewportRules[i], origin);
+}
+
+void ViewportStyleResolver::addViewportRule(StyleRuleViewport* viewportRule, Origin origin)
 {
     StylePropertySet* propertySet = viewportRule->mutableProperties();
 
     unsigned propertyCount = propertySet->propertyCount();
     if (!propertyCount)
         return;
+
+    if (origin == AuthorOrigin)
+        m_hasAuthorStyle = true;
 
     if (!m_propertySet) {
         m_propertySet = propertySet->mutableCopy();
@@ -75,30 +89,37 @@ void ViewportStyleResolver::clearDocument()
 
 void ViewportStyleResolver::resolve()
 {
-    if (!m_document || !m_propertySet)
+    if (!m_document)
         return;
 
-    ViewportArguments arguments(ViewportArguments::CSSDeviceAdaptation);
+    if (!m_propertySet || (!m_hasAuthorStyle && m_document->hasLegacyViewportTag())) {
+        ASSERT(!m_hasAuthorStyle);
+        m_propertySet = 0;
+        m_document->setViewportDescription(ViewportDescription());
+        return;
+    }
 
-    arguments.userZoom = viewportArgumentValue(CSSPropertyUserZoom);
-    arguments.zoom = viewportArgumentValue(CSSPropertyZoom);
-    arguments.minZoom = viewportArgumentValue(CSSPropertyMinZoom);
-    arguments.maxZoom = viewportArgumentValue(CSSPropertyMaxZoom);
-    arguments.minWidth = viewportLengthValue(CSSPropertyMinWidth);
-    arguments.maxWidth = viewportLengthValue(CSSPropertyMaxWidth);
-    arguments.minHeight = viewportLengthValue(CSSPropertyMinHeight);
-    arguments.maxHeight = viewportLengthValue(CSSPropertyMaxHeight);
-    arguments.orientation = viewportArgumentValue(CSSPropertyOrientation);
+    ViewportDescription description(m_hasAuthorStyle ? ViewportDescription::AuthorStyleSheet : ViewportDescription::UserAgentStyleSheet);
 
-    m_document->setViewportArguments(arguments);
-    m_document->updateViewportArguments();
+    description.userZoom = viewportArgumentValue(CSSPropertyUserZoom);
+    description.zoom = viewportArgumentValue(CSSPropertyZoom);
+    description.minZoom = viewportArgumentValue(CSSPropertyMinZoom);
+    description.maxZoom = viewportArgumentValue(CSSPropertyMaxZoom);
+    description.minWidth = viewportLengthValue(CSSPropertyMinWidth);
+    description.maxWidth = viewportLengthValue(CSSPropertyMaxWidth);
+    description.minHeight = viewportLengthValue(CSSPropertyMinHeight);
+    description.maxHeight = viewportLengthValue(CSSPropertyMaxHeight);
+    description.orientation = viewportArgumentValue(CSSPropertyOrientation);
+
+    m_document->setViewportDescription(description);
 
     m_propertySet = 0;
+    m_hasAuthorStyle = false;
 }
 
 float ViewportStyleResolver::viewportArgumentValue(CSSPropertyID id) const
 {
-    float defaultValue = ViewportArguments::ValueAuto;
+    float defaultValue = ViewportDescription::ValueAuto;
 
     // UserZoom default value is CSSValueZoom, which maps to true, meaning that
     // yes, it is user scalable. When the value is set to CSSValueFixed, we
@@ -135,13 +156,13 @@ float ViewportStyleResolver::viewportArgumentValue(CSSPropertyID id) const
     case CSSValueAuto:
         return defaultValue;
     case CSSValueLandscape:
-        return ViewportArguments::ValueLandscape;
+        return ViewportDescription::ValueLandscape;
     case CSSValuePortrait:
-        return ViewportArguments::ValuePortrait;
+        return ViewportDescription::ValuePortrait;
     case CSSValueZoom:
         return defaultValue;
     case CSSValueInternalExtendToZoom:
-        return ViewportArguments::ValueExtendToZoom;
+        return ViewportDescription::ValueExtendToZoom;
     case CSSValueFixed:
         return 0;
     default:
@@ -163,7 +184,7 @@ Length ViewportStyleResolver::viewportLengthValue(CSSPropertyID id) const
     CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(value.get());
 
     if (primitiveValue->isLength())
-        return primitiveValue->computeLength<Length>(m_document->renderStyle(), m_document->renderStyle());
+        return primitiveValue->computeLength<Length>(CSSToLengthConversionData(m_document->renderStyle(), m_document->renderStyle(), 1.0f));
 
     if (primitiveValue->isViewportPercentageLength())
         return primitiveValue->viewportPercentageLength();

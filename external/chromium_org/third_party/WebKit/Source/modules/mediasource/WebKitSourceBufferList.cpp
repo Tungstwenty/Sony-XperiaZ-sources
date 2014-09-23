@@ -31,14 +31,14 @@
 #include "config.h"
 #include "modules/mediasource/WebKitSourceBufferList.h"
 
-#include "core/dom/Event.h"
-#include "core/dom/GenericEventQueue.h"
+#include "core/events/Event.h"
+#include "core/events/GenericEventQueue.h"
 #include "modules/mediasource/WebKitSourceBuffer.h"
 
 namespace WebCore {
 
-WebKitSourceBufferList::WebKitSourceBufferList(ScriptExecutionContext* context, GenericEventQueue* asyncEventQueue)
-    : m_scriptExecutionContext(context)
+WebKitSourceBufferList::WebKitSourceBufferList(ExecutionContext* context, GenericEventQueue* asyncEventQueue)
+    : m_executionContext(context)
     , m_asyncEventQueue(asyncEventQueue)
 {
     ScriptWrappable::init(this);
@@ -59,18 +59,18 @@ WebKitSourceBuffer* WebKitSourceBufferList::item(unsigned index) const
 void WebKitSourceBufferList::add(PassRefPtr<WebKitSourceBuffer> buffer)
 {
     m_list.append(buffer);
-    createAndFireEvent(eventNames().webkitaddsourcebufferEvent);
+    createAndFireEvent(EventTypeNames::webkitaddsourcebuffer);
 }
 
 bool WebKitSourceBufferList::remove(WebKitSourceBuffer* buffer)
 {
     size_t index = m_list.find(buffer);
-    if (index == notFound)
+    if (index == kNotFound)
         return false;
 
     buffer->removedFromMediaSource();
     m_list.remove(index);
-    createAndFireEvent(eventNames().webkitremovesourcebufferEvent);
+    createAndFireEvent(EventTypeNames::webkitremovesourcebuffer);
     return true;
 }
 
@@ -79,14 +79,14 @@ void WebKitSourceBufferList::clear()
     for (size_t i = 0; i < m_list.size(); ++i)
         m_list[i]->removedFromMediaSource();
     m_list.clear();
-    createAndFireEvent(eventNames().webkitremovesourcebufferEvent);
+    createAndFireEvent(EventTypeNames::webkitremovesourcebuffer);
 }
 
 void WebKitSourceBufferList::createAndFireEvent(const AtomicString& eventName)
 {
     ASSERT(m_asyncEventQueue);
 
-    RefPtr<Event> event = Event::create(eventName, false, false);
+    RefPtr<Event> event = Event::create(eventName);
     event->setTarget(this);
 
     m_asyncEventQueue->enqueueEvent(event.release());
@@ -94,22 +94,12 @@ void WebKitSourceBufferList::createAndFireEvent(const AtomicString& eventName)
 
 const AtomicString& WebKitSourceBufferList::interfaceName() const
 {
-    return eventNames().interfaceForWebKitSourceBufferList;
+    return EventTargetNames::WebKitSourceBufferList;
 }
 
-ScriptExecutionContext* WebKitSourceBufferList::scriptExecutionContext() const
+ExecutionContext* WebKitSourceBufferList::executionContext() const
 {
-    return m_scriptExecutionContext;
-}
-
-EventTargetData* WebKitSourceBufferList::eventTargetData()
-{
-    return &m_eventTargetData;
-}
-
-EventTargetData* WebKitSourceBufferList::ensureEventTargetData()
-{
-    return &m_eventTargetData;
+    return m_executionContext;
 }
 
 } // namespace WebCore

@@ -21,49 +21,84 @@ def PushEnv():
   env_stack.append(env_copy)
 
 def PopEnv():
-  os.eniron=env_stack.pop()
+  os.environ.clear()
+  os.environ.update(env_stack.pop())
 
-formats = ['make']
-if sys.platform.startswith('linux'):
-  # Only Linux ninja generator supports CFLAGS.
-  formats.append('ninja')
+formats = ['make', 'ninja']
 
 test = TestGyp.TestGyp(formats=formats)
 
 try:
   PushEnv()
-  os.environ['CFLAGS'] = '-O0'
+  os.environ['CFLAGS'] = ''
+  os.environ['GYP_CROSSCOMPILE'] = '1'
   test.run_gyp('cflags.gyp')
+  test.build('cflags.gyp')
 finally:
   # We clear the environ after calling gyp.  When the auto-regeneration happens,
   # the same define should be reused anyway.  Reset to empty string first in
   # case the platform doesn't support unsetenv.
   PopEnv()
 
-test.build('cflags.gyp')
 
-expect = """\
-Using no optimization flag
-"""
+expect = """FOO not defined\n"""
+test.run_built_executable('cflags', stdout=expect)
+test.run_built_executable('cflags_host', stdout=expect)
+
+test.sleep()
+
+try:
+  PushEnv()
+  os.environ['CFLAGS'] = '-DFOO=1'
+  os.environ['GYP_CROSSCOMPILE'] = '1'
+  test.run_gyp('cflags.gyp')
+  test.build('cflags.gyp')
+finally:
+  # We clear the environ after calling gyp.  When the auto-regeneration happens,
+  # the same define should be reused anyway.  Reset to empty string first in
+  # case the platform doesn't support unsetenv.
+  PopEnv()
+
+
+expect = """FOO defined\n"""
+test.run_built_executable('cflags', stdout=expect)
+
+# Environment variables shouldn't influence the flags for the host.
+expect = """FOO not defined\n"""
+test.run_built_executable('cflags_host', stdout=expect)
+
+test.sleep()
+
+try:
+  PushEnv()
+  os.environ['CFLAGS'] = ''
+  test.run_gyp('cflags.gyp')
+  test.build('cflags.gyp')
+finally:
+  # We clear the environ after calling gyp.  When the auto-regeneration happens,
+  # the same define should be reused anyway.  Reset to empty string first in
+  # case the platform doesn't support unsetenv.
+  PopEnv()
+
+
+expect = """FOO not defined\n"""
 test.run_built_executable('cflags', stdout=expect)
 
 test.sleep()
 
 try:
   PushEnv()
-  os.environ['CFLAGS'] = '-O2'
+  os.environ['CFLAGS'] = '-DFOO=1'
   test.run_gyp('cflags.gyp')
+  test.build('cflags.gyp')
 finally:
   # We clear the environ after calling gyp.  When the auto-regeneration happens,
   # the same define should be reused anyway.  Reset to empty string first in
   # case the platform doesn't support unsetenv.
   PopEnv()
 
-test.build('cflags.gyp')
 
-expect = """\
-Using an optimization flag
-"""
+expect = """FOO defined\n"""
 test.run_built_executable('cflags', stdout=expect)
 
 test.pass_test()

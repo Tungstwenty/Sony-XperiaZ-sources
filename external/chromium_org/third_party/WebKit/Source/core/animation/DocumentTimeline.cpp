@@ -31,63 +31,157 @@
 #include "config.h"
 #include "core/animation/DocumentTimeline.h"
 
-#include "core/animation/Player.h"
+#include "core/animation/ActiveAnimations.h"
+#include "core/animation/AnimationClock.h"
 #include "core/dom/Document.h"
-#include "core/page/FrameView.h"
+#include "core/frame/FrameView.h"
 
 namespace WebCore {
 
-PassRefPtr<DocumentTimeline> DocumentTimeline::create(Document* document)
+// This value represents 1 frame at 30Hz plus a little bit of wiggle room.
+// TODO: Plumb a nominal framerate through and derive this value from that.
+const double DocumentTimeline::s_minimumDelay = 0.04;
+
+
+PassRefPtr<DocumentTimeline> DocumentTimeline::create(Document* document, PassOwnPtr<PlatformTiming> timing)
 {
-    return adoptRef(new DocumentTimeline(document));
+    return adoptRef(new DocumentTimeline(document, timing));
 }
 
-DocumentTimeline::DocumentTimeline(Document* document)
-    : m_currentTime(nullValue())
+DocumentTimeline::DocumentTimeline(Document* document, PassOwnPtr<PlatformTiming> timing)
+    : m_zeroTime(nullValue())
     , m_document(document)
+    , m_eventDistpachTimer(this, &DocumentTimeline::eventDispatchTimerFired)
 {
+    if (!timing)
+        m_timing = adoptPtr(new DocumentTimelineTiming(this));
+    else
+        m_timing = timing;
+
     ASSERT(document);
 }
 
-PassRefPtr<Player> DocumentTimeline::play(TimedItem* child)
+Player* DocumentTimeline::createPlayer(TimedItem* child)
 {
-    RefPtr<Player> player = Player::create(this, child);
-    m_players.append(player);
-
+    RefPtr<Player> player = Player::create(*this, child);
+    Player* result = player.get();
+    m_players.append(player.release());
     if (m_document->view())
-        m_document->view()->scheduleAnimation();
-
-    return player.release();
+        m_timing->serviceOnNextFrame();
+    return result;
 }
 
-void DocumentTimeline::serviceAnimations(double monotonicAnimationStartTime)
+Player* DocumentTimeline::play(TimedItem* child)
 {
-    m_currentTime = monotonicAnimationStartTime;
+    Player* player = createPlayer(child);
+    player->setStartTime(currentTime());
+    return player;
+}
 
+void DocumentTimeline::wake()
+{
+    m_timing->serviceOnNextFrame();
+}
+
+bool DocumentTimeline::serviceAnimations()
+{
+    TRACE_EVENT0("webkit", "DocumentTimeline::serviceAnimations");
+
+    m_timing->cancelWake();
+
+    double timeToNextEffect = std::numeric_limits<double>::infinity();
+    bool didTriggerStyleRecalc = false;
     for (int i = m_players.size() - 1; i >= 0; --i) {
-        if (!m_players[i]->update())
+        double playerNextEffect;
+        bool playerDidTriggerStyleRecalc;
+        if (!m_players[i]->update(&playerNextEffect, &playerDidTriggerStyleRecalc))
             m_players.remove(i);
+        didTriggerStyleRecalc |= playerDidTriggerStyleRecalc;
+        if (playerNextEffect < timeToNextEffect)
+            timeToNextEffect = playerNextEffect;
     }
 
-    if (m_document->view() && !m_players.isEmpty())
-        m_document->view()->scheduleAnimation();
+    if (!m_players.isEmpty()) {
+        if (timeToNextEffect < s_minimumDelay)
+            m_timing->serviceOnNextFrame();
+        else if (timeToNextEffect != std::numeric_limits<double>::infinity())
+            m_timing->wakeAfter(timeToNextEffect - s_minimumDelay);
+    }
 
-    dispatchEvents();
+    return didTriggerStyleRecalc;
+}
+
+void DocumentTimeline::setZeroTime(double zeroTime)
+{
+    ASSERT(isNull(m_zeroTime));
+    m_zeroTime = zeroTime;
+    ASSERT(!isNull(m_zeroTime));
+}
+
+void DocumentTimeline::DocumentTimelineTiming::wakeAfter(double duration)
+{
+    m_timer.startOneShot(duration);
+}
+
+void DocumentTimeline::DocumentTimelineTiming::cancelWake()
+{
+    m_timer.stop();
+}
+
+void DocumentTimeline::DocumentTimelineTiming::serviceOnNextFrame()
+{
+    if (m_timeline->m_document->view())
+        m_timeline->m_document->view()->scheduleAnimation();
+}
+
+double DocumentTimeline::currentTime()
+{
+    return m_document->animationClock().currentTime() - m_zeroTime;
 }
 
 void DocumentTimeline::pauseAnimationsForTesting(double pauseTime)
 {
     for (size_t i = 0; i < m_players.size(); i++) {
-        m_players[i]->setPaused(true);
+        m_players[i]->pauseForTesting();
         m_players[i]->setCurrentTime(pauseTime);
     }
 }
 
 void DocumentTimeline::dispatchEvents()
 {
-    for (size_t i = 0; i < m_events.size(); i++)
-        m_events[i].target->dispatchEvent(m_events[i].event.release());
+    Vector<EventToDispatch> events = m_events;
     m_events.clear();
+    for (size_t i = 0; i < events.size(); i++)
+        events[i].target->dispatchEvent(events[i].event.release());
+}
+
+void DocumentTimeline::dispatchEventsAsync()
+{
+    if (m_events.isEmpty() || m_eventDistpachTimer.isActive())
+        return;
+    m_eventDistpachTimer.startOneShot(0);
+}
+
+void DocumentTimeline::eventDispatchTimerFired(Timer<DocumentTimeline>*)
+{
+    dispatchEvents();
+}
+
+size_t DocumentTimeline::numberOfActiveAnimationsForTesting() const
+{
+    if (isNull(m_zeroTime))
+        return 0;
+    // Includes all players whose directly associated timed items
+    // are current or in effect.
+    if (isNull(m_zeroTime))
+        return 0;
+    size_t count = 0;
+    for (size_t i = 0; i < m_players.size(); ++i) {
+        const TimedItem* timedItem = m_players[i]->source();
+        if (m_players[i]->hasStartTime())
+            count += (timedItem && (timedItem->isCurrent() || timedItem->isInEffect()));
+    }
+    return count;
 }
 
 } // namespace

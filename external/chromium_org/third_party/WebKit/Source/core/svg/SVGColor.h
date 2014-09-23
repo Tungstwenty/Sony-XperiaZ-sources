@@ -23,7 +23,7 @@
 #define SVGColor_h
 
 #include "core/css/CSSValue.h"
-#include "core/platform/graphics/Color.h"
+#include "platform/graphics/Color.h"
 #include "wtf/PassRefPtr.h"
 
 namespace WebCore {
@@ -43,7 +43,7 @@ public:
     static PassRefPtr<SVGColor> createFromString(const String& rgbColor)
     {
         RefPtr<SVGColor> color = adoptRef(new SVGColor(SVG_COLORTYPE_RGBCOLOR));
-        color->m_valid = colorFromRGBColorString(rgbColor, color->m_color);
+        color->setColor(colorFromRGBColorString(rgbColor));
         return color.release();
     }
 
@@ -63,19 +63,13 @@ public:
     const SVGColorType& colorType() const { return m_colorType; }
     PassRefPtr<RGBColor> rgbColor() const;
 
-    static bool colorFromRGBColorString(const String&, Color&);
-    static Color colorFromRGBColorString(const String& s)
-    {
-        Color color;
-        colorFromRGBColorString(s, color);
-        return color;
-    }
+    static Color colorFromRGBColorString(const String&);
 
     void setRGBColor(const String& rgbColor, ExceptionState&);
     void setRGBColorICCColor(const String& rgbColor, const String& iccColor, ExceptionState&);
     void setColor(unsigned short colorType, const String& rgbColor, const String& iccColor, ExceptionState&);
 
-    String customCssText() const;
+    String customCSSText() const;
 
     ~SVGColor() { }
 
@@ -89,7 +83,7 @@ protected:
     SVGColor(ClassType, const SVGColorType&);
     SVGColor(ClassType, const SVGColor& cloneFrom);
 
-    void setColor(const Color& color) { m_color = color; m_valid = true; }
+    void setColor(const Color& color) { m_color = color; }
     void setColorType(const SVGColorType& type) { m_colorType = type; }
 
 private:
@@ -97,8 +91,9 @@ private:
 
     Color m_color;
     SVGColorType m_colorType;
-    bool m_valid;
 };
+
+DEFINE_CSS_VALUE_TYPE_CASTS(SVGColor, isSVGColor());
 
 } // namespace WebCore
 

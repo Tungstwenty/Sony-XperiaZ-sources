@@ -36,7 +36,7 @@
 
 using namespace WebCore;
 
-namespace WebKit {
+namespace blink {
 
 void WebRuntimeFeatures::enableStableFeatures(bool enable)
 {
@@ -96,13 +96,23 @@ bool WebRuntimeFeatures::isDeviceOrientationEnabled()
     return RuntimeEnabledFeatures::deviceOrientationEnabled();
 }
 
+void WebRuntimeFeatures::enableDialogElement(bool enable)
+{
+    RuntimeEnabledFeatures::setDialogElementEnabled(enable);
+}
+
+bool WebRuntimeFeatures::isDialogElementEnabled()
+{
+    return RuntimeEnabledFeatures::dialogElementEnabled();
+}
+
 void WebRuntimeFeatures::enableEncryptedMedia(bool enable)
 {
     RuntimeEnabledFeatures::setEncryptedMediaEnabled(enable);
     // FIXME: Hack to allow MediaKeyError to be enabled for either version.
     RuntimeEnabledFeatures::setEncryptedMediaAnyVersionEnabled(
         RuntimeEnabledFeatures::encryptedMediaEnabled()
-        || RuntimeEnabledFeatures::legacyEncryptedMediaEnabled());
+        || RuntimeEnabledFeatures::prefixedEncryptedMediaEnabled());
 }
 
 bool WebRuntimeFeatures::isEncryptedMediaEnabled()
@@ -110,18 +120,29 @@ bool WebRuntimeFeatures::isEncryptedMediaEnabled()
     return RuntimeEnabledFeatures::encryptedMediaEnabled();
 }
 
-void WebRuntimeFeatures::enableLegacyEncryptedMedia(bool enable)
+void WebRuntimeFeatures::enablePrefixedEncryptedMedia(bool enable)
 {
-    RuntimeEnabledFeatures::setLegacyEncryptedMediaEnabled(enable);
+    RuntimeEnabledFeatures::setPrefixedEncryptedMediaEnabled(enable);
     // FIXME: Hack to allow MediaKeyError to be enabled for either version.
     RuntimeEnabledFeatures::setEncryptedMediaAnyVersionEnabled(
         RuntimeEnabledFeatures::encryptedMediaEnabled()
-        || RuntimeEnabledFeatures::legacyEncryptedMediaEnabled());
+        || RuntimeEnabledFeatures::prefixedEncryptedMediaEnabled());
 }
 
-bool WebRuntimeFeatures::isLegacyEncryptedMediaEnabled()
+bool WebRuntimeFeatures::isPrefixedEncryptedMediaEnabled()
 {
-    return RuntimeEnabledFeatures::legacyEncryptedMediaEnabled();
+    return RuntimeEnabledFeatures::prefixedEncryptedMediaEnabled();
+}
+
+void WebRuntimeFeatures::enableDirectWrite(bool enable)
+{
+    RuntimeEnabledFeatures::setDirectWriteEnabled(enable);
+    RuntimeEnabledFeatures::setSubpixelFontScalingEnabled(enable || RuntimeEnabledFeatures::subpixelFontScalingEnabled());
+}
+
+bool WebRuntimeFeatures::isDirectWriteEnabled()
+{
+    return RuntimeEnabledFeatures::directWriteEnabled();
 }
 
 void WebRuntimeFeatures::enableExperimentalCanvasFeatures(bool enable)
@@ -132,6 +153,16 @@ void WebRuntimeFeatures::enableExperimentalCanvasFeatures(bool enable)
 bool WebRuntimeFeatures::isExperimentalCanvasFeaturesEnabled()
 {
     return RuntimeEnabledFeatures::experimentalCanvasFeaturesEnabled();
+}
+
+void WebRuntimeFeatures::enableFastTextAutosizing(bool enable)
+{
+    RuntimeEnabledFeatures::setFastTextAutosizingEnabled(enable);
+}
+
+bool WebRuntimeFeatures::isFastTextAutosizingEnabled()
+{
+    return RuntimeEnabledFeatures::fastTextAutosizingEnabled();
 }
 
 void WebRuntimeFeatures::enableFileSystem(bool enable)
@@ -176,12 +207,7 @@ bool WebRuntimeFeatures::isGeolocationEnabled()
 
 void WebRuntimeFeatures::enableLazyLayout(bool enable)
 {
-    RuntimeEnabledFeatures::setLazyLayoutEnabled(enable);
-}
-
-bool WebRuntimeFeatures::isLazyLayoutEnabled()
-{
-    return RuntimeEnabledFeatures::lazyLayoutEnabled();
+    // FIXME: Remove this once Chromium stops calling this.
 }
 
 void WebRuntimeFeatures::enableLocalStorage(bool enable)
@@ -214,6 +240,16 @@ bool WebRuntimeFeatures::isWebKitMediaSourceEnabled()
     return RuntimeEnabledFeatures::webKitMediaSourceEnabled();
 }
 
+void WebRuntimeFeatures::enableMediaSource(bool enable)
+{
+    RuntimeEnabledFeatures::setMediaSourceEnabled(enable);
+}
+
+bool WebRuntimeFeatures::isMediaSourceEnabled()
+{
+    return RuntimeEnabledFeatures::mediaSourceEnabled();
+}
+
 void WebRuntimeFeatures::enableMediaStream(bool enable)
 {
     RuntimeEnabledFeatures::setMediaStreamEnabled(enable);
@@ -226,18 +262,22 @@ bool WebRuntimeFeatures::isMediaStreamEnabled()
 
 void WebRuntimeFeatures::enableNotifications(bool enable)
 {
-#if ENABLE(NOTIFICATIONS) || ENABLE(LEGACY_NOTIFICATIONS)
     RuntimeEnabledFeatures::setNotificationsEnabled(enable);
-#endif
 }
 
 bool WebRuntimeFeatures::isNotificationsEnabled()
 {
-#if ENABLE(NOTIFICATIONS) || ENABLE(LEGACY_NOTIFICATIONS)
     return RuntimeEnabledFeatures::notificationsEnabled();
-#else
-    return false;
-#endif
+}
+
+void WebRuntimeFeatures::enableNavigatorContentUtils(bool enable)
+{
+    RuntimeEnabledFeatures::setNavigatorContentUtilsEnabled(enable);
+}
+
+bool WebRuntimeFeatures::isNavigatorContentUtilsEnabled()
+{
+    return RuntimeEnabledFeatures::navigatorContentUtilsEnabled();
 }
 
 void WebRuntimeFeatures::enablePagePopup(bool enable)
@@ -280,6 +320,16 @@ bool WebRuntimeFeatures::isScriptedSpeechEnabled()
     return RuntimeEnabledFeatures::scriptedSpeechEnabled();
 }
 
+void WebRuntimeFeatures::enableServiceWorker(bool enable)
+{
+    RuntimeEnabledFeatures::setServiceWorkerEnabled(enable);
+}
+
+bool WebRuntimeFeatures::isServiceWorkerEnabled()
+{
+    return RuntimeEnabledFeatures::serviceWorkerEnabled();
+}
+
 void WebRuntimeFeatures::enableSessionStorage(bool enable)
 {
     RuntimeEnabledFeatures::setSessionStorageEnabled(enable);
@@ -320,16 +370,14 @@ bool WebRuntimeFeatures::isTouchEnabled()
     return RuntimeEnabledFeatures::touchEnabled();
 }
 
-void WebRuntimeFeatures::enableWebAnimationsCSS()
+void WebRuntimeFeatures::enableWebAnimationsCSS(bool enable)
 {
-    RuntimeEnabledFeatures::setWebAnimationsEnabled(true);
-    RuntimeEnabledFeatures::setWebAnimationsCSSEnabled(true);
+    RuntimeEnabledFeatures::setWebAnimationsCSSEnabled(enable);
 }
 
-void WebRuntimeFeatures::enableWebAnimationsSVG()
+void WebRuntimeFeatures::enableWebAnimationsSVG(bool enable)
 {
-    RuntimeEnabledFeatures::setWebAnimationsEnabled(true);
-    RuntimeEnabledFeatures::setWebAnimationsSVGEnabled(true);
+    RuntimeEnabledFeatures::setWebAnimationsSVGEnabled(enable);
 }
 
 void WebRuntimeFeatures::enableWebAudio(bool enable)
@@ -382,11 +430,9 @@ bool WebRuntimeFeatures::isHTMLImportsEnabled()
     return RuntimeEnabledFeatures::htmlImportsEnabled();
 }
 
-// FIXME: Remove this when embedders switch to enableEmbedderCustomElements.
-void WebRuntimeFeatures::enableCustomElements(bool enable)
+void WebRuntimeFeatures::enableXSLT(bool enable)
 {
-    RuntimeEnabledFeatures::setCustomDOMElementsEnabled(enable);
-    enableEmbedderCustomElements(enable);
+    RuntimeEnabledFeatures::setXSLTEnabled(enable);
 }
 
 void WebRuntimeFeatures::enableEmbedderCustomElements(bool enable)
@@ -399,4 +445,24 @@ void WebRuntimeFeatures::enableOverlayScrollbars(bool enable)
     RuntimeEnabledFeatures::setOverlayScrollbarsEnabled(enable);
 }
 
-} // namespace WebKit
+void WebRuntimeFeatures::enableInputModeAttribute(bool enable)
+{
+    RuntimeEnabledFeatures::setInputModeAttributeEnabled(enable);
+}
+
+void WebRuntimeFeatures::enableOverlayFullscreenVideo(bool enable)
+{
+    RuntimeEnabledFeatures::setOverlayFullscreenVideoEnabled(enable);
+}
+
+void WebRuntimeFeatures::enableSharedWorker(bool enable)
+{
+    RuntimeEnabledFeatures::setSharedWorkerEnabled(enable);
+}
+
+void WebRuntimeFeatures::enableRepaintAfterLayout(bool enable)
+{
+    RuntimeEnabledFeatures::setRepaintAfterLayoutEnabled(enable);
+}
+
+} // namespace blink

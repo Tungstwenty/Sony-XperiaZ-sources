@@ -32,8 +32,8 @@
 #define PopupListBox_h
 
 #include "core/dom/Element.h"
-#include "core/platform/chromium/FramelessScrollView.h"
-#include "core/platform/text/TextDirection.h"
+#include "platform/scroll/FramelessScrollView.h"
+#include "platform/text/TextDirection.h"
 #include "wtf/text/WTFString.h"
 
 namespace WebCore {
@@ -128,11 +128,12 @@ public:
 
     // ScrollView
     virtual HostWindow* hostWindow() const OVERRIDE;
+    virtual bool shouldPlaceVerticalScrollbarOnLeft() const OVERRIDE;
 
     // PopupListBox methods
 
-    // Hides the popup.
-    void hidePopup();
+    // Closes the popup
+    void abandon();
 
     // Updates our internal list to match the client.
     void updateFromElement();
@@ -192,8 +193,8 @@ private:
         clear();
     }
 
-    // Closes the popup
-    void abandon();
+    // Hides the popup. Other classes should not call this. Use abandon instead.
+    void hidePopup();
 
     // Returns true if the selection can be changed to index.
     // Disabled items, or labels cannot be selected.

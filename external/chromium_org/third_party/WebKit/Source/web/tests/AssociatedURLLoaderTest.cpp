@@ -44,12 +44,13 @@
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/WebURLResponse.h"
 #include "public/platform/WebUnitTestSupport.h"
+#include "wtf/text/CString.h"
 #include "wtf/text/WTFString.h"
 
 #include <gtest/gtest.h>
 
-using namespace WebKit;
-using WebKit::URLTestHelpers::toKURL;
+using namespace blink;
+using blink::URLTestHelpers::toKURL;
 
 namespace {
 
@@ -91,7 +92,8 @@ public:
     void SetUp()
     {
         m_webView = WebView::create(0);
-        m_webView->initializeMainFrame(&m_webFrameClient);
+        m_mainFrame = WebFrame::create(&m_webFrameClient);
+        m_webView->setMainFrame(m_mainFrame);
 
         std::string urlRoot = "http://www.test.com/";
         WebCore::KURL url = RegisterMockedUrl(urlRoot, "iframes_test.html");
@@ -117,6 +119,7 @@ public:
     {
         Platform::current()->unitTestSupport()->unregisterAllMockedURLs();
         m_webView->close();
+        m_mainFrame->close();
     }
 
     void serveRequests()
@@ -155,7 +158,7 @@ public:
         EXPECT_EQ(m_expectedResponse.httpStatusCode(), response.httpStatusCode());
     }
 
-    void didDownloadData(WebURLLoader* loader, int dataLength)
+    void didDownloadData(WebURLLoader* loader, int dataLength, int encodedDataLength)
     {
         m_didDownloadData = true;
         EXPECT_EQ(m_expectedLoader, loader);
@@ -274,6 +277,7 @@ protected:
     WTF::String m_frameFilePath;
     TestWebFrameClient m_webFrameClient;
     WebView* m_webView;
+    WebFrame* m_mainFrame;
 
     WebURLLoader* m_expectedLoader;
     WebURLResponse m_actualResponse;

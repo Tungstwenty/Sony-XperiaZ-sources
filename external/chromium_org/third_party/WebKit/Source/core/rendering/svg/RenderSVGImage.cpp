@@ -27,8 +27,9 @@
 
 #include "core/rendering/svg/RenderSVGImage.h"
 
-#include "core/platform/graphics/GraphicsContextStateSaver.h"
+#include "core/rendering/GraphicsContextAnnotator.h"
 #include "core/rendering/ImageQualityController.h"
+#include "core/rendering/LayoutRectRecorder.h"
 #include "core/rendering/LayoutRepainter.h"
 #include "core/rendering/PointerEventsHitRules.h"
 #include "core/rendering/RenderImageResource.h"
@@ -37,6 +38,7 @@
 #include "core/rendering/svg/SVGResources.h"
 #include "core/rendering/svg/SVGResourcesCache.h"
 #include "core/svg/SVGImageElement.h"
+#include "platform/graphics/GraphicsContextStateSaver.h"
 
 namespace WebCore {
 
@@ -57,7 +59,7 @@ RenderSVGImage::~RenderSVGImage()
 
 bool RenderSVGImage::updateImageViewport()
 {
-    SVGImageElement* image = toSVGImageElement(node());
+    SVGImageElement* image = toSVGImageElement(element());
     FloatRect oldBoundaries = m_objectBoundingBox;
     bool updatedViewport = false;
 
@@ -89,15 +91,15 @@ bool RenderSVGImage::updateImageViewport()
 
 void RenderSVGImage::layout()
 {
-    StackStats::LayoutCheckPoint layoutCheckPoint;
     ASSERT(needsLayout());
 
+    LayoutRectRecorder recorder(*this);
     LayoutRepainter repainter(*this, SVGRenderSupport::checkForSVGRepaintDuringLayout(this) && selfNeedsLayout());
     updateImageViewport();
 
     bool transformOrBoundariesUpdate = m_needsTransformUpdate || m_needsBoundariesUpdate;
     if (m_needsTransformUpdate) {
-        m_localTransform = toSVGImageElement(node())->animatedLocalTransform();
+        m_localTransform = toSVGImageElement(element())->animatedLocalTransform();
         m_needsTransformUpdate = false;
     }
 
@@ -137,11 +139,11 @@ void RenderSVGImage::paint(PaintInfo& paintInfo, const LayoutPoint&)
         GraphicsContextStateSaver stateSaver(*childPaintInfo.context);
         childPaintInfo.applyTransform(m_localTransform);
 
-        if (childPaintInfo.phase == PaintPhaseForeground) {
+        if (childPaintInfo.phase == PaintPhaseForeground && !m_objectBoundingBox.isEmpty()) {
             SVGRenderingContext renderingContext(this, childPaintInfo);
 
             if (renderingContext.isRenderingPrepared()) {
-                if (style()->svgStyle()->bufferedRendering() == BR_STATIC  && renderingContext.bufferForeground(m_bufferedForeground))
+                if (style()->svgStyle()->bufferedRendering() == BR_STATIC && renderingContext.bufferForeground(m_bufferedForeground))
                     return;
 
                 paintForeground(childPaintInfo);
@@ -159,7 +161,7 @@ void RenderSVGImage::paintForeground(PaintInfo& paintInfo)
     FloatRect destRect = m_objectBoundingBox;
     FloatRect srcRect(0, 0, image->width(), image->height());
 
-    SVGImageElement* imageElement = toSVGImageElement(node());
+    SVGImageElement* imageElement = toSVGImageElement(element());
     imageElement->preserveAspectRatioCurrentValue().transformRect(destRect, srcRect);
 
     bool useLowQualityScaling = false;
@@ -188,7 +190,7 @@ bool RenderSVGImage::nodeAtFloatPoint(const HitTestRequest& request, HitTestResu
         if (!SVGRenderSupport::pointInClippingArea(this, localPoint))
             return false;
 
-        if (hitRules.canHitFill) {
+        if (hitRules.canHitFill || hitRules.canHitBoundingBox) {
             if (m_objectBoundingBox.contains(localPoint)) {
                 updateHitTestResult(result, roundedLayoutPoint(localPoint));
                 return true;

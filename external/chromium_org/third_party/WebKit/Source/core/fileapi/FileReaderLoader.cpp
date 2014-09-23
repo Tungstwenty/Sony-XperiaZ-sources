@@ -32,17 +32,18 @@
 
 #include "core/fileapi/FileReaderLoader.h"
 
-#include "core/dom/ScriptExecutionContext.h"
+#include "FetchInitiatorTypeNames.h"
+#include "core/dom/ExecutionContext.h"
+#include "core/fetch/TextResourceDecoder.h"
 #include "core/fileapi/Blob.h"
-#include "core/fileapi/BlobRegistry.h"
-#include "core/fileapi/BlobURL.h"
 #include "core/fileapi/FileReaderLoaderClient.h"
 #include "core/fileapi/Stream.h"
-#include "core/loader/TextResourceDecoder.h"
 #include "core/loader/ThreadableLoader.h"
-#include "core/platform/network/ResourceRequest.h"
-#include "core/platform/network/ResourceResponse.h"
-#include "wtf/ArrayBuffer.h"
+#include "platform/blob/BlobRegistry.h"
+#include "platform/blob/BlobURL.h"
+#include "platform/network/ResourceRequest.h"
+#include "platform/network/ResourceResponse.h"
+#include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
@@ -53,16 +54,15 @@ using namespace std;
 
 namespace WebCore {
 
-const int defaultBufferLength = 32768;
-
 FileReaderLoader::FileReaderLoader(ReadType readType, FileReaderLoaderClient* client)
     : m_readType(readType)
     , m_client(client)
+    , m_urlForReadingIsStream(false)
     , m_isRawDataConverted(false)
     , m_stringResult("")
-    , m_variableLength(false)
+    , m_finishedLoading(false)
     , m_bytesLoaded(0)
-    , m_totalBytes(0)
+    , m_totalBytes(-1)
     , m_hasRange(false)
     , m_rangeStart(0)
     , m_rangeEnd(0)
@@ -73,19 +73,30 @@ FileReaderLoader::FileReaderLoader(ReadType readType, FileReaderLoaderClient* cl
 FileReaderLoader::~FileReaderLoader()
 {
     terminate();
-    if (!m_urlForReading.isEmpty())
-        BlobRegistry::unregisterBlobURL(m_urlForReading);
+    if (!m_urlForReading.isEmpty()) {
+        if (m_urlForReadingIsStream)
+            BlobRegistry::unregisterStreamURL(m_urlForReading);
+        else
+            BlobRegistry::revokePublicBlobURL(m_urlForReading);
+    }
 }
 
-void FileReaderLoader::startForURL(ScriptExecutionContext* scriptExecutionContext, const KURL& url)
+void FileReaderLoader::startInternal(ExecutionContext* executionContext, const Stream* stream, PassRefPtr<BlobDataHandle> blobData)
 {
     // The blob is read by routing through the request handling layer given a temporary public url.
-    m_urlForReading = BlobURL::createPublicURL(scriptExecutionContext->securityOrigin());
+    m_urlForReading = BlobURL::createPublicURL(executionContext->securityOrigin());
     if (m_urlForReading.isEmpty()) {
         failed(FileError::SECURITY_ERR);
         return;
     }
-    BlobRegistry::registerBlobURL(scriptExecutionContext->securityOrigin(), m_urlForReading, url);
+
+    if (blobData) {
+        ASSERT(!stream);
+        BlobRegistry::registerPublicBlobURL(executionContext->securityOrigin(), m_urlForReading, blobData);
+    } else {
+        ASSERT(stream);
+        BlobRegistry::registerStreamURL(executionContext->securityOrigin(), m_urlForReading, stream->url());
+    }
 
     // Construct and load the request.
     ResourceRequest request(m_urlForReading);
@@ -101,21 +112,31 @@ void FileReaderLoader::startForURL(ScriptExecutionContext* scriptExecutionContex
     options.crossOriginRequestPolicy = DenyCrossOriginRequests;
     // FIXME: Is there a directive to which this load should be subject?
     options.contentSecurityPolicyEnforcement = DoNotEnforceContentSecurityPolicy;
+    // Use special initiator to hide the request from the inspector.
+    options.initiator = FetchInitiatorTypeNames::internal;
 
     if (m_client)
-        m_loader = ThreadableLoader::create(scriptExecutionContext, this, request, options);
+        m_loader = ThreadableLoader::create(executionContext, this, request, options);
     else
-        ThreadableLoader::loadResourceSynchronously(scriptExecutionContext, request, *this, options);
+        ThreadableLoader::loadResourceSynchronously(executionContext, request, *this, options);
 }
 
-void FileReaderLoader::start(ScriptExecutionContext* scriptExecutionContext, const Blob& blob)
+void FileReaderLoader::start(ExecutionContext* executionContext, PassRefPtr<BlobDataHandle> blobData)
 {
-    startForURL(scriptExecutionContext, blob.url());
+    m_urlForReadingIsStream = false;
+    startInternal(executionContext, 0, blobData);
 }
 
-void FileReaderLoader::start(ScriptExecutionContext* scriptExecutionContext, const Stream& stream)
+void FileReaderLoader::start(ExecutionContext* executionContext, const Stream& stream, unsigned readSize)
 {
-    startForURL(scriptExecutionContext, stream.url());
+    if (readSize > 0) {
+        m_hasRange = true;
+        m_rangeStart = 0;
+        m_rangeEnd = readSize - 1; // End is inclusive so (0,0) is a 1-byte read.
+    }
+
+    m_urlForReadingIsStream = true;
+    startInternal(executionContext, &stream, 0);
 }
 
 void FileReaderLoader::cancel()
@@ -138,8 +159,10 @@ void FileReaderLoader::cleanup()
 
     // If we get any error, we do not need to keep a buffer around.
     if (m_errorCode) {
-        m_rawData = 0;
+        m_rawData.clear();
         m_stringResult = "";
+        m_isRawDataConverted = true;
+        m_decoder.clear();
     }
 }
 
@@ -150,35 +173,48 @@ void FileReaderLoader::didReceiveResponse(unsigned long, const ResourceResponse&
         return;
     }
 
-    unsigned long long length = response.expectedContentLength();
+    // A negative value means that the content length wasn't specified.
+    m_totalBytes = response.expectedContentLength();
 
-    // A value larger than INT_MAX means that the content length wasn't
-    // specified, so the buffer will need to be dynamically grown.
-    if (length > INT_MAX) {
-        m_variableLength = true;
-        if (m_hasRange)
-            length = 1 + m_rangeEnd - m_rangeStart;
-        else
-            length = defaultBufferLength;
-    }
+    long long initialBufferLength = -1;
 
-    // Check that we can cast to unsigned since we have to do
-    // so to call ArrayBuffer's create function.
-    // FIXME: Support reading more than the current size limit of ArrayBuffer.
-    if (length > numeric_limits<unsigned>::max()) {
-        failed(FileError::NOT_READABLE_ERR);
-        return;
+    if (m_totalBytes >= 0) {
+        initialBufferLength = m_totalBytes;
+    } else if (m_hasRange) {
+        // Set m_totalBytes and allocate a buffer based on the specified range.
+        m_totalBytes = 1LL + m_rangeEnd - m_rangeStart;
+        initialBufferLength = m_totalBytes;
+    } else {
+        // Nothing is known about the size of the resource. Normalize
+        // m_totalBytes to -1 and initialize the buffer for receiving with the
+        // default size.
+        m_totalBytes = -1;
     }
 
     ASSERT(!m_rawData);
-    m_rawData = ArrayBuffer::create(static_cast<unsigned>(length), 1);
 
-    if (!m_rawData) {
-        failed(FileError::NOT_READABLE_ERR);
-        return;
+    if (m_readType != ReadByClient) {
+        // Check that we can cast to unsigned since we have to do
+        // so to call ArrayBuffer's create function.
+        // FIXME: Support reading more than the current size limit of ArrayBuffer.
+        if (initialBufferLength > numeric_limits<unsigned>::max()) {
+            failed(FileError::NOT_READABLE_ERR);
+            return;
+        }
+
+        if (initialBufferLength < 0) {
+            m_rawData = adoptPtr(new ArrayBufferBuilder());
+        } else {
+            m_rawData = adoptPtr(new ArrayBufferBuilder(static_cast<unsigned>(initialBufferLength)));
+            // Total size is known. Set m_rawData to ignore overflowed data.
+            m_rawData->setVariableCapacity(false);
+        }
+
+        if (!m_rawData) {
+            failed(FileError::NOT_READABLE_ERR);
+            return;
+        }
     }
-
-    m_totalBytes = static_cast<unsigned>(length);
 
     if (m_client)
         m_client->didStartLoading();
@@ -193,34 +229,22 @@ void FileReaderLoader::didReceiveData(const char* data, int dataLength)
     if (m_errorCode)
         return;
 
-    int length = dataLength;
-    unsigned remainingBufferSpace = m_totalBytes - m_bytesLoaded;
-    if (length > static_cast<long long>(remainingBufferSpace)) {
-        // If the buffer has hit maximum size, it can't be grown any more.
-        if (m_totalBytes >= numeric_limits<unsigned>::max()) {
-            failed(FileError::NOT_READABLE_ERR);
-            return;
-        }
-        if (m_variableLength) {
-            unsigned long long newLength = m_totalBytes * 2;
-            if (newLength > numeric_limits<unsigned>::max())
-                newLength = numeric_limits<unsigned>::max();
-            RefPtr<ArrayBuffer> newData =
-                ArrayBuffer::create(static_cast<unsigned>(newLength), 1);
-            memcpy(static_cast<char*>(newData->data()), static_cast<char*>(m_rawData->data()), m_bytesLoaded);
+    if (m_readType == ReadByClient) {
+        m_bytesLoaded += dataLength;
 
-            m_rawData = newData;
-            m_totalBytes = static_cast<unsigned>(newLength);
-        } else
-            length = remainingBufferSpace;
+        if (m_client)
+            m_client->didReceiveDataForClient(data, dataLength);
+        return;
     }
 
-    if (length <= 0)
+    unsigned bytesAppended = m_rawData->append(data, static_cast<unsigned>(dataLength));
+    if (!bytesAppended) {
+        m_rawData.clear();
+        m_bytesLoaded = 0;
+        failed(FileError::NOT_READABLE_ERR);
         return;
-
-    memcpy(static_cast<char*>(m_rawData->data()) + m_bytesLoaded, data, length);
-    m_bytesLoaded += length;
-
+    }
+    m_bytesLoaded += bytesAppended;
     m_isRawDataConverted = false;
 
     if (m_client)
@@ -229,12 +253,18 @@ void FileReaderLoader::didReceiveData(const char* data, int dataLength)
 
 void FileReaderLoader::didFinishLoading(unsigned long, double)
 {
-    if (m_variableLength && m_totalBytes > m_bytesLoaded) {
-        RefPtr<ArrayBuffer> newData = m_rawData->slice(0, m_bytesLoaded);
+    if (m_readType != ReadByClient && m_rawData) {
+        m_rawData->shrinkToFit();
+        m_isRawDataConverted = false;
+    }
 
-        m_rawData = newData;
+    if (m_totalBytes == -1) {
+        // Update m_totalBytes only when in dynamic buffer grow mode.
         m_totalBytes = m_bytesLoaded;
     }
+
+    m_finishedLoading = true;
+
     cleanup();
     if (m_client)
         m_client->didFinishLoading();
@@ -277,17 +307,12 @@ PassRefPtr<ArrayBuffer> FileReaderLoader::arrayBufferResult() const
     if (!m_rawData || m_errorCode)
         return 0;
 
-    // If completed, we can simply return our buffer.
-    if (isCompleted())
-        return m_rawData;
-
-    // Otherwise, return a copy.
-    return m_rawData->slice(0, m_bytesLoaded);
+    return m_rawData->toArrayBuffer();
 }
 
 String FileReaderLoader::stringResult()
 {
-    ASSERT(m_readType != ReadAsArrayBuffer && m_readType != ReadAsBlob);
+    ASSERT(m_readType != ReadAsArrayBuffer && m_readType != ReadAsBlob && m_readType != ReadByClient);
 
     // If the loading is not started or an error occurs, return an empty result.
     if (!m_rawData || m_errorCode)
@@ -302,14 +327,15 @@ String FileReaderLoader::stringResult()
         // No conversion is needed.
         break;
     case ReadAsBinaryString:
-        m_stringResult = String(static_cast<const char*>(m_rawData->data()), m_bytesLoaded);
+        m_stringResult = m_rawData->toString();
+        m_isRawDataConverted = true;
         break;
     case ReadAsText:
         convertToText();
         break;
     case ReadAsDataURL:
         // Partial data is not supported when reading as data URL.
-        if (isCompleted())
+        if (m_finishedLoading)
             convertToDataURL();
         break;
     default:
@@ -321,8 +347,12 @@ String FileReaderLoader::stringResult()
 
 void FileReaderLoader::convertToText()
 {
-    if (!m_bytesLoaded)
+    m_isRawDataConverted = true;
+
+    if (!m_bytesLoaded) {
+        m_stringResult = "";
         return;
+    }
 
     // Decode the data.
     // The File API spec says that we should use the supplied encoding if it is valid. However, we choose to ignore this
@@ -332,9 +362,9 @@ void FileReaderLoader::convertToText()
     StringBuilder builder;
     if (!m_decoder)
         m_decoder = TextResourceDecoder::create("text/plain", m_encoding.isValid() ? m_encoding : UTF8Encoding());
-    builder.append(m_decoder->decode(static_cast<const char*>(m_rawData->data()), m_bytesLoaded));
+    builder.append(m_decoder->decode(static_cast<const char*>(m_rawData->data()), m_rawData->byteLength()));
 
-    if (isCompleted())
+    if (m_finishedLoading)
         builder.append(m_decoder->flush());
 
     m_stringResult = builder.toString();
@@ -342,6 +372,8 @@ void FileReaderLoader::convertToText()
 
 void FileReaderLoader::convertToDataURL()
 {
+    m_isRawDataConverted = true;
+
     StringBuilder builder;
     builder.append("data:");
 
@@ -354,16 +386,11 @@ void FileReaderLoader::convertToDataURL()
     builder.append(";base64,");
 
     Vector<char> out;
-    base64Encode(static_cast<const char*>(m_rawData->data()), m_bytesLoaded, out);
+    base64Encode(static_cast<const char*>(m_rawData->data()), m_rawData->byteLength(), out);
     out.append('\0');
     builder.append(out.data());
 
     m_stringResult = builder.toString();
-}
-
-bool FileReaderLoader::isCompleted() const
-{
-    return m_bytesLoaded == m_totalBytes;
 }
 
 void FileReaderLoader::setEncoding(const String& encoding)

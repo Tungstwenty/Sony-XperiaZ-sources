@@ -29,21 +29,20 @@
  */
 
 #include "config.h"
-
 #include "V8FileReader.h"
 
 #include "bindings/v8/V8Binding.h"
 #include "bindings/v8/custom/V8ArrayBufferCustom.h"
-#include "core/dom/ScriptExecutionContext.h"
+#include "core/dom/ExecutionContext.h"
 
 namespace WebCore {
 
-void V8FileReader::resultAttrGetterCustom(v8::Local<v8::String> name, const v8::PropertyCallbackInfo<v8::Value>& info)
+void V8FileReader::resultAttributeGetterCustom(const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     v8::Handle<v8::Object> holder = info.Holder();
     FileReader* imp = V8FileReader::toNative(holder);
     if (imp->readType() == FileReaderLoader::ReadAsArrayBuffer) {
-        v8SetReturnValue(info, toV8Fast(imp->arrayBufferResult(), info, imp));
+        v8SetReturnValueFast(info, imp->arrayBufferResult(), imp);
         return;
     }
     v8SetReturnValueStringOrNull(info, imp->stringResult(), info.GetIsolate());

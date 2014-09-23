@@ -27,9 +27,9 @@
 #ifndef WorkerThread_h
 #define WorkerThread_h
 
-#include "core/page/ContentSecurityPolicy.h"
+#include "core/frame/ContentSecurityPolicy.h"
 #include "core/workers/WorkerRunLoop.h"
-#include "weborigin/SecurityOrigin.h"
+#include "platform/weborigin/SecurityOrigin.h"
 #include "wtf/Forward.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassRefPtr.h"
@@ -62,10 +62,8 @@ namespace WebCore {
         static unsigned workerThreadCount();
         static void releaseFastMallocFreeMemoryInAllThreads();
 
-#if ENABLE(NOTIFICATIONS) || ENABLE(LEGACY_NOTIFICATIONS)
         NotificationClient* getNotificationClient() { return m_notificationClient; }
         void setNotificationClient(NotificationClient* client) { m_notificationClient = client; }
-#endif
 
     protected:
         WorkerThread(WorkerLoaderProxy&, WorkerReportingProxy&, PassOwnPtr<WorkerThreadStartupData>);
@@ -94,9 +92,7 @@ namespace WebCore {
 
         OwnPtr<WorkerThreadStartupData> m_startupData;
 
-#if ENABLE(NOTIFICATIONS) || ENABLE(LEGACY_NOTIFICATIONS)
         NotificationClient* m_notificationClient;
-#endif
     };
 
 } // namespace WebCore

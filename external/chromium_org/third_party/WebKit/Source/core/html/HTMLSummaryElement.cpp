@@ -23,40 +23,39 @@
 
 #include "HTMLNames.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "core/dom/KeyboardEvent.h"
-#include "core/dom/NodeRenderingContext.h"
+#include "core/events/KeyboardEvent.h"
+#include "core/dom/NodeRenderingTraversal.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/html/HTMLDetailsElement.h"
 #include "core/html/shadow/DetailsMarkerControl.h"
 #include "core/html/shadow/HTMLContentElement.h"
-#include "core/rendering/RenderBlock.h"
+#include "core/rendering/RenderBlockFlow.h"
 
 namespace WebCore {
 
 using namespace HTMLNames;
 
-PassRefPtr<HTMLSummaryElement> HTMLSummaryElement::create(const QualifiedName& tagName, Document* document)
+PassRefPtr<HTMLSummaryElement> HTMLSummaryElement::create(Document& document)
 {
-    RefPtr<HTMLSummaryElement> summary = adoptRef(new HTMLSummaryElement(tagName, document));
+    RefPtr<HTMLSummaryElement> summary = adoptRef(new HTMLSummaryElement(document));
     summary->ensureUserAgentShadowRoot();
     return summary.release();
 }
 
-HTMLSummaryElement::HTMLSummaryElement(const QualifiedName& tagName, Document* document)
-    : HTMLElement(tagName, document)
+HTMLSummaryElement::HTMLSummaryElement(Document& document)
+    : HTMLElement(summaryTag, document)
 {
-    ASSERT(hasTagName(summaryTag));
 }
 
 RenderObject* HTMLSummaryElement::createRenderer(RenderStyle*)
 {
-    return new RenderBlock(this);
+    return new RenderBlockFlow(this);
 }
 
-void HTMLSummaryElement::didAddUserAgentShadowRoot(ShadowRoot* root)
+void HTMLSummaryElement::didAddUserAgentShadowRoot(ShadowRoot& root)
 {
-    root->appendChild(DetailsMarkerControl::create(document()), ASSERT_NO_EXCEPTION, AttachLazily);
-    root->appendChild(HTMLContentElement::create(document()), ASSERT_NO_EXCEPTION, AttachLazily);
+    root.appendChild(DetailsMarkerControl::create(document()));
+    root.appendChild(HTMLContentElement::create(document()));
 }
 
 HTMLDetailsElement* HTMLSummaryElement::detailsElement() const
@@ -94,7 +93,7 @@ bool HTMLSummaryElement::supportsFocus() const
 void HTMLSummaryElement::defaultEventHandler(Event* event)
 {
     if (isMainSummary() && renderer()) {
-        if (event->type() == eventNames().DOMActivateEvent && !isClickableControl(event->target()->toNode())) {
+        if (event->type() == EventTypeNames::DOMActivate && !isClickableControl(event->target()->toNode())) {
             if (HTMLDetailsElement* details = detailsElement())
                 details->toggleOpen();
             event->setDefaultHandled();
@@ -102,12 +101,12 @@ void HTMLSummaryElement::defaultEventHandler(Event* event)
         }
 
         if (event->isKeyboardEvent()) {
-            if (event->type() == eventNames().keydownEvent && toKeyboardEvent(event)->keyIdentifier() == "U+0020") {
-                setActive(true, true);
+            if (event->type() == EventTypeNames::keydown && toKeyboardEvent(event)->keyIdentifier() == "U+0020") {
+                setActive(true);
                 // No setDefaultHandled() - IE dispatches a keypress in this case.
                 return;
             }
-            if (event->type() == eventNames().keypressEvent) {
+            if (event->type() == EventTypeNames::keypress) {
                 switch (toKeyboardEvent(event)->charCode()) {
                 case '\r':
                     dispatchSimulatedClick(event);
@@ -119,7 +118,7 @@ void HTMLSummaryElement::defaultEventHandler(Event* event)
                     return;
                 }
             }
-            if (event->type() == eventNames().keyupEvent && toKeyboardEvent(event)->keyIdentifier() == "U+0020") {
+            if (event->type() == EventTypeNames::keyup && toKeyboardEvent(event)->keyIdentifier() == "U+0020") {
                 if (active())
                     dispatchSimulatedClick(event);
                 event->setDefaultHandled();

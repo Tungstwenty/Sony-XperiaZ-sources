@@ -32,7 +32,7 @@ namespace WebCore {
 
 class HTMLTableCellElement FINAL : public HTMLTablePartElement {
 public:
-    static PassRefPtr<HTMLTableCellElement> create(const QualifiedName&, Document*);
+    static PassRefPtr<HTMLTableCellElement> create(const QualifiedName&, Document&);
 
     int cellIndex() const;
 
@@ -41,17 +41,17 @@ public:
 
     void setCellIndex(int);
 
-    String abbr() const;
-    String axis() const;
+    const AtomicString& abbr() const;
+    const AtomicString& axis() const;
     void setColSpan(int);
-    String headers() const;
+    const AtomicString& headers() const;
     void setRowSpan(int);
-    String scope() const;
+    const AtomicString& scope() const;
 
     HTMLTableCellElement* cellAbove() const;
 
 private:
-    HTMLTableCellElement(const QualifiedName&, Document*);
+    HTMLTableCellElement(const QualifiedName&, Document&);
 
     virtual void parseAttribute(const QualifiedName&, const AtomicString&) OVERRIDE;
     virtual bool isPresentationAttribute(const QualifiedName&) const OVERRIDE;
@@ -63,26 +63,12 @@ private:
     virtual void addSubresourceAttributeURLs(ListHashSet<KURL>&) const;
 };
 
-HTMLTableCellElement* toHTMLTableCellElement(Node* node);
-const HTMLTableCellElement* toHTMLTableCellElement(const Node* node);
-
-// This will catch anyone doing an unnecessary cast.
-void toHTMLTableCellElement(const HTMLTableCellElement*);
-
-#ifdef NDEBUG
-
-// The debug versions of these, with assertions, are not inlined.
-
-inline HTMLTableCellElement* toHTMLTableCellElement(Node* node)
+inline bool isHTMLTableCellElement(const Node& node)
 {
-    return static_cast<HTMLTableCellElement*>(node);
+    return node.hasTagName(HTMLNames::tdTag) || node.hasTagName(HTMLNames::thTag);
 }
 
-inline const HTMLTableCellElement* toHTMLTableCellElement(const Node* node)
-{
-    return static_cast<const HTMLTableCellElement*>(node);
-}
-#endif
+DEFINE_NODE_TYPE_CASTS_WITH_FUNCTION(HTMLTableCellElement);
 
 } // namespace
 

@@ -26,8 +26,8 @@
 #ifndef RenderScrollbarPart_h
 #define RenderScrollbarPart_h
 
-#include "core/platform/ScrollTypes.h"
 #include "core/rendering/RenderBlock.h"
+#include "platform/scroll/ScrollTypes.h"
 
 namespace WebCore {
 
@@ -66,6 +66,8 @@ private:
 
     virtual void computePreferredLogicalWidths();
 
+    virtual bool supportsPartialLayout() const OVERRIDE { return false; }
+
     void layoutHorizontalPart();
     void layoutVerticalPart();
 
@@ -76,20 +78,7 @@ private:
     ScrollbarPart m_part;
 };
 
-inline RenderScrollbarPart* toRenderScrollbarPart(RenderObject* object)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!object || object->isRenderScrollbarPart());
-    return static_cast<RenderScrollbarPart*>(object);
-}
-
-inline const RenderScrollbarPart* toRenderScrollbarPart(const RenderObject* object)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!object || object->isRenderScrollbarPart());
-    return static_cast<const RenderScrollbarPart*>(object);
-}
-
-// This will catch anyone doing an unnecessary cast.
-void toRenderScrollbarPart(const RenderScrollbarPart*);
+DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderScrollbarPart, isRenderScrollbarPart());
 
 } // namespace WebCore
 

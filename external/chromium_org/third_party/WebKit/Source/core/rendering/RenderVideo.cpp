@@ -30,12 +30,14 @@
 #include "HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/html/HTMLVideoElement.h"
-#include "core/page/Frame.h"
-#include "core/page/FrameView.h"
+#include "core/frame/Frame.h"
+#include "core/frame/FrameView.h"
 #include "core/page/Page.h"
-#include "core/platform/graphics/MediaPlayer.h"
+#include "core/rendering/LayoutRectRecorder.h"
 #include "core/rendering/PaintInfo.h"
 #include "core/rendering/RenderFullScreen.h"
+#include "platform/graphics/media/MediaPlayer.h"
+#include "public/platform/WebLayer.h"
 
 namespace WebCore {
 
@@ -80,7 +82,7 @@ void RenderVideo::updateIntrinsicSize()
         return;
 
     setIntrinsicSize(size);
-    setPreferredLogicalWidthsDirty(true);
+    setPreferredLogicalWidthsDirty();
     setNeedsLayout();
 }
 
@@ -106,12 +108,6 @@ LayoutSize RenderVideo::calculateIntrinsicSize()
 
     if (video->shouldDisplayPosterImage() && !m_cachedImageSize.isEmpty() && !imageResource()->errorOccurred())
         return m_cachedImageSize;
-
-    // When the natural size of the video is unavailable, we use the provided
-    // width and height attributes of the video element as the intrinsic size until
-    // better values become available.
-    if (video->hasAttribute(widthAttr) && video->hasAttribute(heightAttr))
-        return LayoutSize(video->width(), video->height());
 
     // <video> in standalone media documents should not use the default 300x150
     // size since they also have audio-only files. By setting the intrinsic
@@ -140,35 +136,11 @@ void RenderVideo::imageChanged(WrappedImagePtr newImage, const IntRect* rect)
 
 IntRect RenderVideo::videoBox() const
 {
-    if (m_cachedImageSize.isEmpty() && videoElement()->shouldDisplayPosterImage())
-        return IntRect();
-
-    LayoutSize elementSize;
+    const LayoutSize* overriddenIntrinsicSize = 0;
     if (videoElement()->shouldDisplayPosterImage())
-        elementSize = m_cachedImageSize;
-    else
-        elementSize = intrinsicSize();
+        overriddenIntrinsicSize = &m_cachedImageSize;
 
-    IntRect contentRect = pixelSnappedIntRect(contentBoxRect());
-    if (elementSize.isEmpty() || contentRect.isEmpty())
-        return IntRect();
-
-    LayoutRect renderBox = contentRect;
-    LayoutUnit ratio = renderBox.width() * elementSize.height() - renderBox.height() * elementSize.width();
-    if (ratio > 0) {
-        LayoutUnit newWidth = renderBox.height() * elementSize.width() / elementSize.height();
-        // Just fill the whole area if the difference is one pixel or less (in both sides)
-        if (renderBox.width() - newWidth > 2)
-            renderBox.setWidth(newWidth);
-        renderBox.move((contentRect.width() - renderBox.width()) / 2, 0);
-    } else if (ratio < 0) {
-        LayoutUnit newHeight = renderBox.width() * elementSize.height() / elementSize.width();
-        if (renderBox.height() - newHeight > 2)
-            renderBox.setHeight(newHeight);
-        renderBox.move(0, (contentRect.height() - renderBox.height()) / 2);
-    }
-
-    return pixelSnappedIntRect(renderBox);
+    return pixelSnappedIntRect(replacedContentRect(overriddenIntrinsicSize));
 }
 
 bool RenderVideo::shouldDisplayVideo() const
@@ -180,41 +152,43 @@ void RenderVideo::paintReplaced(PaintInfo& paintInfo, const LayoutPoint& paintOf
 {
     MediaPlayer* mediaPlayer = mediaElement()->player();
     bool displayingPoster = videoElement()->shouldDisplayPosterImage();
-
-    Page* page = 0;
-    if (Frame* frame = this->frame())
-        page = frame->page();
-
-    if (!displayingPoster && !mediaPlayer) {
-        if (page && paintInfo.phase == PaintPhaseForeground)
-            page->addRelevantUnpaintedObject(this, visualOverflowRect());
+    if (!displayingPoster && !mediaPlayer)
         return;
-    }
 
     LayoutRect rect = videoBox();
-    if (rect.isEmpty()) {
-        if (page && paintInfo.phase == PaintPhaseForeground)
-            page->addRelevantUnpaintedObject(this, visualOverflowRect());
+    if (rect.isEmpty())
         return;
-    }
     rect.moveBy(paintOffset);
 
-    if (page && paintInfo.phase == PaintPhaseForeground)
-        page->addRelevantRepaintedObject(this, rect);
+    LayoutRect contentRect = contentBoxRect();
+    contentRect.moveBy(paintOffset);
+    GraphicsContext* context = paintInfo.context;
+    bool clip = !contentRect.contains(rect);
+    if (clip) {
+        context->save();
+        context->clip(contentRect);
+    }
 
     if (displayingPoster)
-        paintIntoRect(paintInfo.context, rect);
-    else if (document()->view() && document()->view()->paintBehavior() & PaintBehaviorFlattenCompositingLayers)
-        mediaPlayer->paintCurrentFrameInContext(paintInfo.context, pixelSnappedIntRect(rect));
-    else
-        mediaPlayer->paint(paintInfo.context, pixelSnappedIntRect(rect));
+        paintIntoRect(context, rect);
+    else if ((document().view() && document().view()->paintBehavior() & PaintBehaviorFlattenCompositingLayers) || !acceleratedRenderingInUse())
+        mediaPlayer->paint(context, pixelSnappedIntRect(rect));
+
+    if (clip)
+        context->restore();
+}
+
+bool RenderVideo::acceleratedRenderingInUse()
+{
+    blink::WebLayer* webLayer = mediaElement()->platformLayer();
+    return webLayer && !webLayer->isOrphan();
 }
 
 void RenderVideo::layout()
 {
-    StackStats::LayoutCheckPoint layoutCheckPoint;
-    RenderMedia::layout();
+    LayoutRectRecorder recorder(*this);
     updatePlayer();
+    RenderMedia::layout();
 }
 
 HTMLVideoElement* RenderVideo::videoElement() const
@@ -237,7 +211,7 @@ void RenderVideo::updatePlayer()
     if (!mediaPlayer)
         return;
 
-    if (!videoElement()->inActiveDocument())
+    if (!videoElement()->isActive())
         return;
 
     contentChanged(VideoChanged);
@@ -260,11 +234,7 @@ LayoutUnit RenderVideo::minimumReplacedHeight() const
 
 bool RenderVideo::supportsAcceleratedRendering() const
 {
-    MediaPlayer* p = mediaElement()->player();
-    if (p)
-        return p->supportsAcceleratedRendering();
-
-    return false;
+    return !!mediaElement()->platformLayer();
 }
 
 static const RenderBlock* rendererPlaceholder(const RenderObject* renderer)

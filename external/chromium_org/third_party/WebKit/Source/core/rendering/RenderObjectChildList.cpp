@@ -38,12 +38,8 @@ namespace WebCore {
 void RenderObjectChildList::destroyLeftoverChildren()
 {
     while (firstChild()) {
-        if (firstChild()->isListMarker() || (firstChild()->style()->styleType() == FIRST_LETTER && !firstChild()->isText()))
+        if (firstChild()->isListMarker() || (firstChild()->style()->styleType() == FIRST_LETTER && !firstChild()->isText())) {
             firstChild()->remove();  // List markers are owned by their enclosing list and so don't get destroyed by this container. Similarly, first letters are destroyed by their remaining text fragment.
-        else if (firstChild()->isRunIn() && firstChild()->node()) {
-            firstChild()->node()->setRenderer(0);
-            firstChild()->node()->setNeedsStyleRecalc();
-            firstChild()->destroy();
         } else {
             // Destroy any anonymous children remaining in the render tree, as well as implicit (shadow) DOM elements like those used in the engine-based text fields.
             if (firstChild()->node())
@@ -109,7 +105,7 @@ RenderObject* RenderObjectChildList::removeChildNode(RenderObject* owner, Render
     if (!owner->documentBeingDestroyed())
         RenderCounter::rendererRemovedFromTree(oldChild);
 
-    if (AXObjectCache* cache = owner->document()->existingAXObjectCache())
+    if (AXObjectCache* cache = owner->document().existingAXObjectCache())
         cache->childrenChanged(owner);
 
     return oldChild;
@@ -118,7 +114,7 @@ RenderObject* RenderObjectChildList::removeChildNode(RenderObject* owner, Render
 void RenderObjectChildList::insertChildNode(RenderObject* owner, RenderObject* newChild, RenderObject* beforeChild, bool notifyRenderer)
 {
     ASSERT(!newChild->parent());
-    ASSERT(!owner->isBlockFlow() || (!newChild->isTableSection() && !newChild->isTableRow() && !newChild->isTableCell()));
+    ASSERT(!owner->isRenderBlockFlow() || (!newChild->isTableSection() && !newChild->isTableRow() && !newChild->isTableCell()));
 
     while (beforeChild && beforeChild->parent() && beforeChild->parent() != owner)
         beforeChild = beforeChild->parent();
@@ -161,7 +157,7 @@ void RenderObjectChildList::insertChildNode(RenderObject* owner, RenderObject* n
     if (!owner->normalChildNeedsLayout())
         owner->setChildNeedsLayout(); // We may supply the static position for an absolute positioned child.
 
-    if (AXObjectCache* cache = owner->document()->axObjectCache())
+    if (AXObjectCache* cache = owner->document().axObjectCache())
         cache->childrenChanged(owner);
 }
 

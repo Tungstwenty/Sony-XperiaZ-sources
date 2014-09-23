@@ -29,17 +29,16 @@
 
 #include "HTMLNames.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "core/dom/MouseEvent.h"
 #include "core/dom/Text.h"
-#include "core/html/DateTimeFieldsState.h"
+#include "core/events/MouseEvent.h"
+#include "core/html/forms/DateTimeFieldsState.h"
 #include "core/html/shadow/DateTimeFieldElements.h"
 #include "core/html/shadow/ShadowElementNames.h"
-#include "core/platform/DateComponents.h"
-#include "core/platform/graphics/FontCache.h"
-#include "core/platform/text/DateTimeFormat.h"
-#include "core/platform/text/PlatformLocale.h"
 #include "core/rendering/style/RenderStyle.h"
 #include "core/rendering/style/StyleInheritedData.h"
+#include "platform/fonts/FontCache.h"
+#include "platform/text/DateTimeFormat.h"
+#include "platform/text/PlatformLocale.h"
 #include "wtf/DateMath.h"
 
 namespace WebCore {
@@ -144,7 +143,7 @@ void DateTimeEditBuilder::visitField(DateTimeFormat::FieldType fieldType, int co
     const int countForAbbreviatedMonth = 3;
     const int countForFullMonth = 4;
     const int countForNarrowMonth = 5;
-    Document* const document = m_editElement.document();
+    Document& document = m_editElement.document();
 
     switch (fieldType) {
     case DateTimeFormat::FieldTypeDayOfMonth: {
@@ -403,14 +402,14 @@ void DateTimeEditBuilder::visitLiteral(const String& text)
     DEFINE_STATIC_LOCAL(AtomicString, textPseudoId, ("-webkit-datetime-edit-text", AtomicString::ConstructFromLiteral));
     ASSERT(text.length());
     RefPtr<HTMLDivElement> element = HTMLDivElement::create(m_editElement.document());
-    element->setPart(textPseudoId);
+    element->setPseudo(textPseudoId);
     if (m_parameters.locale.isRTL() && text.length()) {
         Direction dir = direction(text[0]);
         if (dir == SegmentSeparator || dir == WhiteSpaceNeutral || dir == OtherNeutral)
             element->appendChild(Text::create(m_editElement.document(), String(&rightToLeftMark, 1)));
     }
     element->appendChild(Text::create(m_editElement.document(), text));
-    m_editElement.fieldsWrapperElement()->appendChild(element, ASSERT_NO_EXCEPTION, AttachLazily);
+    m_editElement.fieldsWrapperElement()->appendChild(element);
 }
 
 DateTimeNumericFieldElement::Step DateTimeEditBuilder::createStep(double msPerFieldUnit, double msPerFieldSize) const
@@ -440,8 +439,8 @@ DateTimeEditElement::EditControlOwner::~EditControlOwner()
 {
 }
 
-DateTimeEditElement::DateTimeEditElement(Document* document, EditControlOwner& editControlOwner)
-    : HTMLDivElement(divTag, document)
+DateTimeEditElement::DateTimeEditElement(Document& document, EditControlOwner& editControlOwner)
+    : HTMLDivElement(document)
     , m_editControlOwner(&editControlOwner)
 {
     setHasCustomStyleCallbacks();
@@ -464,7 +463,7 @@ void DateTimeEditElement::addField(PassRefPtr<DateTimeFieldElement> field)
     if (m_fields.size() == m_fields.capacity())
         return;
     m_fields.append(field.get());
-    fieldsWrapperElement()->appendChild(field, ASSERT_NO_EXCEPTION, AttachLazily);
+    fieldsWrapperElement()->appendChild(field);
 }
 
 bool DateTimeEditElement::anyEditableFieldsHaveValues() const
@@ -482,10 +481,10 @@ void DateTimeEditElement::blurByOwner()
         field->blur();
 }
 
-PassRefPtr<DateTimeEditElement> DateTimeEditElement::create(Document* document, EditControlOwner& editControlOwner)
+PassRefPtr<DateTimeEditElement> DateTimeEditElement::create(Document& document, EditControlOwner& editControlOwner)
 {
     RefPtr<DateTimeEditElement> container = adoptRef(new DateTimeEditElement(document, editControlOwner));
-    container->setPart(AtomicString("-webkit-datetime-edit", AtomicString::ConstructFromLiteral));
+    container->setPseudo(AtomicString("-webkit-datetime-edit", AtomicString::ConstructFromLiteral));
     container->setAttribute(idAttr, ShadowElementNames::dateTimeEdit());
     return container.release();
 }
@@ -512,6 +511,7 @@ PassRefPtr<RenderStyle> DateTimeEditElement::customStyleForRenderer()
         }
     }
     style->setWidth(Length(ceilf(width), Fixed));
+    style->setUnique();
     return style.release();
 }
 
@@ -573,7 +573,7 @@ DateTimeFieldElement* DateTimeEditElement::focusedField() const
 
 size_t DateTimeEditElement::focusedFieldIndex() const
 {
-    Element* const focusedFieldElement = document()->focusedElement();
+    Element* const focusedFieldElement = document().focusedElement();
     for (size_t fieldIndex = 0; fieldIndex < m_fields.size(); ++fieldIndex) {
         if (m_fields[fieldIndex] == focusedFieldElement)
             return fieldIndex;
@@ -652,8 +652,8 @@ void DateTimeEditElement::layout(const LayoutParameters& layoutParameters, const
     DEFINE_STATIC_LOCAL(AtomicString, fieldsWrapperPseudoId, ("-webkit-datetime-edit-fields-wrapper", AtomicString::ConstructFromLiteral));
     if (!firstChild()) {
         RefPtr<HTMLDivElement> element = HTMLDivElement::create(document());
-        element->setPart(fieldsWrapperPseudoId);
-        appendChild(element.get(), ASSERT_NO_EXCEPTION, AttachLazily);
+        element->setPseudo(fieldsWrapperPseudoId);
+        appendChild(element.get());
     }
     Element* fieldsWrapper = fieldsWrapperElement();
 

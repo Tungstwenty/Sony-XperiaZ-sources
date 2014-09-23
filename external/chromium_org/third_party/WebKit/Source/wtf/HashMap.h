@@ -21,6 +21,7 @@
 #ifndef WTF_HashMap_h
 #define WTF_HashMap_h
 
+#include "wtf/FastAllocBase.h"
 #include "wtf/HashTable.h"
 
 namespace WTF {
@@ -75,8 +76,8 @@ namespace WTF {
     public:
         void swap(HashMap&);
 
-        int size() const;
-        int capacity() const;
+        unsigned size() const;
+        unsigned capacity() const;
         bool isEmpty() const;
 
         // iterators iterate over pairs of keys and values
@@ -250,13 +251,13 @@ namespace WTF {
     }
 
     template<typename T, typename U, typename V, typename W, typename X>
-    inline int HashMap<T, U, V, W, X>::size() const
+    inline unsigned HashMap<T, U, V, W, X>::size() const
     {
         return m_impl.size();
     }
 
     template<typename T, typename U, typename V, typename W, typename X>
-    inline int HashMap<T, U, V, W, X>::capacity() const
+    inline unsigned HashMap<T, U, V, W, X>::capacity() const
     {
         return m_impl.capacity();
     }
@@ -432,11 +433,11 @@ namespace WTF {
 
         typedef typename HashMap<T, U, V, W, X>::const_iterator const_iterator;
 
-        const_iterator end = a.end();
-        const_iterator notFound = b.end();
-        for (const_iterator it = a.begin(); it != end; ++it) {
+        const_iterator aEnd = a.end();
+        const_iterator bEnd = b.end();
+        for (const_iterator it = a.begin(); it != aEnd; ++it) {
             const_iterator bPos = b.find(it->key);
-            if (bPos == notFound || it->value != bPos->value)
+            if (bPos == bEnd || it->value != bPos->value)
                 return false;
         }
 

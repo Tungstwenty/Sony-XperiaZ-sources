@@ -25,9 +25,9 @@
 #ifndef StyleBackgroundData_h
 #define StyleBackgroundData_h
 
-#include "core/css/StyleColor.h"
 #include "core/rendering/style/FillLayer.h"
 #include "core/rendering/style/OutlineValue.h"
+#include "platform/graphics/Color.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 
@@ -46,7 +46,7 @@ public:
     }
 
     const FillLayer& background() const { return m_background; }
-    const StyleColor& color() const { return m_color; }
+    const Color& color() const { return m_color; }
     const OutlineValue& outline() const { return m_outline; }
 
 private:
@@ -56,7 +56,7 @@ private:
     StyleBackgroundData(const StyleBackgroundData&);
 
     FillLayer m_background;
-    StyleColor m_color;
+    Color m_color;
     OutlineValue m_outline;
 };
 

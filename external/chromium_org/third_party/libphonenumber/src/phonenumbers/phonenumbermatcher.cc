@@ -26,10 +26,9 @@
 #endif  // I18N_PHONENUMBERS_USE_ICU_REGEXP
 
 #include <ctype.h>
-#include <iostream>
+#include <stddef.h>
 #include <limits>
 #include <map>
-#include <stddef.h>
 #include <string>
 #include <utility>
 #include <vector>
@@ -56,8 +55,6 @@
 #include "phonenumbers/regexp_adapter_re2.h"
 #endif  // I18N_PHONENUMBERS_USE_RE2_AND_ICU
 
-using std::cerr;
-using std::endl;
 using std::make_pair;
 using std::map;
 using std::numeric_limits;
@@ -136,13 +133,23 @@ bool AllNumberGroupsRemainGrouped(
     // Moves from_index forward.
     from_index += formatted_number_groups.at(i).length();
     if (i == 0 && from_index < normalized_candidate.length()) {
-      // We are at the position right after the NDC. Note although
-      // normalized_candidate might contain non-ASCII formatting characters,
-      // they won't be treated as ASCII digits when converted to a char.
-      if (isdigit(normalized_candidate.at(from_index))) {
+      // We are at the position right after the NDC. We get the region used for
+      // formatting information based on the country code in the phone number,
+      // rather than the number itself, as we do not need to distinguish between
+      // different countries with the same country calling code and this is
+      // faster.
+      string region;
+      util.GetRegionCodeForCountryCode(phone_number.country_code(), &region);
+      string ndd_prefix;
+      util.GetNddPrefixForRegion(region, true, &ndd_prefix);
+      // Note although normalized_candidate might contain non-ASCII formatting
+      // characters, they won't be treated as ASCII digits when converted to a
+      // char.
+      if (!ndd_prefix.empty() && isdigit(normalized_candidate.at(from_index))) {
         // This means there is no formatting symbol after the NDC. In this case,
         // we only accept the number if there is no formatting symbol at all in
-        // the number, except for extensions.
+        // the number, except for extensions. This is only important for
+        // countries with national prefixes.
         string national_significant_number;
         util.GetNationalSignificantNumber(
             phone_number, &national_significant_number);
@@ -163,7 +170,7 @@ bool LoadAlternateFormats(PhoneMetadataCollection* alternate_formats) {
 #if defined(I18N_PHONENUMBERS_USE_ALTERNATE_FORMATS)
   if (!alternate_formats->ParseFromArray(alternate_format_get(),
                                          alternate_format_size())) {
-    cerr << "Could not parse binary data." << endl;
+    LOG(ERROR) << "Could not parse binary data.";
     return false;
   }
   return true;
@@ -478,8 +485,8 @@ bool PhoneNumberMatcher::VerifyAccordingToLeniency(
     case PhoneNumberMatcher::STRICT_GROUPING: {
       if (!phone_util_.IsValidNumber(number) ||
           !ContainsOnlyValidXChars(number, candidate, phone_util_) ||
-          // Two or more slashes were present.
-          (FindNth(candidate, '/', 2) != string::npos) ||
+          ContainsMoreThanOneSlashInNationalNumber(
+              number, candidate, phone_util_) ||
           !IsNationalPrefixPresentIfRequired(number)) {
         return false;
       }
@@ -493,8 +500,8 @@ bool PhoneNumberMatcher::VerifyAccordingToLeniency(
     case PhoneNumberMatcher::EXACT_GROUPING: {
       if (!phone_util_.IsValidNumber(number) ||
           !ContainsOnlyValidXChars(number, candidate, phone_util_) ||
-          // Two or more slashes were present.
-          (FindNth(candidate, '/', 2) != string::npos) ||
+          ContainsMoreThanOneSlashInNationalNumber(
+              number, candidate, phone_util_) ||
           !IsNationalPrefixPresentIfRequired(number)) {
         return false;
       }
@@ -816,6 +823,38 @@ bool PhoneNumberMatcher::AllNumberGroupsAreExactlyPresent(
   return (candidate_number_group_index >= 0 &&
           HasSuffixString(candidate_groups.at(candidate_number_group_index),
                           formatted_number_groups.at(0)));
+}
+
+// static
+bool PhoneNumberMatcher::ContainsMoreThanOneSlashInNationalNumber(
+    const PhoneNumber& number,
+    const string& candidate,
+    const PhoneNumberUtil& util) {
+  size_t first_slash_in_body = candidate.find('/');
+  if (first_slash_in_body == string::npos) {
+    // No slashes, this is okay.
+    return false;
+  }
+  // Now look for a second one.
+  size_t second_slash_in_body = candidate.find('/', first_slash_in_body + 1);
+  if (second_slash_in_body == string::npos) {
+    // Only one slash, this is okay.
+    return false;
+  }
+
+  // If the first slash is after the country calling code, this is permitted.
+  if (number.country_code_source() == PhoneNumber::FROM_NUMBER_WITH_PLUS_SIGN ||
+      number.country_code_source() ==
+          PhoneNumber::FROM_NUMBER_WITHOUT_PLUS_SIGN) {
+    string normalized_country_code =
+        candidate.substr(0, first_slash_in_body);
+    util.NormalizeDigitsOnly(&normalized_country_code);
+    if (normalized_country_code == SimpleItoa(number.country_code())) {
+      // Any more slashes and this is illegal.
+      return candidate.find('/', second_slash_in_body + 1) != string::npos;
+    }
+  }
+  return true;
 }
 
 }  // namespace phonenumbers

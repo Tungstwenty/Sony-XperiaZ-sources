@@ -50,6 +50,9 @@ inline int DecodeConstantPoolLength(int instr) {
   return ((instr >> 4) & 0xfff0) | (instr & 0xf);
 }
 
+// Used in code age prologue - ldr(pc, MemOperand(pc, -4))
+const int kCodeAgeJumpInstruction = 0xe51ff004;
+
 // Number of registers in normal ARM mode.
 const int kNumRegisters = 16;
 
@@ -220,6 +223,8 @@ enum {
   kCoprocessorMask = 15 << 8,
   kOpCodeMask = 15 << 21,  // In data-processing instructions.
   kImm24Mask  = (1 << 24) - 1,
+  kImm16Mask  = (1 << 16) - 1,
+  kImm8Mask  = (1 << 8) - 1,
   kOff12Mask  = (1 << 12) - 1,
   kOff8Mask  = (1 << 8) - 1
 };

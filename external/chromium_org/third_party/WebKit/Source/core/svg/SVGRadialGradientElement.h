@@ -21,6 +21,7 @@
 #ifndef SVGRadialGradientElement_h
 #define SVGRadialGradientElement_h
 
+#include "SVGNames.h"
 #include "core/svg/SVGAnimatedLength.h"
 #include "core/svg/SVGGradientElement.h"
 
@@ -30,12 +31,12 @@ struct RadialGradientAttributes;
 
 class SVGRadialGradientElement FINAL : public SVGGradientElement {
 public:
-    static PassRefPtr<SVGRadialGradientElement> create(const QualifiedName&, Document*);
+    static PassRefPtr<SVGRadialGradientElement> create(Document&);
 
     bool collectGradientAttributes(RadialGradientAttributes&);
 
 private:
-    SVGRadialGradientElement(const QualifiedName&, Document*);
+    explicit SVGRadialGradientElement(Document&);
 
     bool isSupportedAttribute(const QualifiedName&);
     virtual void parseAttribute(const QualifiedName&, const AtomicString&) OVERRIDE;
@@ -54,6 +55,8 @@ private:
         DECLARE_ANIMATED_LENGTH(Fr, fr)
     END_DECLARE_ANIMATED_PROPERTIES
 };
+
+DEFINE_NODE_TYPE_CASTS(SVGRadialGradientElement, hasTagName(SVGNames::radialGradientTag));
 
 } // namespace WebCore
 

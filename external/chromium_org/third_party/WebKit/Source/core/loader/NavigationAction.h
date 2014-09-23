@@ -29,11 +29,11 @@
 #ifndef NavigationAction_h
 #define NavigationAction_h
 
-#include "core/dom/Event.h"
+#include "core/events/Event.h"
 #include "core/loader/FrameLoaderTypes.h"
 #include "core/loader/NavigationPolicy.h"
-#include "core/platform/network/ResourceRequest.h"
-#include "weborigin/KURL.h"
+#include "platform/network/ResourceRequest.h"
+#include "platform/weborigin/KURL.h"
 #include "wtf/Forward.h"
 
 namespace WebCore {
@@ -41,22 +41,19 @@ namespace WebCore {
     class NavigationAction {
     public:
         NavigationAction();
-        explicit NavigationAction(const ResourceRequest&);
-        NavigationAction(const ResourceRequest&, NavigationType);
-        NavigationAction(const ResourceRequest&, FrameLoadType, bool isFormSubmission);
-        NavigationAction(const ResourceRequest&, NavigationType, PassRefPtr<Event>);
-        NavigationAction(const ResourceRequest&, FrameLoadType, bool isFormSubmission, PassRefPtr<Event>);
+        NavigationAction(const ResourceRequest&, FrameLoadType = FrameLoadTypeStandard, bool isFormSubmission = false, PassRefPtr<Event> = 0);
 
         const ResourceRequest& resourceRequest() const { return m_resourceRequest; }
         NavigationType type() const { return m_type; }
         Event* event() const { return m_event.get(); }
-
-        bool specifiesNavigationPolicy(NavigationPolicy*) const;
+        NavigationPolicy policy() const { return m_policy; }
+        bool shouldOpenInNewWindow() const { return m_policy != NavigationPolicyCurrentTab; }
 
     private:
         ResourceRequest m_resourceRequest;
         NavigationType m_type;
         RefPtr<Event> m_event;
+        NavigationPolicy m_policy;
     };
 
 }

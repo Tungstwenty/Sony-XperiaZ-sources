@@ -31,14 +31,12 @@ namespace WebCore {
 SVGColor::SVGColor(const SVGColorType& colorType)
     : CSSValue(SVGColorClass)
     , m_colorType(colorType)
-    , m_valid(false)
 {
 }
 
 SVGColor::SVGColor(ClassType classType, const SVGColorType& colorType)
     : CSSValue(classType)
     , m_colorType(colorType)
-    , m_valid(false)
 {
 }
 
@@ -47,35 +45,33 @@ PassRefPtr<RGBColor> SVGColor::rgbColor() const
     return RGBColor::create(m_color.rgb());
 }
 
-bool SVGColor::colorFromRGBColorString(const String& colorString, Color& color)
+Color SVGColor::colorFromRGBColorString(const String& colorString)
 {
     // FIXME: Rework css parser so it is more SVG aware.
-    RGBA32 rgba;
-    if (CSSParser::parseColor(rgba, colorString.stripWhiteSpace())) {
-        color = rgba;
-        return true;
-    }
-    return false;
+    RGBA32 color;
+    if (CSSParser::parseColor(color, colorString.stripWhiteSpace()))
+        return color;
+    return Color();
 }
 
-void SVGColor::setRGBColor(const String&, ExceptionState& es)
+void SVGColor::setRGBColor(const String&, ExceptionState& exceptionState)
 {
     // The whole SVGColor interface is deprecated in SVG 1.1 (2nd edition).
     // The setters are the most problematic part so we remove the support for those first.
-    es.throwDOMException(NoModificationAllowedError);
+    exceptionState.throwUninformativeAndGenericDOMException(NoModificationAllowedError);
 }
 
-void SVGColor::setRGBColorICCColor(const String&, const String&, ExceptionState& es)
+void SVGColor::setRGBColorICCColor(const String&, const String&, ExceptionState& exceptionState)
 {
-    es.throwDOMException(NoModificationAllowedError);
+    exceptionState.throwUninformativeAndGenericDOMException(NoModificationAllowedError);
 }
 
-void SVGColor::setColor(unsigned short, const String&, const String&, ExceptionState& es)
+void SVGColor::setColor(unsigned short, const String&, const String&, ExceptionState& exceptionState)
 {
-    es.throwDOMException(NoModificationAllowedError);
+    exceptionState.throwUninformativeAndGenericDOMException(NoModificationAllowedError);
 }
 
-String SVGColor::customCssText() const
+String SVGColor::customCSSText() const
 {
     switch (m_colorType) {
     case SVG_COLORTYPE_UNKNOWN:
@@ -85,7 +81,7 @@ String SVGColor::customCssText() const
         // FIXME: No ICC color support.
         return m_color.serialized();
     case SVG_COLORTYPE_CURRENTCOLOR:
-        if (m_valid)
+        if (m_color.isValid())
             return m_color.serialized();
         return "currentColor";
     }

@@ -22,8 +22,6 @@
 
 #include "CSSPropertyNames.h"
 #include "core/dom/Document.h"
-#include "core/platform/graphics/Font.h"
-#include "core/platform/graphics/GraphicsContextStateSaver.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/InlineTextBox.h"
 #include "core/rendering/RenderBlock.h"
@@ -35,6 +33,8 @@
 #include "core/rendering/RenderRubyText.h"
 #include "core/rendering/RenderView.h"
 #include "core/rendering/RootInlineBox.h"
+#include "platform/fonts/Font.h"
+#include "platform/graphics/GraphicsContextStateSaver.h"
 
 #include <math.h>
 
@@ -728,7 +728,6 @@ void InlineFlowBox::placeBoxesInBlockDirection(LayoutUnit top, LayoutUnit maxHei
     }
 }
 
-#if ENABLE(CSS3_TEXT)
 void InlineFlowBox::computeMaxLogicalTop(float& maxLogicalTop) const
 {
     for (InlineBox* curr = firstChild(); curr; curr = curr->nextOnLine()) {
@@ -745,7 +744,6 @@ void InlineFlowBox::computeMaxLogicalTop(float& maxLogicalTop) const
         maxLogicalTop = max<float>(maxLogicalTop, localMaxLogicalTop);
     }
 }
-#endif // CSS3_TEXT
 
 void InlineFlowBox::flipLinesInBlockDirection(LayoutUnit lineTop, LayoutUnit lineBottom)
 {
@@ -1040,7 +1038,7 @@ bool InlineFlowBox::nodeAtPoint(const HitTestRequest& request, HitTestResult& re
     LayoutUnit height = frameRect.height();
 
     // Constrain our hit testing to the line top and bottom if necessary.
-    bool noQuirksMode = renderer()->document()->inNoQuirksMode();
+    bool noQuirksMode = renderer()->document().inNoQuirksMode();
     if (!noQuirksMode && !hasTextChildren() && !(descendantsHaveSameLineHeightAndBaseline() && hasTextDescendants())) {
         RootInlineBox* rootBox = root();
         LayoutUnit& top = isHorizontal() ? minY : minX;
@@ -1105,8 +1103,9 @@ void InlineFlowBox::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset, 
                     // Add ourselves to the containing block of the entire continuation so that it can
                     // paint us atomically.
                     cb->addContinuationWithOutline(toRenderInline(renderer()->node()->renderer()));
-                } else if (!inlineFlow->isInlineElementContinuation())
-                    paintInfo.outlineObjects->add(inlineFlow);
+                } else if (!inlineFlow->isInlineElementContinuation()) {
+                    paintInfo.outlineObjects()->add(inlineFlow);
+                }
             }
         } else if (paintInfo.phase == PaintPhaseMask) {
             paintMask(paintInfo, paintOffset);
@@ -1207,7 +1206,7 @@ void InlineFlowBox::paintBoxShadow(const PaintInfo& info, RenderStyle* s, Shadow
 
 void InlineFlowBox::constrainToLineTopAndBottomIfNeeded(LayoutRect& rect) const
 {
-    bool noQuirksMode = renderer()->document()->inNoQuirksMode();
+    bool noQuirksMode = renderer()->document().inNoQuirksMode();
     if (!noQuirksMode && !hasTextChildren() && !(descendantsHaveSameLineHeightAndBaseline() && hasTextDescendants())) {
         const RootInlineBox* rootBox = root();
         LayoutUnit logicalTop = isHorizontal() ? rect.y() : rect.x();
@@ -1365,7 +1364,7 @@ void InlineFlowBox::paintMask(PaintInfo& paintInfo, const LayoutPoint& paintOffs
     bool hasBoxImage = maskBoxImage && maskBoxImage->canRender(renderer(), renderer()->style()->effectiveZoom());
     if (!hasBoxImage || !maskBoxImage->isLoaded()) {
         if (pushTransparencyLayer)
-            paintInfo.context->endTransparencyLayer();
+            paintInfo.context->endLayer();
         return; // Don't paint anything while we wait for the image to load.
     }
 
@@ -1394,7 +1393,7 @@ void InlineFlowBox::paintMask(PaintInfo& paintInfo, const LayoutPoint& paintOffs
     }
 
     if (pushTransparencyLayer)
-        paintInfo.context->endTransparencyLayer();
+        paintInfo.context->endLayer();
 }
 
 InlineBox* InlineFlowBox::firstLeafChild() const

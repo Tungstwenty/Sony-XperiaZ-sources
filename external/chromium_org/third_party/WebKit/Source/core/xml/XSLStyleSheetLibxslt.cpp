@@ -25,7 +25,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/Node.h"
 #include "core/dom/TransformSource.h"
-#include "core/page/Frame.h"
+#include "core/frame/Frame.h"
 #include "core/page/Page.h"
 #include "core/xml/XSLImportRule.h"
 #include "core/xml/XSLTProcessor.h"
@@ -131,7 +131,7 @@ bool XSLStyleSheet::parseString(const String& source)
     PageConsole* console = 0;
     Frame* frame = ownerDocument()->frame();
     if (frame && frame->page())
-        console = frame->page()->console();
+        console = &frame->page()->console();
 
     XMLDocumentParserScope scope(fetcher(), XSLTProcessor::genericErrorFunc, XSLTProcessor::parseErrorFunc, console);
     XMLParserInput input(source);
@@ -254,7 +254,7 @@ Document* XSLStyleSheet::ownerDocument()
     for (XSLStyleSheet* styleSheet = this; styleSheet; styleSheet = styleSheet->parentStyleSheet()) {
         Node* node = styleSheet->ownerNode();
         if (node)
-            return node->document();
+            return &node->document();
     }
     return 0;
 }

@@ -22,9 +22,7 @@
 
 #include "core/svg/SVGTextPathElement.h"
 
-#include "SVGNames.h"
 #include "XLinkNames.h"
-#include "core/dom/NodeRenderingContext.h"
 #include "core/rendering/svg/RenderSVGResource.h"
 #include "core/rendering/svg/RenderSVGTextPath.h"
 #include "core/svg/SVGElementInstance.h"
@@ -45,20 +43,19 @@ BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGTextPathElement)
     REGISTER_PARENT_ANIMATED_PROPERTIES(SVGTextContentElement)
 END_REGISTER_ANIMATED_PROPERTIES
 
-inline SVGTextPathElement::SVGTextPathElement(const QualifiedName& tagName, Document* document)
-    : SVGTextContentElement(tagName, document)
+inline SVGTextPathElement::SVGTextPathElement(Document& document)
+    : SVGTextContentElement(SVGNames::textPathTag, document)
     , m_startOffset(LengthModeOther)
     , m_method(SVGTextPathMethodAlign)
     , m_spacing(SVGTextPathSpacingExact)
 {
-    ASSERT(hasTagName(SVGNames::textPathTag));
     ScriptWrappable::init(this);
     registerAnimatedPropertiesForSVGTextPathElement();
 }
 
-PassRefPtr<SVGTextPathElement> SVGTextPathElement::create(const QualifiedName& tagName, Document* document)
+PassRefPtr<SVGTextPathElement> SVGTextPathElement::create(Document& document)
 {
-    return adoptRef(new SVGTextPathElement(tagName, document));
+    return adoptRef(new SVGTextPathElement(document));
 }
 
 SVGTextPathElement::~SVGTextPathElement()
@@ -68,8 +65,7 @@ SVGTextPathElement::~SVGTextPathElement()
 
 void SVGTextPathElement::clearResourceReferences()
 {
-    ASSERT(document());
-    document()->accessSVGExtensions()->removeAllTargetReferencesForElement(this);
+    document().accessSVGExtensions()->removeAllTargetReferencesForElement(this);
 }
 
 bool SVGTextPathElement::isSupportedAttribute(const QualifiedName& attrName)
@@ -133,23 +129,22 @@ RenderObject* SVGTextPathElement::createRenderer(RenderStyle*)
     return new RenderSVGTextPath(this);
 }
 
-bool SVGTextPathElement::childShouldCreateRenderer(const NodeRenderingContext& childContext) const
+bool SVGTextPathElement::childShouldCreateRenderer(const Node& child) const
 {
-    if (childContext.node()->isTextNode()
-        || childContext.node()->hasTagName(SVGNames::aTag)
-        || childContext.node()->hasTagName(SVGNames::trefTag)
-        || childContext.node()->hasTagName(SVGNames::tspanTag))
+    if (child.isTextNode()
+        || child.hasTagName(SVGNames::aTag)
+        || child.hasTagName(SVGNames::tspanTag))
         return true;
 
     return false;
 }
 
-bool SVGTextPathElement::rendererIsNeeded(const NodeRenderingContext& context)
+bool SVGTextPathElement::rendererIsNeeded(const RenderStyle& style)
 {
     if (parentNode()
         && (parentNode()->hasTagName(SVGNames::aTag)
             || parentNode()->hasTagName(SVGNames::textTag)))
-        return Element::rendererIsNeeded(context);
+        return Element::rendererIsNeeded(style);
 
     return false;
 }
@@ -164,17 +159,17 @@ void SVGTextPathElement::buildPendingResource()
     Element* target = SVGURIReference::targetElementFromIRIString(hrefCurrentValue(), document(), &id);
     if (!target) {
         // Do not register as pending if we are already pending this resource.
-        if (document()->accessSVGExtensions()->isElementPendingResource(this, id))
+        if (document().accessSVGExtensions()->isElementPendingResource(this, id))
             return;
 
         if (!id.isEmpty()) {
-            document()->accessSVGExtensions()->addPendingResource(id, this);
+            document().accessSVGExtensions()->addPendingResource(id, this);
             ASSERT(hasPendingResources());
         }
     } else if (target->hasTagName(SVGNames::pathTag)) {
         // Register us with the target in the dependencies map. Any change of hrefElement
         // that leads to relayout/repainting now informs us, so we can react to it.
-        document()->accessSVGExtensions()->addElementReferencingTarget(this, toSVGElement(target));
+        document().accessSVGExtensions()->addElementReferencingTarget(this, toSVGElement(target));
     }
 }
 

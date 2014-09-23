@@ -25,8 +25,9 @@
 #define HTMLAnchorElement_h
 
 #include "HTMLNames.h"
+#include "core/dom/DOMURLUtils.h"
 #include "core/html/HTMLElement.h"
-#include "core/platform/LinkHash.h"
+#include "platform/LinkHash.h"
 
 namespace WebCore {
 
@@ -53,10 +54,10 @@ enum {
 //     RelationUp          = 0x00020000,
 };
 
-class HTMLAnchorElement : public HTMLElement {
+class HTMLAnchorElement : public HTMLElement, public DOMURLUtils {
 public:
-    static PassRefPtr<HTMLAnchorElement> create(Document*);
-    static PassRefPtr<HTMLAnchorElement> create(const QualifiedName&, Document*);
+    static PassRefPtr<HTMLAnchorElement> create(Document&);
+    static PassRefPtr<HTMLAnchorElement> create(const QualifiedName&, Document&);
 
     virtual ~HTMLAnchorElement();
 
@@ -65,32 +66,13 @@ public:
 
     const AtomicString& name() const;
 
-    String hash() const;
-    void setHash(const String&);
+    virtual KURL url() const OVERRIDE;
+    virtual void setURL(const KURL&) OVERRIDE;
 
-    String host() const;
-    void setHost(const String&);
-
-    String hostname() const;
-    void setHostname(const String&);
-
-    String pathname() const;
-    void setPathname(const String&);
-
-    String port() const;
-    void setPort(const String&);
-
-    String protocol() const;
-    void setProtocol(const String&);
-
-    String search() const;
-    void setSearch(const String&);
-
-    String origin() const;
+    virtual String input() const OVERRIDE;
+    virtual void setInput(const String&) OVERRIDE;
 
     String text();
-
-    String toString() const;
 
     bool isLiveLink() const;
 
@@ -103,7 +85,7 @@ public:
     void invalidateCachedVisitedLinkHash() { m_cachedVisitedLinkHash = 0; }
 
 protected:
-    HTMLAnchorElement(const QualifiedName&, Document*);
+    HTMLAnchorElement(const QualifiedName&, Document&);
 
     virtual void parseAttribute(const QualifiedName&, const AtomicString&) OVERRIDE;
 
@@ -112,13 +94,14 @@ private:
     virtual bool isMouseFocusable() const;
     virtual bool isKeyboardFocusable() const OVERRIDE;
     virtual void defaultEventHandler(Event*);
-    virtual void setActive(bool active = true, bool pause = false);
+    virtual void setActive(bool = true) OVERRIDE FINAL;
     virtual void accessKeyAction(bool sendMouseEvents);
     virtual bool isURLAttribute(const Attribute&) const OVERRIDE;
     virtual bool canStartSelection() const;
     virtual String target() const;
     virtual short tabIndex() const;
     virtual bool draggable() const;
+    virtual bool isInteractiveContent() const OVERRIDE;
 
     void sendPings(const KURL& destinationURL);
 
@@ -149,7 +132,7 @@ private:
 inline LinkHash HTMLAnchorElement::visitedLinkHash() const
 {
     if (!m_cachedVisitedLinkHash)
-        m_cachedVisitedLinkHash = WebCore::visitedLinkHash(document()->baseURL(), fastGetAttribute(HTMLNames::hrefAttr));
+        m_cachedVisitedLinkHash = WebCore::visitedLinkHash(document().baseURL(), fastGetAttribute(HTMLNames::hrefAttr));
     return m_cachedVisitedLinkHash;
 }
 
@@ -168,11 +151,12 @@ inline bool isHTMLAnchorElement(const Element* element)
     return element->hasTagName(HTMLNames::aTag);
 }
 
-inline HTMLAnchorElement* toHTMLAnchorElement(Node* node)
+inline bool isHTMLAnchorElement(const Element& element)
 {
-    ASSERT_WITH_SECURITY_IMPLICATION(!node || isHTMLAnchorElement(node));
-    return static_cast<HTMLAnchorElement*>(node);
+    return element.hasTagName(HTMLNames::aTag);
 }
+
+DEFINE_NODE_TYPE_CASTS(HTMLAnchorElement, hasTagName(HTMLNames::aTag));
 
 } // namespace WebCore
 

@@ -212,7 +212,7 @@ void CodeEventLogger::CodeCreateEvent(Logger::LogEventsAndTags tag,
                                       Code* code,
                                       SharedFunctionInfo* shared,
                                       CompilationInfo* info,
-                                      Name* source, int line) {
+                                      Name* source, int line, int column) {
   name_buffer_->Init(tag);
   name_buffer_->AppendBytes(ComputeMarker(code));
   name_buffer_->AppendString(shared->DebugName());
@@ -243,6 +243,231 @@ void CodeEventLogger::RegExpCodeCreateEvent(Code* code, String* source) {
   name_buffer_->Init(Logger::REG_EXP_TAG);
   name_buffer_->AppendString(source);
   LogRecordedBuffer(code, NULL, name_buffer_->get(), name_buffer_->size());
+}
+
+
+// Linux perf tool logging support
+class PerfBasicLogger : public CodeEventLogger {
+ public:
+  PerfBasicLogger();
+  virtual ~PerfBasicLogger();
+
+  virtual void CodeMoveEvent(Address from, Address to) { }
+  virtual void CodeDeleteEvent(Address from) { }
+
+ private:
+  virtual void LogRecordedBuffer(Code* code,
+                                 SharedFunctionInfo* shared,
+                                 const char* name,
+                                 int length);
+
+  // Extension added to V8 log file name to get the low-level log name.
+  static const char kFilenameFormatString[];
+  static const int kFilenameBufferPadding;
+
+  // File buffer size of the low-level log. We don't use the default to
+  // minimize the associated overhead.
+  static const int kLogBufferSize = 2 * MB;
+
+  FILE* perf_output_handle_;
+};
+
+const char PerfBasicLogger::kFilenameFormatString[] = "/tmp/perf-%d.map";
+// Extra space for the PID in the filename
+const int PerfBasicLogger::kFilenameBufferPadding = 16;
+
+PerfBasicLogger::PerfBasicLogger()
+    : perf_output_handle_(NULL) {
+  // Open the perf JIT dump file.
+  int bufferSize = sizeof(kFilenameFormatString) + kFilenameBufferPadding;
+  ScopedVector<char> perf_dump_name(bufferSize);
+  int size = OS::SNPrintF(
+      perf_dump_name,
+      kFilenameFormatString,
+      OS::GetCurrentProcessId());
+  CHECK_NE(size, -1);
+  perf_output_handle_ = OS::FOpen(perf_dump_name.start(), OS::LogFileOpenMode);
+  CHECK_NE(perf_output_handle_, NULL);
+  setvbuf(perf_output_handle_, NULL, _IOFBF, kLogBufferSize);
+}
+
+
+PerfBasicLogger::~PerfBasicLogger() {
+  fclose(perf_output_handle_);
+  perf_output_handle_ = NULL;
+}
+
+
+void PerfBasicLogger::LogRecordedBuffer(Code* code,
+                                       SharedFunctionInfo*,
+                                       const char* name,
+                                       int length) {
+  ASSERT(code->instruction_start() == code->address() + Code::kHeaderSize);
+
+  OS::FPrint(perf_output_handle_, "%llx %x %.*s\n",
+      reinterpret_cast<uint64_t>(code->instruction_start()),
+      code->instruction_size(),
+      length, name);
+}
+
+
+// Linux perf tool logging support
+class PerfJitLogger : public CodeEventLogger {
+ public:
+  PerfJitLogger();
+  virtual ~PerfJitLogger();
+
+  virtual void CodeMoveEvent(Address from, Address to) { }
+  virtual void CodeDeleteEvent(Address from) { }
+
+ private:
+  virtual void LogRecordedBuffer(Code* code,
+                                 SharedFunctionInfo* shared,
+                                 const char* name,
+                                 int length);
+
+  // Extension added to V8 log file name to get the low-level log name.
+  static const char kFilenameFormatString[];
+  static const int kFilenameBufferPadding;
+
+  // File buffer size of the low-level log. We don't use the default to
+  // minimize the associated overhead.
+  static const int kLogBufferSize = 2 * MB;
+
+  void LogWriteBytes(const char* bytes, int size);
+  void LogWriteHeader();
+
+  static const uint32_t kJitHeaderMagic = 0x4F74496A;
+  static const uint32_t kJitHeaderVersion = 0x2;
+  static const uint32_t kElfMachIA32 = 3;
+  static const uint32_t kElfMachX64 = 62;
+  static const uint32_t kElfMachARM = 40;
+  static const uint32_t kElfMachMIPS = 10;
+
+  struct jitheader {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t total_size;
+    uint32_t elf_mach;
+    uint32_t pad1;
+    uint32_t pid;
+    uint64_t timestamp;
+  };
+
+  enum jit_record_type {
+    JIT_CODE_LOAD = 0
+    // JIT_CODE_UNLOAD = 1,
+    // JIT_CODE_CLOSE = 2,
+    // JIT_CODE_DEBUG_INFO = 3,
+    // JIT_CODE_PAGE_MAP = 4,
+    // JIT_CODE_MAX = 5
+  };
+
+  struct jr_code_load {
+    uint32_t id;
+    uint32_t total_size;
+    uint64_t timestamp;
+    uint64_t vma;
+    uint64_t code_addr;
+    uint32_t code_size;
+    uint32_t align;
+  };
+
+  uint32_t GetElfMach() {
+#if V8_TARGET_ARCH_IA32
+    return kElfMachIA32;
+#elif V8_TARGET_ARCH_X64
+    return kElfMachX64;
+#elif V8_TARGET_ARCH_ARM
+    return kElfMachARM;
+#elif V8_TARGET_ARCH_MIPS
+    return kElfMachMIPS;
+#else
+    UNIMPLEMENTED();
+    return 0;
+#endif
+  }
+
+  FILE* perf_output_handle_;
+};
+
+const char PerfJitLogger::kFilenameFormatString[] = "/tmp/jit-%d.dump";
+
+// Extra padding for the PID in the filename
+const int PerfJitLogger::kFilenameBufferPadding = 16;
+
+PerfJitLogger::PerfJitLogger()
+    : perf_output_handle_(NULL) {
+  // Open the perf JIT dump file.
+  int bufferSize = sizeof(kFilenameFormatString) + kFilenameBufferPadding;
+  ScopedVector<char> perf_dump_name(bufferSize);
+  int size = OS::SNPrintF(
+      perf_dump_name,
+      kFilenameFormatString,
+      OS::GetCurrentProcessId());
+  CHECK_NE(size, -1);
+  perf_output_handle_ = OS::FOpen(perf_dump_name.start(), OS::LogFileOpenMode);
+  CHECK_NE(perf_output_handle_, NULL);
+  setvbuf(perf_output_handle_, NULL, _IOFBF, kLogBufferSize);
+
+  LogWriteHeader();
+}
+
+
+PerfJitLogger::~PerfJitLogger() {
+  fclose(perf_output_handle_);
+  perf_output_handle_ = NULL;
+}
+
+
+void PerfJitLogger::LogRecordedBuffer(Code* code,
+                                      SharedFunctionInfo*,
+                                      const char* name,
+                                      int length) {
+  ASSERT(code->instruction_start() == code->address() + Code::kHeaderSize);
+  ASSERT(perf_output_handle_ != NULL);
+
+  const char* code_name = name;
+  uint8_t* code_pointer = reinterpret_cast<uint8_t*>(code->instruction_start());
+  uint32_t code_size = code->instruction_size();
+
+  static const char string_terminator[] = "\0";
+
+  jr_code_load code_load;
+  code_load.id = JIT_CODE_LOAD;
+  code_load.total_size = sizeof(code_load) + length + 1 + code_size;
+  code_load.timestamp =
+      static_cast<uint64_t>(OS::TimeCurrentMillis() * 1000.0);
+  code_load.vma = 0x0;  //  Our addresses are absolute.
+  code_load.code_addr = reinterpret_cast<uint64_t>(code->instruction_start());
+  code_load.code_size = code_size;
+  code_load.align = 0;
+
+  LogWriteBytes(reinterpret_cast<const char*>(&code_load), sizeof(code_load));
+  LogWriteBytes(code_name, length);
+  LogWriteBytes(string_terminator, 1);
+  LogWriteBytes(reinterpret_cast<const char*>(code_pointer), code_size);
+}
+
+
+void PerfJitLogger::LogWriteBytes(const char* bytes, int size) {
+  size_t rv = fwrite(bytes, 1, size, perf_output_handle_);
+  ASSERT(static_cast<size_t>(size) == rv);
+  USE(rv);
+}
+
+
+void PerfJitLogger::LogWriteHeader() {
+  ASSERT(perf_output_handle_ != NULL);
+  jitheader header;
+  header.magic = kJitHeaderMagic;
+  header.version = kJitHeaderVersion;
+  header.total_size = sizeof(jitheader);
+  header.pad1 = 0xdeadbeef;
+  header.elf_mach = GetElfMach();
+  header.pid = OS::GetCurrentProcessId();
+  header.timestamp = static_cast<uint64_t>(OS::TimeCurrentMillis() * 1000.0);
+  LogWriteBytes(reinterpret_cast<const char*>(&header), sizeof(header));
 }
 
 
@@ -556,13 +781,20 @@ class Profiler: public Thread {
     } else {
       buffer_[head_] = *sample;
       head_ = Succ(head_);
-      buffer_semaphore_->Signal();  // Tell we have an element.
+      buffer_semaphore_.Signal();  // Tell we have an element.
     }
   }
 
+  virtual void Run();
+
+  // Pause and Resume TickSample data collection.
+  void pause() { paused_ = true; }
+  void resume() { paused_ = false; }
+
+ private:
   // Waits for a signal and removes profiling data.
   bool Remove(TickSample* sample) {
-    buffer_semaphore_->Wait();  // Wait for an element.
+    buffer_semaphore_.Wait();  // Wait for an element.
     *sample = buffer_[tail_];
     bool result = overflow_;
     tail_ = Succ(tail_);
@@ -570,14 +802,6 @@ class Profiler: public Thread {
     return result;
   }
 
-  void Run();
-
-  // Pause and Resume TickSample data collection.
-  bool paused() const { return paused_; }
-  void pause() { paused_ = true; }
-  void resume() { paused_ = false; }
-
- private:
   // Returns the next index in the cyclic buffer.
   int Succ(int index) { return (index + 1) % kBufferSize; }
 
@@ -589,7 +813,8 @@ class Profiler: public Thread {
   int head_;  // Index to the buffer head.
   int tail_;  // Index to the buffer tail.
   bool overflow_;  // Tell whether a buffer overflow has occurred.
-  Semaphore* buffer_semaphore_;  // Sempahore used for buffer synchronization.
+  // Sempahore used for buffer synchronization.
+  Semaphore buffer_semaphore_;
 
   // Tells whether profiler is engaged, that is, processing thread is stated.
   bool engaged_;
@@ -622,13 +847,13 @@ class Ticker: public Sampler {
     ASSERT(profiler_ == NULL);
     profiler_ = profiler;
     IncreaseProfilingDepth();
-    if (!FLAG_prof_lazy && !IsActive()) Start();
+    if (!IsActive()) Start();
   }
 
   void ClearProfiler() {
-    DecreaseProfilingDepth();
     profiler_ = NULL;
     if (IsActive()) Stop();
+    DecreaseProfilingDepth();
   }
 
  private:
@@ -645,7 +870,7 @@ Profiler::Profiler(Isolate* isolate)
       head_(0),
       tail_(0),
       overflow_(false),
-      buffer_semaphore_(OS::CreateSemaphore(0)),
+      buffer_semaphore_(0),
       engaged_(false),
       running_(false),
       paused_(false) {
@@ -656,7 +881,7 @@ void Profiler::Engage() {
   if (engaged_) return;
   engaged_ = true;
 
-  OS::LogSharedLibraryAddresses();
+  OS::LogSharedLibraryAddresses(isolate_);
 
   // Start thread processing the profiler buffer.
   running_ = true;
@@ -686,7 +911,7 @@ void Profiler::Disengage() {
   Insert(&sample);
   Join();
 
-  LOG(ISOLATE, UncheckedStringEvent("profiler", "end"));
+  LOG(isolate_, UncheckedStringEvent("profiler", "end"));
 }
 
 
@@ -709,14 +934,14 @@ Logger::Logger(Isolate* isolate)
     ticker_(NULL),
     profiler_(NULL),
     log_events_(NULL),
-    logging_nesting_(0),
-    cpu_profiler_nesting_(0),
+    is_logging_(false),
     log_(new Log(this)),
+    perf_basic_logger_(NULL),
+    perf_jit_logger_(NULL),
     ll_logger_(NULL),
     jit_logger_(NULL),
     listeners_(5),
-    is_initialized_(false),
-    epoch_(0) {
+    is_initialized_(false) {
 }
 
 
@@ -867,7 +1092,7 @@ void Logger::CodeDeoptEvent(Code* code) {
   if (!log_->IsEnabled()) return;
   ASSERT(FLAG_log_internal_timer_events);
   Log::MessageBuilder msg(log_);
-  int since_epoch = static_cast<int>(OS::Ticks() - epoch_);
+  int since_epoch = static_cast<int>(timer_.Elapsed().InMicroseconds());
   msg.Append("code-deopt,%ld,%d\n", since_epoch, code->CodeSize());
   msg.WriteToLogFile();
 }
@@ -877,7 +1102,7 @@ void Logger::TimerEvent(StartEnd se, const char* name) {
   if (!log_->IsEnabled()) return;
   ASSERT(FLAG_log_internal_timer_events);
   Log::MessageBuilder msg(log_);
-  int since_epoch = static_cast<int>(OS::Ticks() - epoch_);
+  int since_epoch = static_cast<int>(timer_.Elapsed().InMicroseconds());
   const char* format = (se == START) ? "timer-event-start,\"%s\",%ld\n"
                                      : "timer-event-end,\"%s\",%ld\n";
   msg.Append(format, name, since_epoch);
@@ -906,8 +1131,8 @@ void Logger::TimerEventScope::LogTimerEvent(StartEnd se) {
 
 const char* Logger::TimerEventScope::v8_recompile_synchronous =
     "V8.RecompileSynchronous";
-const char* Logger::TimerEventScope::v8_recompile_parallel =
-    "V8.RecompileParallel";
+const char* Logger::TimerEventScope::v8_recompile_concurrent =
+    "V8.RecompileConcurrent";
 const char* Logger::TimerEventScope::v8_compile_full_code =
     "V8.CompileFullCode";
 const char* Logger::TimerEventScope::v8_execute = "V8.Execute";
@@ -976,7 +1201,7 @@ void Logger::LogRuntime(Vector<const char> format,
     if (c == '%' && i <= format.length() - 2) {
       i++;
       ASSERT('0' <= format[i] && format[i] <= '9');
-      MaybeObject* maybe = args->GetElement(format[i] - '0');
+      MaybeObject* maybe = args->GetElement(isolate_, format[i] - '0');
       Object* obj;
       if (!maybe->ToObject(&obj)) {
         msg.Append("<exception>");
@@ -1233,11 +1458,12 @@ void Logger::CodeCreateEvent(LogEventsAndTags tag,
                              Code* code,
                              SharedFunctionInfo* shared,
                              CompilationInfo* info,
-                             Name* source, int line) {
-  PROFILER_LOG(CodeCreateEvent(tag, code, shared, info, source, line));
+                             Name* source, int line, int column) {
+  PROFILER_LOG(CodeCreateEvent(tag, code, shared, info, source, line, column));
 
   if (!is_logging_code_events()) return;
-  CALL_LISTENERS(CodeCreateEvent(tag, code, shared, info, source, line));
+  CALL_LISTENERS(CodeCreateEvent(tag, code, shared, info, source, line,
+                                 column));
 
   if (!FLAG_log_code || !log_->IsEnabled()) return;
   Log::MessageBuilder msg(log_);
@@ -1252,7 +1478,7 @@ void Logger::CodeCreateEvent(LogEventsAndTags tag,
   } else {
     msg.AppendSymbolName(Symbol::cast(source));
   }
-  msg.Append(":%d\",", line);
+  msg.Append(":%d:%d\",", line, column);
   msg.AppendAddress(shared->address());
   msg.Append(",%s", ComputeMarker(code));
   msg.Append('\n');
@@ -1500,7 +1726,7 @@ void Logger::TickEvent(TickSample* sample, bool overflow) {
   Log::MessageBuilder msg(log_);
   msg.Append("%s,", kLogEventsNames[TICK_EVENT]);
   msg.AppendAddress(sample->pc);
-  msg.Append(",%ld", static_cast<int>(OS::Ticks() - epoch_));
+  msg.Append(",%ld", static_cast<int>(timer_.Elapsed().InMicroseconds()));
   if (sample->has_external_callback) {
     msg.Append(",1,");
     msg.AppendAddress(sample->external_callback);
@@ -1521,43 +1747,11 @@ void Logger::TickEvent(TickSample* sample, bool overflow) {
 }
 
 
-bool Logger::IsProfilerPaused() {
-  return profiler_ == NULL || profiler_->paused();
-}
-
-
-void Logger::PauseProfiler() {
+void Logger::StopProfiler() {
   if (!log_->IsEnabled()) return;
   if (profiler_ != NULL) {
-    // It is OK to have negative nesting.
-    if (--cpu_profiler_nesting_ == 0) {
-      profiler_->pause();
-      if (FLAG_prof_lazy) {
-        ticker_->Stop();
-        FLAG_log_code = false;
-        LOG(ISOLATE, UncheckedStringEvent("profiler", "pause"));
-      }
-      --logging_nesting_;
-    }
-  }
-}
-
-
-void Logger::ResumeProfiler() {
-  if (!log_->IsEnabled()) return;
-  if (profiler_ != NULL) {
-    if (cpu_profiler_nesting_++ == 0) {
-      ++logging_nesting_;
-      if (FLAG_prof_lazy) {
-        profiler_->Engage();
-        LOG(ISOLATE, UncheckedStringEvent("profiler", "resume"));
-        FLAG_log_code = true;
-        LogCompiledFunctions();
-        LogAccessorCallbacks();
-        if (!ticker_->IsActive()) ticker_->Start();
-      }
-      profiler_->resume();
-    }
+    profiler_->pause();
+    is_logging_ = false;
   }
 }
 
@@ -1565,7 +1759,7 @@ void Logger::ResumeProfiler() {
 // This function can be called when Log's mutex is acquired,
 // either from main or Profiler's thread.
 void Logger::LogFailure() {
-  PauseProfiler();
+  StopProfiler();
 }
 
 
@@ -1644,7 +1838,7 @@ void Logger::LogCodeObject(Object* object) {
     case Code::FUNCTION:
     case Code::OPTIMIZED_FUNCTION:
       return;  // We log this later using LogCompiledFunctions.
-    case Code::BINARY_OP_IC:   // fall through
+    case Code::BINARY_OP_IC:
     case Code::COMPARE_IC:  // fall through
     case Code::COMPARE_NIL_IC:   // fall through
     case Code::TO_BOOLEAN_IC:  // fall through
@@ -1662,6 +1856,10 @@ void Logger::LogCodeObject(Object* object) {
     case Code::BUILTIN:
       description = "A builtin from the snapshot";
       tag = Logger::BUILTIN_TAG;
+      break;
+    case Code::HANDLER:
+      description = "An IC handler from the snapshot";
+      tag = Logger::HANDLER_TAG;
       break;
     case Code::KEYED_LOAD_IC:
       description = "A keyed load IC from the snapshot";
@@ -1712,6 +1910,8 @@ void Logger::LogExistingFunction(Handle<SharedFunctionInfo> shared,
   if (shared->script()->IsScript()) {
     Handle<Script> script(Script::cast(shared->script()));
     int line_num = GetScriptLineNumber(script, shared->start_position()) + 1;
+    int column_num =
+        GetScriptColumnNumber(script, shared->start_position()) + 1;
     if (script->name()->IsString()) {
       Handle<String> script_name(String::cast(script->name()));
       if (line_num > 0) {
@@ -1719,7 +1919,7 @@ void Logger::LogExistingFunction(Handle<SharedFunctionInfo> shared,
                 CodeCreateEvent(
                     Logger::ToNativeByScript(Logger::LAZY_COMPILE_TAG, *script),
                     *code, *shared, NULL,
-                    *script_name, line_num));
+                    *script_name, line_num, column_num));
       } else {
         // Can't distinguish eval and script here, so always use Script.
         PROFILE(isolate_,
@@ -1732,7 +1932,7 @@ void Logger::LogExistingFunction(Handle<SharedFunctionInfo> shared,
               CodeCreateEvent(
                   Logger::ToNativeByScript(Logger::LAZY_COMPILE_TAG, *script),
                   *code, *shared, NULL,
-                  isolate_->heap()->empty_string(), line_num));
+                  isolate_->heap()->empty_string(), line_num, column_num));
     }
   } else if (shared->IsApiFunction()) {
     // API function.
@@ -1796,21 +1996,20 @@ void Logger::LogAccessorCallbacks() {
 }
 
 
-static void AddIsolateIdIfNeeded(StringStream* stream) {
-  Isolate* isolate = Isolate::Current();
-  if (isolate->IsDefaultIsolate()) return;
+static void AddIsolateIdIfNeeded(Isolate* isolate, StringStream* stream) {
+  if (isolate->IsDefaultIsolate() || !FLAG_logfile_per_isolate) return;
   stream->Add("isolate-%p-", isolate);
 }
 
 
-static SmartArrayPointer<const char> PrepareLogFileName(const char* file_name) {
-  if (strchr(file_name, '%') != NULL ||
-      !Isolate::Current()->IsDefaultIsolate()) {
+static SmartArrayPointer<const char> PrepareLogFileName(
+    Isolate* isolate, const char* file_name) {
+  if (strchr(file_name, '%') != NULL || !isolate->IsDefaultIsolate()) {
     // If there's a '%' in the log file name we have to expand
     // placeholders.
     HeapStringAllocator allocator;
     StringStream stream(&allocator);
-    AddIsolateIdIfNeeded(&stream);
+    AddIsolateIdIfNeeded(isolate, &stream);
     for (const char* p = file_name; *p; p++) {
       if (*p == '%') {
         p++;
@@ -1863,14 +2062,20 @@ bool Logger::SetUp(Isolate* isolate) {
     FLAG_log_snapshot_positions = true;
   }
 
-  // --prof_lazy controls --log-code.
-  if (FLAG_prof_lazy) {
-    FLAG_log_code = false;
+  SmartArrayPointer<const char> log_file_name =
+      PrepareLogFileName(isolate, FLAG_logfile);
+  log_->Initialize(*log_file_name);
+
+
+  if (FLAG_perf_basic_prof) {
+    perf_basic_logger_ = new PerfBasicLogger();
+    addCodeEventListener(perf_basic_logger_);
   }
 
-  SmartArrayPointer<const char> log_file_name =
-      PrepareLogFileName(FLAG_logfile);
-  log_->Initialize(*log_file_name);
+  if (FLAG_perf_jit_prof) {
+    perf_jit_logger_ = new PerfJitLogger();
+    addCodeEventListener(perf_jit_logger_);
+  }
 
   if (FLAG_ll_prof) {
     ll_logger_ = new LowLevelLogger(*log_file_name);
@@ -1880,20 +2085,16 @@ bool Logger::SetUp(Isolate* isolate) {
   ticker_ = new Ticker(isolate, kSamplingIntervalMs);
 
   if (Log::InitLogAtStart()) {
-    logging_nesting_ = 1;
+    is_logging_ = true;
   }
 
   if (FLAG_prof) {
     profiler_ = new Profiler(isolate);
-    if (FLAG_prof_lazy) {
-      profiler_->pause();
-    } else {
-      logging_nesting_ = 1;
-      profiler_->Engage();
-    }
+    is_logging_ = true;
+    profiler_->Engage();
   }
 
-  if (FLAG_log_internal_timer_events || FLAG_prof) epoch_ = OS::Ticks();
+  if (FLAG_log_internal_timer_events || FLAG_prof) timer_.Start();
 
   return true;
 }
@@ -1937,6 +2138,18 @@ FILE* Logger::TearDown() {
 
   delete ticker_;
   ticker_ = NULL;
+
+  if (perf_basic_logger_) {
+    removeCodeEventListener(perf_basic_logger_);
+    delete perf_basic_logger_;
+    perf_basic_logger_ = NULL;
+  }
+
+  if (perf_jit_logger_) {
+    removeCodeEventListener(perf_jit_logger_);
+    delete perf_jit_logger_;
+    perf_jit_logger_ = NULL;
+  }
 
   if (ll_logger_) {
     removeCodeEventListener(ll_logger_);

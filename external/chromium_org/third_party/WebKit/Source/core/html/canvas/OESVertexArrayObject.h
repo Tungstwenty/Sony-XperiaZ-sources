@@ -28,7 +28,7 @@
 
 #include "bindings/v8/ScriptWrappable.h"
 #include "core/html/canvas/WebGLExtension.h"
-#include "core/platform/graphics/GraphicsTypes3D.h"
+#include "platform/graphics/GraphicsTypes3D.h"
 #include "wtf/PassRefPtr.h"
 
 namespace WebCore {
@@ -40,10 +40,10 @@ class OESVertexArrayObject : public WebGLExtension, public ScriptWrappable {
 public:
     static PassRefPtr<OESVertexArrayObject> create(WebGLRenderingContext*);
     static bool supported(WebGLRenderingContext*);
-    static const char* getExtensionName();
+    static const char* extensionName();
 
     virtual ~OESVertexArrayObject();
-    virtual ExtensionName getName() const;
+    virtual ExtensionName name() const;
 
     PassRefPtr<WebGLVertexArrayObjectOES> createVertexArrayOES();
     void deleteVertexArrayOES(WebGLVertexArrayObjectOES*);

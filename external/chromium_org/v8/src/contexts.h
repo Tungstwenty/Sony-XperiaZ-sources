@@ -166,6 +166,7 @@ enum BindingFlags {
   V(ALLOW_CODE_GEN_FROM_STRINGS_INDEX, Object, allow_code_gen_from_strings) \
   V(ERROR_MESSAGE_FOR_CODE_GEN_FROM_STRINGS_INDEX, Object, \
     error_message_for_code_gen_from_strings) \
+  V(RUN_MICROTASKS_INDEX, JSFunction, run_microtasks) \
   V(TO_COMPLETE_PROPERTY_DESCRIPTOR_INDEX, JSFunction, \
     to_complete_property_descriptor) \
   V(DERIVED_HAS_TRAP_INDEX, JSFunction, derived_has_trap) \
@@ -178,14 +179,12 @@ enum BindingFlags {
     observers_begin_perform_splice) \
   V(OBSERVERS_END_SPLICE_INDEX, JSFunction, \
     observers_end_perform_splice) \
-  V(OBSERVERS_DELIVER_CHANGES_INDEX, JSFunction, observers_deliver_changes) \
   V(GENERATOR_FUNCTION_MAP_INDEX, Map, generator_function_map) \
   V(STRICT_MODE_GENERATOR_FUNCTION_MAP_INDEX, Map, \
     strict_mode_generator_function_map) \
   V(GENERATOR_OBJECT_PROTOTYPE_MAP_INDEX, Map, \
     generator_object_prototype_map) \
-  V(GENERATOR_RESULT_MAP_INDEX, Map, generator_result_map) \
-  V(RANDOM_SEED_INDEX, ByteArray, random_seed)
+  V(GENERATOR_RESULT_MAP_INDEX, Map, generator_result_map)
 
 // JSFunctions are pairs (context, function code), sometimes also called
 // closures. A Context object is used to represent function contexts and
@@ -318,6 +317,7 @@ class Context: public FixedArray {
     EMBEDDER_DATA_INDEX,
     ALLOW_CODE_GEN_FROM_STRINGS_INDEX,
     ERROR_MESSAGE_FOR_CODE_GEN_FROM_STRINGS_INDEX,
+    RUN_MICROTASKS_INDEX,
     TO_COMPLETE_PROPERTY_DESCRIPTOR_INDEX,
     DERIVED_HAS_TRAP_INDEX,
     DERIVED_GET_TRAP_INDEX,
@@ -327,18 +327,18 @@ class Context: public FixedArray {
     OBSERVERS_ENQUEUE_SPLICE_INDEX,
     OBSERVERS_BEGIN_SPLICE_INDEX,
     OBSERVERS_END_SPLICE_INDEX,
-    OBSERVERS_DELIVER_CHANGES_INDEX,
     GENERATOR_FUNCTION_MAP_INDEX,
     STRICT_MODE_GENERATOR_FUNCTION_MAP_INDEX,
     GENERATOR_OBJECT_PROTOTYPE_MAP_INDEX,
     GENERATOR_RESULT_MAP_INDEX,
-    RANDOM_SEED_INDEX,
 
     // Properties from here are treated as weak references by the full GC.
     // Scavenge treats them as strong references.
     OPTIMIZED_FUNCTIONS_LIST,  // Weak.
-    MAP_CACHE_INDEX,  // Weak.
-    NEXT_CONTEXT_LINK,  // Weak.
+    OPTIMIZED_CODE_LIST,       // Weak.
+    DEOPTIMIZED_CODE_LIST,     // Weak.
+    MAP_CACHE_INDEX,           // Weak.
+    NEXT_CONTEXT_LINK,         // Weak.
 
     // Total number of slots.
     NATIVE_CONTEXT_SLOTS,
@@ -370,7 +370,7 @@ class Context: public FixedArray {
 
   GlobalObject* global_object() {
     Object* result = get(GLOBAL_OBJECT_INDEX);
-    ASSERT(IsBootstrappingOrGlobalObject(result));
+    ASSERT(IsBootstrappingOrGlobalObject(this->GetIsolate(), result));
     return reinterpret_cast<GlobalObject*>(result);
   }
   void set_global_object(GlobalObject* object) {
@@ -428,11 +428,19 @@ class Context: public FixedArray {
   // Mark the native context with out of memory.
   inline void mark_out_of_memory();
 
-  // A native context hold a list of all functions which have been optimized.
+  // A native context holds a list of all functions with optimized code.
   void AddOptimizedFunction(JSFunction* function);
   void RemoveOptimizedFunction(JSFunction* function);
+  void SetOptimizedFunctionsListHead(Object* head);
   Object* OptimizedFunctionsListHead();
-  void ClearOptimizedFunctions();
+
+  // The native context also stores a list of all optimized code and a
+  // list of all deoptimized code, which are needed by the deoptimizer.
+  void AddOptimizedCode(Code* code);
+  void SetOptimizedCodeListHead(Object* head);
+  Object* OptimizedCodeListHead();
+  void SetDeoptimizedCodeListHead(Object* head);
+  Object* DeoptimizedCodeListHead();
 
   Handle<Object> ErrorMessageForCodeGenerationFromStrings();
 
@@ -508,7 +516,7 @@ class Context: public FixedArray {
 #ifdef DEBUG
   // Bootstrapping-aware type checks.
   static bool IsBootstrappingOrValidParentContext(Object* object, Context* kid);
-  static bool IsBootstrappingOrGlobalObject(Object* object);
+  static bool IsBootstrappingOrGlobalObject(Isolate* isolate, Object* object);
 #endif
 
   STATIC_CHECK(kHeaderSize == Internals::kContextHeaderSize);

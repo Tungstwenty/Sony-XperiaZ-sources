@@ -999,11 +999,8 @@ void SSL_CTX_flush_sessions(SSL_CTX *s, long t)
 	if (tp.cache == NULL) return;
 	tp.time=t;
 	CRYPTO_w_lock(CRYPTO_LOCK_SSL_CTX);
-	i=CHECKED_LHASH_OF(SSL_SESSION, tp.cache)->down_load;
-	CHECKED_LHASH_OF(SSL_SESSION, tp.cache)->down_load=0;
 	lh_SSL_SESSION_doall_arg(tp.cache, LHASH_DOALL_ARG_FN(timeout),
 				 TIMEOUT_PARAM, &tp);
-	CHECKED_LHASH_OF(SSL_SESSION, tp.cache)->down_load=i;
 	CRYPTO_w_unlock(CRYPTO_LOCK_SSL_CTX);
 	}
 
@@ -1130,6 +1127,17 @@ void SSL_CTX_set_client_cert_cb(SSL_CTX *ctx,
 int (*SSL_CTX_get_client_cert_cb(SSL_CTX *ctx))(SSL * ssl, X509 ** x509 , EVP_PKEY **pkey)
 	{
 	return ctx->client_cert_cb;
+	}
+
+void SSL_CTX_set_channel_id_cb(SSL_CTX *ctx,
+	void (*cb)(SSL *ssl, EVP_PKEY **pkey))
+	{
+	ctx->channel_id_cb=cb;
+	}
+
+void (*SSL_CTX_get_channel_id_cb(SSL_CTX *ctx))(SSL * ssl, EVP_PKEY **pkey)
+	{
+	return ctx->channel_id_cb;
 	}
 
 #ifndef OPENSSL_NO_ENGINE

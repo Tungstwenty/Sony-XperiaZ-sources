@@ -34,14 +34,14 @@ namespace WebCore {
 
 using namespace HTMLNames;
 
-inline HTMLTableColElement::HTMLTableColElement(const QualifiedName& tagName, Document* document)
+inline HTMLTableColElement::HTMLTableColElement(const QualifiedName& tagName, Document& document)
     : HTMLTablePartElement(tagName, document)
     , m_span(1)
 {
     ScriptWrappable::init(this);
 }
 
-PassRefPtr<HTMLTableColElement> HTMLTableColElement::create(const QualifiedName& tagName, Document* document)
+PassRefPtr<HTMLTableColElement> HTMLTableColElement::create(const QualifiedName& tagName, Document& document)
 {
     return adoptRef(new HTMLTableColElement(tagName, document));
 }
@@ -91,10 +91,10 @@ const StylePropertySet* HTMLTableColElement::additionalPresentationAttributeStyl
 
 void HTMLTableColElement::setSpan(int n)
 {
-    setAttribute(spanAttr, String::number(n));
+    setIntegralAttribute(spanAttr, n);
 }
 
-String HTMLTableColElement::width() const
+const AtomicString& HTMLTableColElement::width() const
 {
     return getAttribute(widthAttr);
 }

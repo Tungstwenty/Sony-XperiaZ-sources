@@ -36,7 +36,7 @@ namespace WebCore {
 
 class HTMLUnknownElement FINAL : public HTMLElement {
 public:
-    static PassRefPtr<HTMLUnknownElement> create(const QualifiedName& tagName, Document* document)
+    static PassRefPtr<HTMLUnknownElement> create(const QualifiedName& tagName, Document& document)
     {
         return adoptRef(new HTMLUnknownElement(tagName, document));
     }
@@ -44,18 +44,19 @@ public:
     virtual bool isHTMLUnknownElement() const OVERRIDE { return true; }
 
 private:
-    HTMLUnknownElement(const QualifiedName& tagName, Document* document)
+    HTMLUnknownElement(const QualifiedName& tagName, Document& document)
         : HTMLElement(tagName, document)
     {
         ScriptWrappable::init(this);
     }
 };
 
-inline HTMLUnknownElement* toHTMLUnknownElement(HTMLElement* element)
+inline bool isHTMLUnknownElement(const Node& node)
 {
-    ASSERT_WITH_SECURITY_IMPLICATION(!element || element->isHTMLUnknownElement());
-    return static_cast<HTMLUnknownElement*>(element);
+    return node.isElementNode() && toHTMLElement(node).isHTMLUnknownElement();
 }
+
+DEFINE_NODE_TYPE_CASTS_WITH_FUNCTION(HTMLUnknownElement);
 
 } // namespace
 

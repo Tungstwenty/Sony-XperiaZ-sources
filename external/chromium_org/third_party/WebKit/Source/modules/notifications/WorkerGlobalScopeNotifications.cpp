@@ -28,7 +28,7 @@
 #include "config.h"
 #include "modules/notifications/WorkerGlobalScopeNotifications.h"
 
-#if ENABLE(NOTIFICATIONS) || ENABLE(LEGACY_NOTIFICATIONS)
+#if ENABLE(LEGACY_NOTIFICATIONS)
 
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerThread.h"
@@ -52,10 +52,10 @@ const char* WorkerGlobalScopeNotifications::supplementName()
 
 WorkerGlobalScopeNotifications* WorkerGlobalScopeNotifications::from(WorkerGlobalScope* context)
 {
-    WorkerGlobalScopeNotifications* supplement = static_cast<WorkerGlobalScopeNotifications*>(Supplement<ScriptExecutionContext>::from(context, supplementName()));
+    WorkerGlobalScopeNotifications* supplement = static_cast<WorkerGlobalScopeNotifications*>(WorkerSupplement::from(context, supplementName()));
     if (!supplement) {
         supplement = new WorkerGlobalScopeNotifications(context);
-        Supplement<ScriptExecutionContext>::provideTo(context, supplementName(), adoptPtr(supplement));
+        WorkerSupplement::provideTo(context, supplementName(), adoptPtr(supplement));
     }
     return supplement;
 }
@@ -74,4 +74,4 @@ NotificationCenter* WorkerGlobalScopeNotifications::webkitNotifications()
 
 } // namespace WebCore
 
-#endif // ENABLE(NOTIFICATIONS) || ENABLE(LEGACY_NOTIFICATIONS)
+#endif // ENABLE(LEGACY_NOTIFICATIONS)

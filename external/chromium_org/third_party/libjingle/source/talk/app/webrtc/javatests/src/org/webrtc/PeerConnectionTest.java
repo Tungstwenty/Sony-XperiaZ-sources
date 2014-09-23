@@ -34,6 +34,7 @@ import org.webrtc.PeerConnection.IceConnectionState;
 import org.webrtc.PeerConnection.IceGatheringState;
 import org.webrtc.PeerConnection.SignalingState;
 
+import java.io.File;
 import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
@@ -194,6 +195,7 @@ public class PeerConnectionTest extends TestCase {
       expectedAddStreamLabels.add(label);
     }
 
+    @Override
     public synchronized void onAddStream(MediaStream stream) {
       assertEquals(expectedAddStreamLabels.removeFirst(), stream.label());
       assertEquals(1, stream.videoTracks.size());
@@ -212,6 +214,7 @@ public class PeerConnectionTest extends TestCase {
       expectedRemoveStreamLabels.add(label);
     }
 
+    @Override
     public synchronized void onRemoveStream(MediaStream stream) {
       assertEquals(expectedRemoveStreamLabels.removeFirst(), stream.label());
       WeakReference<VideoRenderer> renderer = renderers.remove(stream);
@@ -475,15 +478,18 @@ public class PeerConnectionTest extends TestCase {
 
   @Test
   public void testCompleteSession() throws Exception {
+    CountDownLatch testDone = new CountDownLatch(1);
+    System.gc();  // Encourage any GC-related threads to start up.
+    TreeSet<String> threadsBeforeTest = allThreads();
+
+    PeerConnectionFactory factory = new PeerConnectionFactory();
     // Uncomment to get ALL WebRTC tracing and SENSITIVE libjingle logging.
+    // NOTE: this _must_ happen while |factory| is alive!
     // Logging.enableTracing(
-    //     "/tmp/AMI-nope.txt",
+    //     "/tmp/PeerConnectionTest-log.txt",
     //     EnumSet.of(Logging.TraceLevel.TRACE_ALL),
     //     Logging.Severity.LS_SENSITIVE);
 
-    CountDownLatch testDone = new CountDownLatch(1);
-
-    PeerConnectionFactory factory = new PeerConnectionFactory();
     MediaConstraints pcConstraints = new MediaConstraints();
     pcConstraints.mandatory.add(
         new MediaConstraints.KeyValuePair("DtlsSrtpKeyAgreement", "true"));
@@ -527,9 +533,11 @@ public class PeerConnectionTest extends TestCase {
         factory, offeringPC, videoSource, "oLMS", "oLMSv0", "oLMSa0",
         offeringExpectations);
 
-    offeringExpectations.setDataChannel(offeringPC.createDataChannel(
-        "offeringDC", new DataChannel.Init()));
+    DataChannel offeringDC = offeringPC.createDataChannel(
+        "offeringDC", new DataChannel.Init());
+    assertEquals("offeringDC", offeringDC.label());
 
+    offeringExpectations.setDataChannel(offeringDC);
     SdpObserverLatch sdpLatch = new SdpObserverLatch();
     offeringPC.createOffer(sdpLatch, new MediaConstraints());
     assertTrue(sdpLatch.await());
@@ -688,7 +696,11 @@ public class PeerConnectionTest extends TestCase {
     offeringPC = null;
     shutdownPC(answeringPC, answeringExpectations);
     answeringPC = null;
+    videoSource.dispose();
+    factory.dispose();
     System.gc();
+    TreeSet<String> threadsAfterTest = allThreads();
+    assertEquals(threadsBeforeTest, threadsAfterTest);
     Thread.sleep(100);
   }
 
@@ -719,5 +731,29 @@ public class PeerConnectionTest extends TestCase {
     System.out.println("End stats.");
 
     pc.dispose();
+  }
+
+  // Returns a set of thread IDs belonging to this process, as Strings.
+  private static TreeSet<String> allThreads() {
+    TreeSet<String> threads = new TreeSet<String>();
+    // This pokes at /proc instead of using the Java APIs because we're also
+    // looking for libjingle/webrtc native threads, most of which won't have
+    // attached to the JVM.
+    for (String threadId : (new File("/proc/self/task")).list()) {
+      threads.add(threadId);
+    }
+    return threads;
+  }
+
+  // Return a String form of |strings| joined by |separator|.
+  private static String joinStrings(String separator, TreeSet<String> strings) {
+    StringBuilder builder = new StringBuilder();
+    for (String s : strings) {
+      if (builder.length() > 0) {
+        builder.append(separator);
+      }
+      builder.append(s);
+    }
+    return builder.toString();
   }
 }

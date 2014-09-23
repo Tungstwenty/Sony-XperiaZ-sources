@@ -28,10 +28,32 @@
 #ifndef TALK_BASE_ASYNCPACKETSOCKET_H_
 #define TALK_BASE_ASYNCPACKETSOCKET_H_
 
+#include "talk/base/dscp.h"
 #include "talk/base/sigslot.h"
 #include "talk/base/socket.h"
+#include "talk/base/timeutils.h"
 
 namespace talk_base {
+
+// This structure will have the information about when packet is actually
+// received by socket.
+struct PacketTime {
+  PacketTime() : timestamp(-1), not_before(-1) {}
+  PacketTime(int64 timestamp, int64 not_before)
+      : timestamp(timestamp), not_before(not_before) {
+  }
+
+  int64 timestamp;  // Receive time after socket delivers the data.
+  int64 not_before; // Earliest possible time the data could have arrived,
+                    // indicating the potential error in the |timestamp| value,
+                    // in case the system, is busy. For example, the time of
+                    // the last select() call.
+                    // If unknown, this value will be set to zero.
+};
+
+inline PacketTime CreatePacketTime(int64 not_before) {
+  return PacketTime(TimeMicros(), not_before);
+}
 
 // Provides the ability to receive packets asynchronously. Sends are not
 // buffered since it is acceptable to drop packets under high load.
@@ -56,8 +78,9 @@ class AsyncPacketSocket : public sigslot::has_slots<> {
   virtual SocketAddress GetRemoteAddress() const = 0;
 
   // Send a packet.
-  virtual int Send(const void *pv, size_t cb) = 0;
-  virtual int SendTo(const void *pv, size_t cb, const SocketAddress& addr) = 0;
+  virtual int Send(const void *pv, size_t cb, DiffServCodePoint dscp) = 0;
+  virtual int SendTo(const void *pv, size_t cb, const SocketAddress& addr,
+                     DiffServCodePoint) = 0;
 
   // Close the socket.
   virtual int Close() = 0;
@@ -76,8 +99,9 @@ class AsyncPacketSocket : public sigslot::has_slots<> {
 
   // Emitted each time a packet is read. Used only for UDP and
   // connected TCP sockets.
-  sigslot::signal4<AsyncPacketSocket*, const char*, size_t,
-                   const SocketAddress&> SignalReadPacket;
+  sigslot::signal5<AsyncPacketSocket*, const char*, size_t,
+                   const SocketAddress&,
+                   const PacketTime&> SignalReadPacket;
 
   // Emitted when the socket is currently able to send.
   sigslot::signal1<AsyncPacketSocket*> SignalReadyToSend;

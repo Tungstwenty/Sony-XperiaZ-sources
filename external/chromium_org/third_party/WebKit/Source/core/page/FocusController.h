@@ -27,7 +27,7 @@
 #define FocusController_h
 
 #include "core/page/FocusDirection.h"
-#include "core/platform/graphics/LayoutRect.h"
+#include "platform/geometry/LayoutRect.h"
 #include "wtf/Forward.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/RefPtr.h"
@@ -39,6 +39,7 @@ class Document;
 class Element;
 class Frame;
 class HTMLFrameOwnerElement;
+class HTMLShadowElement;
 class IntRect;
 class KeyboardEvent;
 class Node;
@@ -50,8 +51,10 @@ public:
     Node* rootNode() const;
     Element* owner() const;
     static FocusNavigationScope focusNavigationScopeOf(Node*);
-    static FocusNavigationScope focusNavigationScopeOwnedByShadowHost(Node*);
-    static FocusNavigationScope focusNavigationScopeOwnedByIFrame(HTMLFrameOwnerElement*);
+    static FocusNavigationScope ownedByNonFocusableFocusScopeOwner(Node*);
+    static FocusNavigationScope ownedByShadowHost(Node*);
+    static FocusNavigationScope ownedByShadowInsertionPoint(HTMLShadowElement*);
+    static FocusNavigationScope ownedByIFrame(HTMLFrameOwnerElement*);
 
 private:
     explicit FocusNavigationScope(TreeScope*);
@@ -109,7 +112,7 @@ private:
     Node* findNodeWithExactTabIndex(Node* start, int tabIndex, FocusDirection);
 
     bool advanceFocusDirectionallyInContainer(Node* container, const LayoutRect& startingRect, FocusDirection);
-    void findFocusCandidateInContainer(Node* container, const LayoutRect& startingRect, FocusDirection, FocusCandidate& closest);
+    void findFocusCandidateInContainer(Node& container, const LayoutRect& startingRect, FocusDirection, FocusCandidate& closest);
 
     Page* m_page;
     RefPtr<Frame> m_focusedFrame;

@@ -29,61 +29,58 @@
  */
 
 #include "config.h"
-
 #include "V8XSLTProcessor.h"
-
-#include "core/dom/Document.h"
-#include "core/dom/DocumentFragment.h"
-#include "core/dom/Node.h"
 
 #include "V8Document.h"
 #include "V8DocumentFragment.h"
 #include "V8Node.h"
 #include "bindings/v8/V8Binding.h"
+#include "core/dom/Document.h"
+#include "core/dom/DocumentFragment.h"
+#include "core/dom/Node.h"
 #include "core/xml/XSLTProcessor.h"
-
 #include "wtf/RefPtr.h"
 
 namespace WebCore {
 
-void V8XSLTProcessor::setParameterMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& args)
+void V8XSLTProcessor::setParameterMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    if (isUndefinedOrNull(args[1]) || isUndefinedOrNull(args[2]))
+    if (isUndefinedOrNull(info[1]) || isUndefinedOrNull(info[2]))
         return;
 
-    XSLTProcessor* imp = V8XSLTProcessor::toNative(args.Holder());
+    V8TRYCATCH_FOR_V8STRINGRESOURCE_VOID(V8StringResource<>, namespaceURI, info[0]);
+    V8TRYCATCH_FOR_V8STRINGRESOURCE_VOID(V8StringResource<>, localName, info[1]);
+    V8TRYCATCH_FOR_V8STRINGRESOURCE_VOID(V8StringResource<>, value, info[2]);
 
-    String namespaceURI = toWebCoreString(args[0]);
-    String localName = toWebCoreString(args[1]);
-    String value = toWebCoreString(args[2]);
+    XSLTProcessor* imp = V8XSLTProcessor::toNative(info.Holder());
     imp->setParameter(namespaceURI, localName, value);
 }
 
-void V8XSLTProcessor::getParameterMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& args)
+void V8XSLTProcessor::getParameterMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    if (isUndefinedOrNull(args[1]))
+    if (isUndefinedOrNull(info[1]))
         return;
 
-    XSLTProcessor* imp = V8XSLTProcessor::toNative(args.Holder());
+    V8TRYCATCH_FOR_V8STRINGRESOURCE_VOID(V8StringResource<>, namespaceURI, info[0]);
+    V8TRYCATCH_FOR_V8STRINGRESOURCE_VOID(V8StringResource<>, localName, info[1]);
 
-    String namespaceURI = toWebCoreString(args[0]);
-    String localName = toWebCoreString(args[1]);
+    XSLTProcessor* imp = V8XSLTProcessor::toNative(info.Holder());
     String result = imp->getParameter(namespaceURI, localName);
     if (result.isNull())
         return;
 
-    v8SetReturnValueString(args, result, args.GetIsolate());
+    v8SetReturnValueString(info, result, info.GetIsolate());
 }
 
-void V8XSLTProcessor::removeParameterMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& args)
+void V8XSLTProcessor::removeParameterMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    if (isUndefinedOrNull(args[1]))
+    if (isUndefinedOrNull(info[1]))
         return;
 
-    XSLTProcessor* imp = V8XSLTProcessor::toNative(args.Holder());
+    V8TRYCATCH_FOR_V8STRINGRESOURCE_VOID(V8StringResource<>, namespaceURI, info[0]);
+    V8TRYCATCH_FOR_V8STRINGRESOURCE_VOID(V8StringResource<>, localName, info[1]);
 
-    String namespaceURI = toWebCoreString(args[0]);
-    String localName = toWebCoreString(args[1]);
+    XSLTProcessor* imp = V8XSLTProcessor::toNative(info.Holder());
     imp->removeParameter(namespaceURI, localName);
 }
 

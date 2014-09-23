@@ -27,7 +27,6 @@
 #include "config.h"
 #include "wtf/ArrayBufferContents.h"
 
-#include "wtf/ArrayBufferDeallocationObserver.h"
 #include "wtf/Assertions.h"
 #include "wtf/WTF.h"
 #include <string.h>
@@ -56,10 +55,11 @@ ArrayBufferContents::ArrayBufferContents(unsigned numElements, unsigned elementB
     m_sizeInBytes = numElements * elementByteSize;
 }
 
-ArrayBufferContents::ArrayBufferContents(void* data, unsigned sizeInBytes)
+ArrayBufferContents::ArrayBufferContents(
+    void* data, unsigned sizeInBytes, ArrayBufferDeallocationObserver* observer)
     : m_data(data)
     , m_sizeInBytes(sizeInBytes)
-    , m_deallocationObserver(0)
+    , m_deallocationObserver(observer)
 {
     if (!m_data) {
         ASSERT(!m_sizeInBytes);
@@ -79,7 +79,7 @@ ArrayBufferContents::~ArrayBufferContents()
 void ArrayBufferContents::clear()
 {
     if (m_data && m_deallocationObserver)
-        m_deallocationObserver->ArrayBufferDeallocated(m_sizeInBytes);
+        m_deallocationObserver->arrayBufferDeallocated(m_sizeInBytes);
     m_data = 0;
     m_sizeInBytes = 0;
     m_deallocationObserver = 0;
@@ -106,15 +106,15 @@ void ArrayBufferContents::copyTo(ArrayBufferContents& other)
 
 void ArrayBufferContents::allocateMemory(size_t size, InitializationPolicy policy, void*& data)
 {
-    data = partitionAllocGeneric(WTF::bufferPartition(), size);
+    data = partitionAllocGeneric(WTF::Partitions::getBufferPartition(), size);
     if (policy == ZeroInitialize)
         memset(data, '\0', size);
 }
 
-void ArrayBufferContents::freeMemory(void* data, size_t size)
+void ArrayBufferContents::freeMemory(void* data, size_t)
 {
     if (data)
-        partitionFreeGeneric(data, size);
+        partitionFreeGeneric(WTF::Partitions::getBufferPartition(), data);
 }
 
 } // namespace WTF

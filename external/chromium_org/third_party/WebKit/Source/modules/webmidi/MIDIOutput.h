@@ -39,11 +39,11 @@ namespace WebCore {
 
 class ExceptionState;
 class MIDIAccess;
-class ScriptExecutionContext;
+class ExecutionContext;
 
 class MIDIOutput : public MIDIPort {
 public:
-    static PassRefPtr<MIDIOutput> create(MIDIAccess*, unsigned portIndex, ScriptExecutionContext*, const String& id, const String& manufacturer, const String& name, const String& version);
+    static PassRefPtr<MIDIOutput> create(MIDIAccess*, unsigned portIndex, ExecutionContext*, const String& id, const String& manufacturer, const String& name, const String& version);
     virtual ~MIDIOutput();
 
     void send(Uint8Array*, double timestamp, ExceptionState&);
@@ -53,10 +53,12 @@ public:
     void send(Uint8Array*, ExceptionState&);
     void send(Vector<unsigned>, ExceptionState&);
 
-private:
-    MIDIOutput(MIDIAccess*, unsigned portIndex, ScriptExecutionContext*, const String& id, const String& manufacturer, const String& name, const String& version);
+    MIDIAccess* midiAccess() const { return m_access; }
 
-    RefPtr<MIDIAccess> m_access;
+private:
+    MIDIOutput(MIDIAccess*, unsigned portIndex, ExecutionContext*, const String& id, const String& manufacturer, const String& name, const String& version);
+
+    MIDIAccess* m_access;
     unsigned m_portIndex;
 };
 

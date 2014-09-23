@@ -20,13 +20,13 @@
 #ifndef RenderSVGBlock_h
 #define RenderSVGBlock_h
 
-#include "core/rendering/RenderBlock.h"
+#include "core/rendering/RenderBlockFlow.h"
 
 namespace WebCore {
 
 class SVGElement;
 
-class RenderSVGBlock : public RenderBlock {
+class RenderSVGBlock : public RenderBlockFlow {
 public:
     explicit RenderSVGBlock(SVGElement*);
 
@@ -36,14 +36,14 @@ protected:
     virtual void willBeDestroyed() OVERRIDE;
 
 private:
-    virtual void setStyle(PassRefPtr<RenderStyle>) OVERRIDE FINAL;
     virtual void updateFromStyle() OVERRIDE FINAL;
 
     virtual bool isRenderSVGBlock() const OVERRIDE FINAL { return true; };
 
+    virtual bool supportsPartialLayout() const OVERRIDE { return false; }
+
     virtual void absoluteRects(Vector<IntRect>&, const LayoutPoint& accumulatedOffset) const OVERRIDE FINAL;
 
-    virtual void styleWillChange(StyleDifference, const RenderStyle* newStyle) OVERRIDE FINAL;
     virtual void styleDidChange(StyleDifference, const RenderStyle* oldStyle) OVERRIDE FINAL;
 };
 

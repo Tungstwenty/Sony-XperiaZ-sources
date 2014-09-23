@@ -32,10 +32,13 @@
 #include "core/inspector/PageDebuggerAgent.h"
 
 #include "bindings/v8/DOMWrapperWorld.h"
-#include "bindings/v8/PageScriptDebugServer.h"
+#include "bindings/v8/ScriptController.h"
+#include "bindings/v8/ScriptSourceCode.h"
 #include "core/inspector/InspectorOverlay.h"
 #include "core/inspector/InspectorPageAgent.h"
 #include "core/inspector/InstrumentingAgents.h"
+#include "core/loader/DocumentLoader.h"
+#include "core/frame/Frame.h"
 #include "core/page/Page.h"
 #include "core/page/PageConsole.h"
 
@@ -105,12 +108,7 @@ void PageDebuggerAgent::overlayResumed()
 void PageDebuggerAgent::overlaySteppedOver()
 {
     ErrorString error;
-    stepOver(&error);
-}
-
-void PageDebuggerAgent::addConsoleMessage(MessageSource source, MessageLevel level, const String& message, const String& sourceURL)
-{
-    m_pageAgent->page()->console()->addMessage(source, level, message, sourceURL, 0);
+    stepOver(&error, 0);
 }
 
 InjectedScript PageDebuggerAgent::injectedScriptForEval(ErrorString* errorString, const int* executionContextId)
@@ -136,7 +134,32 @@ void PageDebuggerAgent::didClearWindowObjectInWorld(Frame* frame, DOMWrapperWorl
         return;
 
     reset();
-    scriptDebugServer().setScriptPreprocessor(m_pageAgent->scriptPreprocessor());
+
+    scriptDebugServer().setPreprocessorSource(String());
+    ASSERT(m_pageAgent);
+    if (!m_pageAgent->scriptPreprocessorSource().isEmpty())
+        scriptDebugServer().setPreprocessorSource(m_pageAgent->scriptPreprocessorSource());
+}
+
+String PageDebuggerAgent::preprocessEventListener(Frame* frame, const String& source, const String& url, const String& functionName)
+{
+    ASSERT(frame);
+    ASSERT(m_pageScriptDebugServer);
+    return m_pageScriptDebugServer->preprocessEventListener(frame, source, url, functionName);
+}
+
+PassOwnPtr<ScriptSourceCode> PageDebuggerAgent::preprocess(Frame* frame, const ScriptSourceCode& sourceCode)
+{
+    ASSERT(m_pageScriptDebugServer);
+    ASSERT(frame);
+    return m_pageScriptDebugServer->preprocess(frame, sourceCode);
+}
+
+void PageDebuggerAgent::didCommitLoad(Frame* frame, DocumentLoader* loader)
+{
+    Frame* mainFrame = frame->page()->mainFrame();
+    if (loader->frame() == mainFrame)
+        pageDidCommitLoad();
 }
 
 } // namespace WebCore

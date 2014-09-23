@@ -29,6 +29,7 @@
 
 /**
  * @constructor
+ * @extends {WebInspector.Object}
  * @param {string} securityOrigin
  * @param {boolean} isLocalStorage
  */
@@ -36,22 +37,28 @@ WebInspector.DOMStorage = function(securityOrigin, isLocalStorage)
 {
     this._securityOrigin = securityOrigin;
     this._isLocalStorage = isLocalStorage;
-    this._storageHistory = new WebInspector.DOMStorageHistory(this);
 }
 
 /**
  * @param {string} securityOrigin
  * @param {boolean} isLocalStorage
- * @return {DOMStorageAgent.StorageId}
+ * @return {!DOMStorageAgent.StorageId}
  */
 WebInspector.DOMStorage.storageId = function(securityOrigin, isLocalStorage)
 {
     return { securityOrigin: securityOrigin, isLocalStorage: isLocalStorage };
 }
 
+WebInspector.DOMStorage.Events = {
+    DOMStorageItemsCleared: "DOMStorageItemsCleared",
+    DOMStorageItemRemoved: "DOMStorageItemRemoved",
+    DOMStorageItemAdded: "DOMStorageItemAdded",
+    DOMStorageItemUpdated: "DOMStorageItemUpdated"
+}
+
 WebInspector.DOMStorage.prototype = {
 
-    /** @return {DOMStorageAgent.StorageId} */
+    /** @return {!DOMStorageAgent.StorageId} */
     get id()
     {
         return WebInspector.DOMStorage.storageId(this._securityOrigin, this._isLocalStorage);
@@ -70,7 +77,7 @@ WebInspector.DOMStorage.prototype = {
     },
 
     /**
-     * @param {function(?Protocol.Error, Array.<DOMStorageAgent.Item>):void=} callback
+     * @param {function(?Protocol.Error, !Array.<!DOMStorageAgent.Item>):void=} callback
      */
     getItems: function(callback)
     {
@@ -83,7 +90,7 @@ WebInspector.DOMStorage.prototype = {
      */
     setItem: function(key, value)
     {
-        this._storageHistory.perform(new WebInspector.DOMStorageSetItemAction(this, key, value));
+        DOMStorageAgent.setDOMStorageItem(this.id, key, value);
     },
 
     /**
@@ -91,222 +98,10 @@ WebInspector.DOMStorage.prototype = {
      */
     removeItem: function(key)
     {
-        this._storageHistory.perform(new WebInspector.DOMStorageRemoveItemAction(this, key));
+        DOMStorageAgent.removeDOMStorageItem(this.id, key);
     },
 
-    undo: function()
-    {
-        this._storageHistory.undo();
-    },
-
-    redo: function()
-    {
-        this._storageHistory.redo();
-    }
-}
-
-/**
- * @constructor
- * @param {WebInspector.DOMStorage} domStorage
- */
-WebInspector.DOMStorageAction = function(domStorage)
-{
-    this._domStorage = domStorage;
-}
-
-WebInspector.DOMStorageAction.prototype = {
-    /**
-     * @param {function()} callback
-     */
-    perform: function(callback)
-    {
-    },
-
-    undo: function()
-    {
-    },
-
-    redo: function()
-    {
-    }
-}
-
-/**
- * @constructor
- * @extends {WebInspector.DOMStorageAction}
- * @param {WebInspector.DOMStorage} domStorage
- * @param {string} key
- */
-WebInspector.DOMStorageRemoveItemAction = function(domStorage, key)
-{
-    WebInspector.DOMStorageAction.call(this, domStorage);
-    this._key = key;
-}
-
-WebInspector.DOMStorageRemoveItemAction.prototype = {
-    /**
-     * @override
-     */
-    perform: function(callback)
-    {
-        DOMStorageAgent.getValue(this._domStorage.id, this._key, valueReceived.bind(this));
-
-        /**
-         * @param {?Protocol.Error} error
-         * @param {string=} value
-         */
-        function valueReceived(error, value)
-        {
-            if (error)
-                return;
-
-            this._value = value;
-            this.redo();
-            callback();
-        }
-    },
-
-    /**
-     * @override
-     */
-    undo: function()
-    {
-        DOMStorageAgent.setDOMStorageItem(this._domStorage.id, this._key, this._value);
-    },
-
-    /**
-     * @override
-     */
-    redo: function()
-    {
-        DOMStorageAgent.removeDOMStorageItem(this._domStorage.id, this._key);
-    },
-
-    __proto__: WebInspector.DOMStorageAction.prototype
-}
-
-/**
- * @constructor
- * @extends {WebInspector.DOMStorageAction}
- * @param {WebInspector.DOMStorage} domStorage
- * @param {string} key
- * @param {string} value
- */
-WebInspector.DOMStorageSetItemAction = function(domStorage, key, value)
-{
-    WebInspector.DOMStorageAction.call(this, domStorage);
-    this._key = key;
-    this._value = value;
-}
-
-WebInspector.DOMStorageSetItemAction.prototype = {
-    /**
-     * @override
-     */
-    perform: function(callback)
-    {
-        DOMStorageAgent.getValue(this._domStorage.id, this._key, valueReceived.bind(this));
-
-        /**
-         * @param {?Protocol.Error} error
-         * @param {string=} value
-         */
-        function valueReceived(error, value)
-        {
-            if (error)
-                return;
-
-            if (typeof value === "undefined")
-                delete this._exists;
-            else {
-                this._exists = true;
-                this._oldValue = value;
-            }
-            this.redo();
-            callback();
-        }
-    },
-
-    /**
-     * @override
-     */
-    undo: function()
-    {
-        if (!this._exists)
-            DOMStorageAgent.removeDOMStorageItem(this._domStorage.id, this._key);
-        else
-            DOMStorageAgent.setDOMStorageItem(this._domStorage.id, this._key, this._oldValue);
-    },
-
-    /**
-     * @override
-     */
-    redo: function()
-    {
-        DOMStorageAgent.setDOMStorageItem(this._domStorage.id, this._key, this._value);
-    },
-
-    __proto__: WebInspector.DOMStorageAction.prototype
-}
-
-/**
- * @constructor
- * @param {WebInspector.DOMStorage} domStorage
- */
-WebInspector.DOMStorageHistory = function(domStorage)
-{
-    this._domStorage = domStorage;
-
-    /** @type {!Array.<!WebInspector.DOMStorageAction>} */
-    this._actions = [];
-    this._undoableActionIndex = -1;
-}
-
-WebInspector.DOMStorageHistory.MAX_UNDO_STACK_DEPTH = 256;
-
-WebInspector.DOMStorageHistory.prototype = {
-    /**
-     * @param {WebInspector.DOMStorageAction} action
-     */
-    perform: function(action)
-    {
-        if (!action)
-            return;
-
-        action.perform(actionCompleted.bind(this));
-        function actionCompleted()
-        {
-            if (this._undoableActionIndex + 1 === WebInspector.DOMStorageHistory.MAX_UNDO_STACK_DEPTH) {
-                this._actions.shift();
-                --this._undoableActionIndex;
-            } else if (this._undoableActionIndex + 1 < this._actions.length)
-                this._actions.splice(this._undoableActionIndex + 1);
-
-            this._actions.push(action);
-            ++this._undoableActionIndex;
-        }
-    },
-
-    undo: function()
-    {
-        if (this._undoableActionIndex < 0)
-            return;
-
-        var action = this._actions[this._undoableActionIndex];
-        console.assert(action);
-        action.undo();
-        --this._undoableActionIndex;
-    },
-
-    redo: function()
-    {
-        if (this._undoableActionIndex >= this._actions.length - 1)
-            return;
-
-        var action = this._actions[++this._undoableActionIndex];
-        console.assert(action);
-        action.redo();
-    }
+    __proto__: WebInspector.Object.prototype
 }
 
 /**
@@ -325,17 +120,13 @@ WebInspector.DOMStorageModel = function()
 
 WebInspector.DOMStorageModel.Events = {
     DOMStorageAdded: "DOMStorageAdded",
-    DOMStorageRemoved: "DOMStorageRemoved",
-    DOMStorageItemsCleared: "DOMStorageItemsCleared",
-    DOMStorageItemRemoved: "DOMStorageItemRemoved",
-    DOMStorageItemAdded: "DOMStorageItemAdded",
-    DOMStorageItemUpdated: "DOMStorageItemUpdated"
+    DOMStorageRemoved: "DOMStorageRemoved"
 }
 
 WebInspector.DOMStorageModel.prototype = {
 
     /**
-     * @param {WebInspector.Event} event
+     * @param {!WebInspector.Event} event
      */
     _securityOriginAdded: function(event)
     {
@@ -354,7 +145,7 @@ WebInspector.DOMStorageModel.prototype = {
     },
 
     /**
-     * @param {WebInspector.Event} event
+     * @param {!WebInspector.Event} event
      */
     _securityOriginRemoved: function(event)
     {
@@ -383,68 +174,66 @@ WebInspector.DOMStorageModel.prototype = {
     },
 
     /**
-     * @param {DOMStorageAgent.StorageId} storageId
+     * @param {!DOMStorageAgent.StorageId} storageId
      */
     _domStorageItemsCleared: function(storageId)
     {
         var domStorage = this.storageForId(storageId);
-        var storageData = {
-            storage: domStorage
-        };
-        this.dispatchEventToListeners(WebInspector.DOMStorageModel.Events.DOMStorageItemsCleared, storageData);
+        if (!domStorage)
+            return;
+
+        var eventData = {};
+        domStorage.dispatchEventToListeners(WebInspector.DOMStorage.Events.DOMStorageItemsCleared, eventData);
     },
 
     /**
-     * @param {DOMStorageAgent.StorageId} storageId
+     * @param {!DOMStorageAgent.StorageId} storageId
      * @param {string} key
      */
     _domStorageItemRemoved: function(storageId, key)
     {
         var domStorage = this.storageForId(storageId);
-        var storageData = {
-            storage: domStorage,
-            key: key
-        };
-        this.dispatchEventToListeners(WebInspector.DOMStorageModel.Events.DOMStorageItemRemoved, storageData);
+        if (!domStorage)
+            return;
+
+        var eventData = { key: key };
+        domStorage.dispatchEventToListeners(WebInspector.DOMStorage.Events.DOMStorageItemRemoved, eventData);
     },
 
     /**
-     * @param {DOMStorageAgent.StorageId} storageId
+     * @param {!DOMStorageAgent.StorageId} storageId
      * @param {string} key
-     * @param {string} newValue
+     * @param {string} value
      */
-    _domStorageItemAdded: function(storageId, key, newValue)
+    _domStorageItemAdded: function(storageId, key, value)
     {
         var domStorage = this.storageForId(storageId);
-        var storageData = {
-            storage: domStorage,
-            key: key,
-            newValue: newValue
-        };
-        this.dispatchEventToListeners(WebInspector.DOMStorageModel.Events.DOMStorageItemAdded, storageData);
+        if (!domStorage)
+            return;
+
+        var eventData = { key: key, value: value };
+        domStorage.dispatchEventToListeners(WebInspector.DOMStorage.Events.DOMStorageItemAdded, eventData);
     },
 
     /**
-     * @param {DOMStorageAgent.StorageId} storageId
+     * @param {!DOMStorageAgent.StorageId} storageId
      * @param {string} key
      * @param {string} oldValue
-     * @param {string} newValue
+     * @param {string} value
      */
-    _domStorageItemUpdated: function(storageId, key, oldValue, newValue)
+    _domStorageItemUpdated: function(storageId, key, oldValue, value)
     {
         var domStorage = this.storageForId(storageId);
-        var storageData = {
-            storage: domStorage,
-            key: key,
-            oldValue: oldValue,
-            newValue: newValue
-        };
-        this.dispatchEventToListeners(WebInspector.DOMStorageModel.Events.DOMStorageItemUpdated, storageData);
+        if (!domStorage)
+            return;
+
+        var eventData = { key: key, oldValue: oldValue, value: value };
+        domStorage.dispatchEventToListeners(WebInspector.DOMStorage.Events.DOMStorageItemUpdated, eventData);
     },
 
     /**
-     * @param {DOMStorageAgent.StorageId} storageId
-     * @return {WebInspector.DOMStorage}
+     * @param {!DOMStorageAgent.StorageId} storageId
+     * @return {!WebInspector.DOMStorage}
      */
     storageForId: function(storageId)
     {
@@ -452,7 +241,7 @@ WebInspector.DOMStorageModel.prototype = {
     },
 
     /**
-     * @return {Array.<WebInspector.DOMStorage>}
+     * @return {!Array.<!WebInspector.DOMStorage>}
      */
     storages: function()
     {
@@ -468,7 +257,7 @@ WebInspector.DOMStorageModel.prototype = {
 /**
  * @constructor
  * @implements {DOMStorageAgent.Dispatcher}
- * @param {WebInspector.DOMStorageModel} model
+ * @param {!WebInspector.DOMStorageModel} model
  */
 WebInspector.DOMStorageDispatcher = function(model)
 {
@@ -478,7 +267,7 @@ WebInspector.DOMStorageDispatcher = function(model)
 WebInspector.DOMStorageDispatcher.prototype = {
 
     /**
-     * @param {DOMStorageAgent.StorageId} storageId
+     * @param {!DOMStorageAgent.StorageId} storageId
      */
     domStorageItemsCleared: function(storageId)
     {
@@ -486,7 +275,7 @@ WebInspector.DOMStorageDispatcher.prototype = {
     },
 
     /**
-     * @param {DOMStorageAgent.StorageId} storageId
+     * @param {!DOMStorageAgent.StorageId} storageId
      * @param {string} key
      */
     domStorageItemRemoved: function(storageId, key)
@@ -495,28 +284,28 @@ WebInspector.DOMStorageDispatcher.prototype = {
     },
 
     /**
-     * @param {DOMStorageAgent.StorageId} storageId
+     * @param {!DOMStorageAgent.StorageId} storageId
      * @param {string} key
-     * @param {string} newValue
+     * @param {string} value
      */
-    domStorageItemAdded: function(storageId, key, newValue)
+    domStorageItemAdded: function(storageId, key, value)
     {
-        this._model._domStorageItemAdded(storageId, key, newValue);
+        this._model._domStorageItemAdded(storageId, key, value);
     },
 
     /**
-     * @param {DOMStorageAgent.StorageId} storageId
+     * @param {!DOMStorageAgent.StorageId} storageId
      * @param {string} key
      * @param {string} oldValue
-     * @param {string} newValue
+     * @param {string} value
      */
-    domStorageItemUpdated: function(storageId, key, oldValue, newValue)
+    domStorageItemUpdated: function(storageId, key, oldValue, value)
     {
-        this._model._domStorageItemUpdated(storageId, key, oldValue, newValue);
+        this._model._domStorageItemUpdated(storageId, key, oldValue, value);
     },
 }
 
 /**
- * @type {WebInspector.DOMStorageModel}
+ * @type {!WebInspector.DOMStorageModel}
  */
-WebInspector.domStorageModel = null;
+WebInspector.domStorageModel;

@@ -34,16 +34,15 @@
 #include "WebApplicationCacheHost.h"
 #include "WebDataSource.h"
 #include "WebFrameImpl.h"
-#include "core/loader/CrossOriginAccessControl.h"
+#include "core/fetch/CrossOriginAccessControl.h"
 #include "core/loader/DocumentThreadableLoader.h"
 #include "core/loader/DocumentThreadableLoaderClient.h"
-#include "core/loader/ResourceLoader.h"
-#include "core/platform/Timer.h"
-#include "core/platform/chromium/support/WrappedResourceRequest.h"
-#include "core/platform/chromium/support/WrappedResourceResponse.h"
-#include "core/platform/network/HTTPParsers.h"
-#include "core/platform/network/ResourceError.h"
 #include "core/xml/XMLHttpRequest.h"
+#include "platform/Timer.h"
+#include "platform/exported/WrappedResourceRequest.h"
+#include "platform/exported/WrappedResourceResponse.h"
+#include "platform/network/HTTPParsers.h"
+#include "platform/network/ResourceError.h"
 #include "public/platform/WebHTTPHeaderVisitor.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURLError.h"
@@ -55,7 +54,7 @@
 using namespace WebCore;
 using namespace WTF;
 
-namespace WebKit {
+namespace blink {
 
 namespace {
 
@@ -227,7 +226,7 @@ void AssociatedURLLoader::ClientAdapter::didDownloadData(int dataLength)
     if (!m_client)
         return;
 
-    m_client->didDownloadData(m_loader, dataLength);
+    m_client->didDownloadData(m_loader, dataLength, -1);
 }
 
 void AssociatedURLLoader::ClientAdapter::didReceiveData(const char* data, int dataLength)
@@ -305,11 +304,15 @@ AssociatedURLLoader::~AssociatedURLLoader()
 }
 
 #define COMPILE_ASSERT_MATCHING_ENUM(webkit_name, webcore_name) \
-    COMPILE_ASSERT(static_cast<int>(WebKit::webkit_name) == static_cast<int>(WebCore::webcore_name), mismatching_enums)
+    COMPILE_ASSERT(static_cast<int>(blink::webkit_name) == static_cast<int>(WebCore::webcore_name), mismatching_enums)
 
 COMPILE_ASSERT_MATCHING_ENUM(WebURLLoaderOptions::CrossOriginRequestPolicyDeny, DenyCrossOriginRequests);
 COMPILE_ASSERT_MATCHING_ENUM(WebURLLoaderOptions::CrossOriginRequestPolicyUseAccessControl, UseAccessControl);
 COMPILE_ASSERT_MATCHING_ENUM(WebURLLoaderOptions::CrossOriginRequestPolicyAllow, AllowCrossOriginRequests);
+
+COMPILE_ASSERT_MATCHING_ENUM(WebURLLoaderOptions::ConsiderPreflight, ConsiderPreflight);
+COMPILE_ASSERT_MATCHING_ENUM(WebURLLoaderOptions::ForcePreflight, ForcePreflight);
+COMPILE_ASSERT_MATCHING_ENUM(WebURLLoaderOptions::PreventPreflight, PreventPreflight);
 
 void AssociatedURLLoader::loadSynchronously(const WebURLRequest& request, WebURLResponse& response, WebURLError& error, WebData& data)
 {
@@ -343,7 +346,7 @@ void AssociatedURLLoader::loadAsynchronously(const WebURLRequest& request, WebUR
         options.sendLoadCallbacks = SendCallbacks; // Always send callbacks.
         options.sniffContent = m_options.sniffContent ? SniffContent : DoNotSniffContent;
         options.allowCredentials = m_options.allowCredentials ? AllowStoredCredentials : DoNotAllowStoredCredentials;
-        options.preflightPolicy = m_options.forcePreflight ? ForcePreflight : ConsiderPreflight;
+        options.preflightPolicy = static_cast<WebCore::PreflightPolicy>(m_options.preflightPolicy);
         options.crossOriginRequestPolicy = static_cast<WebCore::CrossOriginRequestPolicy>(m_options.crossOriginRequestPolicy);
         options.dataBufferingPolicy = DoNotBufferData;
 
@@ -371,4 +374,4 @@ void AssociatedURLLoader::setDefersLoading(bool defersLoading)
         m_loader->setDefersLoading(defersLoading);
 }
 
-} // namespace WebKit
+} // namespace blink

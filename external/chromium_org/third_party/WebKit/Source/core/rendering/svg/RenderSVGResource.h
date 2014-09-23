@@ -62,7 +62,6 @@ public:
 
     virtual bool applyResource(RenderObject*, RenderStyle*, GraphicsContext*&, unsigned short resourceMode) = 0;
     virtual void postApplyResource(RenderObject*, GraphicsContext*&, unsigned short, const Path*, const RenderSVGShape*) { }
-    virtual FloatRect resourceBoundingBox(RenderObject*) = 0;
 
     virtual RenderSVGResourceType resourceType() const = 0;
 
@@ -76,12 +75,15 @@ public:
     }
 
     // Helper utilities used in the render tree to access resources used for painting shapes/text (gradients & patterns & solid colors only)
-    static RenderSVGResource* fillPaintingResource(RenderObject*, const RenderStyle*, StyleColor& fallbackColor);
-    static RenderSVGResource* strokePaintingResource(RenderObject*, const RenderStyle*, StyleColor& fallbackColor);
+    static RenderSVGResource* fillPaintingResource(RenderObject*, const RenderStyle*, Color& fallbackColor);
+    static RenderSVGResource* strokePaintingResource(RenderObject*, const RenderStyle*, Color& fallbackColor);
     static RenderSVGResourceSolidColor* sharedSolidPaintingResource();
 
     static void markForLayoutAndParentResourceInvalidation(RenderObject*, bool needsLayout = true);
 };
+
+#define DEFINE_RENDER_SVG_RESOURCE_TYPE_CASTS(thisType, typeName) \
+    DEFINE_TYPE_CASTS(thisType, RenderSVGResource, resource, resource->resourceType() == typeName, resource.resourceType() == typeName)
 
 }
 

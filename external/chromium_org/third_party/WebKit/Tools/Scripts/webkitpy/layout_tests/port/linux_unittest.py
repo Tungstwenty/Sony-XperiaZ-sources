@@ -33,16 +33,16 @@ from webkitpy.common.system.systemhost_mock import MockSystemHost
 from webkitpy.tool.mocktool import MockOptions
 
 from webkitpy.layout_tests.port import linux
-from webkitpy.layout_tests.port import chromium_port_testcase
+from webkitpy.layout_tests.port import port_testcase
 
 
-class LinuxPortTest(chromium_port_testcase.ChromiumPortTestCase):
+class LinuxPortTest(port_testcase.PortTestCase):
     port_name = 'linux'
     port_maker = linux.LinuxPort
 
     def assert_architecture(self, port_name=None, file_output=None, expected_architecture=None):
         host = MockSystemHost()
-        host.filesystem.exists = lambda x: 'content_shell' in x
+        host.filesystem.isfile = lambda x: 'content_shell' in x
         if file_output:
             host.executive = executive_mock.MockExecutive2(file_output)
 
@@ -93,15 +93,11 @@ class LinuxPortTest(chromium_port_testcase.ChromiumPortTestCase):
     def test_build_path(self):
         # Test that optional paths are used regardless of whether they exist.
         options = MockOptions(configuration='Release', build_directory='/foo')
-        self.assert_build_path(options, ['/mock-checkout/Source/WebKit/chromium/out/Release'], '/foo/Release')
+        self.assert_build_path(options, ['/mock-checkout/out/Release'], '/foo/Release')
 
         # Test that optional relative paths are returned unmodified.
         options = MockOptions(configuration='Release', build_directory='foo')
-        self.assert_build_path(options, ['/mock-checkout/Source/WebKit/chromium/out/Release'], 'foo/Release')
-
-        # Test that we prefer the legacy dir over the new dir.
-        options = MockOptions(configuration='Release', build_directory=None)
-        self.assert_build_path(options, ['/mock-checkout/Source/WebKit/chromium/sconsbuild/Release', '/mock-checkout/Source/WebKit/chromium/out/Release'], '/mock-checkout/Source/WebKit/chromium/sconsbuild/Release')
+        self.assert_build_path(options, ['/mock-checkout/out/Release'], 'foo/Release')
 
     def test_driver_name_option(self):
         self.assertTrue(self.make_port()._path_to_driver().endswith('content_shell'))

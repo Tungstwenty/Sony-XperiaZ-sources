@@ -35,25 +35,19 @@ namespace WebCore {
 
 namespace InspectorInstrumentation {
 
-bool profilerEnabledImpl(InstrumentingAgents*);
 bool isDebuggerPausedImpl(InstrumentingAgents*);
 bool collectingHTMLParseErrorsImpl(InstrumentingAgents*);
+PassOwnPtr<ScriptSourceCode> preprocessImpl(InstrumentingAgents*, Frame*, const ScriptSourceCode&);
+String preprocessEventListenerImpl(InstrumentingAgents*, Frame*, const String& source, const String& url, const String& functionName);
 
-bool canvasAgentEnabled(ScriptExecutionContext*);
-bool consoleAgentEnabled(ScriptExecutionContext*);
-bool timelineAgentEnabled(ScriptExecutionContext*);
-
-inline bool profilerEnabled(Page* page)
-{
-    if (InstrumentingAgents* instrumentingAgents = instrumentingAgentsForPage(page))
-        return profilerEnabledImpl(instrumentingAgents);
-    return false;
-}
+bool canvasAgentEnabled(ExecutionContext*);
+bool consoleAgentEnabled(ExecutionContext*);
+bool timelineAgentEnabled(ExecutionContext*);
 
 inline bool isDebuggerPaused(Frame* frame)
 {
     FAST_RETURN_IF_NO_FRONTENDS(false);
-    if (InstrumentingAgents* instrumentingAgents = instrumentingAgentsForFrame(frame))
+    if (InstrumentingAgents* instrumentingAgents = instrumentingAgentsFor(frame))
         return isDebuggerPausedImpl(instrumentingAgents);
     return false;
 }
@@ -61,9 +55,25 @@ inline bool isDebuggerPaused(Frame* frame)
 inline bool collectingHTMLParseErrors(Page* page)
 {
     FAST_RETURN_IF_NO_FRONTENDS(false);
-    if (InstrumentingAgents* instrumentingAgents = instrumentingAgentsForPage(page))
+    if (InstrumentingAgents* instrumentingAgents = instrumentingAgentsFor(page))
         return collectingHTMLParseErrorsImpl(instrumentingAgents);
     return false;
+}
+
+inline String preprocessEventListener(Frame* frame, const String& source, const String& url, const String& functionName)
+{
+    FAST_RETURN_IF_NO_FRONTENDS(source);
+    if (InstrumentingAgents* instrumentingAgents = instrumentingAgentsFor(frame))
+        return preprocessEventListenerImpl(instrumentingAgents, frame, source, url, functionName);
+    return source;
+}
+
+inline PassOwnPtr<ScriptSourceCode> preprocess(Frame* frame, const ScriptSourceCode& sourceCode)
+{
+    FAST_RETURN_IF_NO_FRONTENDS(PassOwnPtr<ScriptSourceCode>());
+    if (InstrumentingAgents* instrumentingAgents = instrumentingAgentsFor(frame))
+        return preprocessImpl(instrumentingAgents, frame, sourceCode);
+    return PassOwnPtr<ScriptSourceCode>();
 }
 
 } // namespace InspectorInstrumentation

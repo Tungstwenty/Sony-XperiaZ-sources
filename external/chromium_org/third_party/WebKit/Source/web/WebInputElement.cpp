@@ -34,18 +34,18 @@
 #include "HTMLNames.h"
 #include "RuntimeEnabledFeatures.h"
 #include "WebNodeCollection.h"
-#include "core/dom/NodeTraversal.h"
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/html/HTMLDataListElement.h"
 #include "core/html/HTMLInputElement.h"
+#include "core/html/shadow/ShadowElementNames.h"
 #include "core/html/shadow/TextControlInnerElements.h"
 #include "public/platform/WebString.h"
 #include "wtf/PassRefPtr.h"
 
 using namespace WebCore;
 
-namespace WebKit {
+namespace blink {
 
 bool WebInputElement::isTextField() const
 {
@@ -132,26 +132,6 @@ WebString WebInputElement::suggestedValue() const
     return constUnwrap<HTMLInputElement>()->suggestedValue();
 }
 
-void WebInputElement::setPlaceholder(const WebString& value)
-{
-    unwrap<HTMLInputElement>()->setAttribute(HTMLNames::placeholderAttr, value);
-}
-
-WebString WebInputElement::placeholder() const
-{
-    return constUnwrap<HTMLInputElement>()->fastGetAttribute(HTMLNames::placeholderAttr);
-}
-
-bool WebInputElement::isAutofilled() const
-{
-    return constUnwrap<HTMLInputElement>()->isAutofilled();
-}
-
-void WebInputElement::setAutofilled(bool autofilled)
-{
-    unwrap<HTMLInputElement>()->setAutofilled(autofilled);
-}
-
 void WebInputElement::setSelectionRange(int start, int end)
 {
     unwrap<HTMLInputElement>()->setSelectionRange(start, end);
@@ -190,8 +170,7 @@ bool WebInputElement::isMultiple() const
 WebNodeCollection WebInputElement::dataListOptions() const
 {
     if (RuntimeEnabledFeatures::dataListElementEnabled()) {
-        HTMLDataListElement* dataList = static_cast<HTMLDataListElement*>(constUnwrap<HTMLInputElement>()->list());
-        if (dataList)
+        if (HTMLDataListElement* dataList = toHTMLDataListElement(constUnwrap<HTMLInputElement>()->list()))
             return WebNodeCollection(dataList->options());
     }
     return WebNodeCollection();
@@ -211,11 +190,17 @@ bool WebInputElement::isSpeechInputEnabled() const
 #endif
 }
 
+#if ENABLE(INPUT_SPEECH)
+static inline InputFieldSpeechButtonElement* speechButtonElement(const WebInputElement* webInput)
+{
+    return toInputFieldSpeechButtonElement(webInput->constUnwrap<HTMLInputElement>()->userAgentShadowRoot()->getElementById(ShadowElementNames::speechButton()));
+}
+#endif
+
 WebInputElement::SpeechInputState WebInputElement::getSpeechInputState() const
 {
 #if ENABLE(INPUT_SPEECH)
-    InputFieldSpeechButtonElement* speechButton = toInputFieldSpeechButtonElement(constUnwrap<HTMLInputElement>()->speechButtonElement());
-    if (speechButton)
+    if (InputFieldSpeechButtonElement* speechButton = speechButtonElement(this))
         return static_cast<WebInputElement::SpeechInputState>(speechButton->state());
 #endif
 
@@ -225,8 +210,7 @@ WebInputElement::SpeechInputState WebInputElement::getSpeechInputState() const
 void WebInputElement::startSpeechInput()
 {
 #if ENABLE(INPUT_SPEECH)
-    InputFieldSpeechButtonElement* speechButton = toInputFieldSpeechButtonElement(constUnwrap<HTMLInputElement>()->speechButtonElement());
-    if (speechButton)
+    if (InputFieldSpeechButtonElement* speechButton = speechButtonElement(this))
         speechButton->startSpeechInput();
 #endif
 }
@@ -234,8 +218,7 @@ void WebInputElement::startSpeechInput()
 void WebInputElement::stopSpeechInput()
 {
 #if ENABLE(INPUT_SPEECH)
-    InputFieldSpeechButtonElement* speechButton = toInputFieldSpeechButtonElement(constUnwrap<HTMLInputElement>()->speechButtonElement());
-    if (speechButton)
+    if (InputFieldSpeechButtonElement* speechButton = speechButtonElement(this))
         speechButton->stopSpeechInput();
 #endif
 }
@@ -284,4 +267,4 @@ WebInputElement* toWebInputElement(WebElement* webElement)
 
     return static_cast<WebInputElement*>(webElement);
 }
-} // namespace WebKit
+} // namespace blink

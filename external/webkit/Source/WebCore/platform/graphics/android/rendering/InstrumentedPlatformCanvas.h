@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2011 Research In Motion Limited. All rights reserved.
+ * Copyright (C) 2014, Sony Mobile Communications AB
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -196,11 +197,11 @@ public:
     }
 
     virtual void drawBitmapRectToRect(const SkBitmap& bitmap, const SkRect* src,
-            const SkRect& dst, const SkPaint* paint)
+            const SkRect& dst, const SkPaint* paint, DrawBitmapRectFlags flags)
     {
         WRAPCANVAS_LOG_ENTRY("");
         m_isSolidColor = false;
-        SkCanvas::drawBitmapRectToRect(bitmap, src, dst, paint);
+        SkCanvas::drawBitmapRectToRect(bitmap, src, dst, paint, flags);
     }
 
     virtual void drawBitmapMatrix(const SkBitmap& bitmap,
@@ -282,6 +283,11 @@ public:
         WRAPCANVAS_LOG_ENTRY("");
         m_isSolidColor = false;
         SkCanvas::drawData(data, size);
+    }
+
+    virtual SkBaseDevice* setDevice(SkBaseDevice* device)
+    {
+        return SkCanvas::setDevice(device);
     }
 
 private:

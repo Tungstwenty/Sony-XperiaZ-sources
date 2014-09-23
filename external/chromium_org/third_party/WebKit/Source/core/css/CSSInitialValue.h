@@ -37,14 +37,14 @@ public:
         return adoptRef(new CSSInitialValue(/* implicit */ true));
     }
 
-    String customCssText() const;
+    String customCSSText() const;
 
     bool isImplicit() const { return m_isImplicit; }
 
     bool equals(const CSSInitialValue&) const { return true; }
 
 private:
-    CSSInitialValue(bool implicit)
+    explicit CSSInitialValue(bool implicit)
         : CSSValue(InitialClass)
         , m_isImplicit(implicit)
     {
@@ -52,6 +52,8 @@ private:
 
     bool m_isImplicit;
 };
+
+DEFINE_CSS_VALUE_TYPE_CASTS(CSSInitialValue, isInitialValue());
 
 } // namespace WebCore
 

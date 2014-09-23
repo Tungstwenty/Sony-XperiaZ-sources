@@ -38,8 +38,6 @@
 #include "string-stream.h"
 #include "vm-state-inl.h"
 
-#include "allocation-inl.h"
-
 namespace v8 {
 namespace internal {
 
@@ -489,7 +487,7 @@ Address StackFrame::UnpaddedFP() const {
 
 
 Code* EntryFrame::unchecked_code() const {
-  return HEAP->js_entry_code();
+  return isolate()->heap()->js_entry_code();
 }
 
 
@@ -512,7 +510,7 @@ StackFrame::Type EntryFrame::GetCallerState(State* state) const {
 
 
 Code* EntryConstructFrame::unchecked_code() const {
-  return HEAP->js_construct_entry_code();
+  return isolate()->heap()->js_construct_entry_code();
 }
 
 
@@ -814,8 +812,7 @@ void JavaScriptFrame::PrintTop(Isolate* isolate,
       PrintF("+%d", code_offset);
       SharedFunctionInfo* shared = fun->shared();
       if (print_line_number) {
-        Code* code = Code::cast(
-            v8::internal::Isolate::Current()->FindCodeObject(pc));
+        Code* code = Code::cast(isolate->FindCodeObject(pc));
         int source_pos = code->SourcePosition(pc);
         Object* maybe_script = shared->script();
         if (maybe_script->IsScript()) {
@@ -987,14 +984,16 @@ void OptimizedFrame::Summarize(List<FrameSummary>* frames) {
       // to construct a stack trace, the receiver is always in a stack slot.
       opcode = static_cast<Translation::Opcode>(it.Next());
       ASSERT(opcode == Translation::STACK_SLOT ||
-             opcode == Translation::LITERAL);
+             opcode == Translation::LITERAL ||
+             opcode == Translation::CAPTURED_OBJECT ||
+             opcode == Translation::DUPLICATED_OBJECT);
       int index = it.Next();
 
       // Get the correct receiver in the optimized frame.
       Object* receiver = NULL;
       if (opcode == Translation::LITERAL) {
         receiver = data->LiteralArray()->get(index);
-      } else {
+      } else if (opcode == Translation::STACK_SLOT) {
         // Positive index means the value is spilled to the locals
         // area. Negative means it is stored in the incoming parameter
         // area.
@@ -1010,6 +1009,12 @@ void OptimizedFrame::Summarize(List<FrameSummary>* frames) {
               ? this->receiver()
               : this->GetParameter(parameter_index);
         }
+      } else {
+        // TODO(3029): Materializing a captured object (or duplicated
+        // object) is hard, we return undefined for now. This breaks the
+        // produced stack trace, as constructor frames aren't marked as
+        // such anymore.
+        receiver = isolate()->heap()->undefined_value();
       }
 
       Code* code = function->shared()->code();
@@ -1398,6 +1403,11 @@ Code* StubFailureTrampolineFrame::unchecked_code() const {
 
   StubFailureTrampolineStub(JS_FUNCTION_STUB_MODE).
       FindCodeInCache(&trampoline, isolate());
+  if (trampoline->contains(pc())) {
+    return trampoline;
+  }
+
+  StubFailureTailCallTrampolineStub().FindCodeInCache(&trampoline, isolate());
   if (trampoline->contains(pc())) {
     return trampoline;
   }

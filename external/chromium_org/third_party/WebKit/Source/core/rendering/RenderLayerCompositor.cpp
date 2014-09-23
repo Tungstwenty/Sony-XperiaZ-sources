@@ -29,50 +29,47 @@
 
 #include "CSSPropertyNames.h"
 #include "HTMLNames.h"
+#include "RuntimeEnabledFeatures.h"
+#include "core/animation/ActiveAnimations.h"
+#include "core/animation/DocumentAnimations.h"
+#include "core/dom/FullscreenElementStack.h"
 #include "core/dom/NodeList.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLIFrameElement.h"
+#include "core/html/HTMLVideoElement.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/page/Chrome.h"
-#include "core/page/ChromeClient.h"
-#include "core/page/Frame.h"
-#include "core/page/FrameView.h"
+#include "core/frame/Frame.h"
+#include "core/frame/FrameView.h"
 #include "core/page/Page.h"
-#include "core/page/Settings.h"
-#include "core/page/animation/AnimationController.h"
+#include "core/frame/Settings.h"
+#include "core/frame/animation/AnimationController.h"
 #include "core/page/scrolling/ScrollingConstraints.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
-#include "core/platform/HistogramSupport.h"
-#include "core/platform/Logging.h"
-#include "core/platform/ScrollbarTheme.h"
-#include "core/platform/chromium/TraceEvent.h"
-#include "core/platform/graphics/GraphicsLayer.h"
-#include "core/platform/graphics/GraphicsLayerClient.h"
-#include "core/platform/graphics/transforms/TransformState.h"
+#include "core/rendering/CompositedLayerMapping.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/RenderApplet.h"
 #include "core/rendering/RenderEmbeddedObject.h"
 #include "core/rendering/RenderFullScreen.h"
 #include "core/rendering/RenderGeometryMap.h"
 #include "core/rendering/RenderIFrame.h"
-#include "core/rendering/RenderLayerBacking.h"
+#include "core/rendering/RenderLayerStackingNode.h"
+#include "core/rendering/RenderLayerStackingNodeIterator.h"
 #include "core/rendering/RenderReplica.h"
 #include "core/rendering/RenderVideo.h"
 #include "core/rendering/RenderView.h"
+#include "platform/OverscrollTheme.h"
+#include "platform/TraceEvent.h"
+#include "platform/geometry/TransformState.h"
+#include "platform/graphics/GraphicsLayer.h"
+#include "platform/scroll/ScrollbarTheme.h"
+#include "public/platform/Platform.h"
 #include "wtf/TemporaryChange.h"
-
-#if !LOG_DISABLED
-#include "wtf/CurrentTime.h"
-#endif
 
 #ifndef NDEBUG
 #include "core/rendering/RenderTreeAsText.h"
 #endif
-
-#define WTF_USE_COMPOSITING_FOR_SMALL_CANVASES 1
-
-static const int canvasAreaThresholdRequiringCompositing = 50 * 100;
 
 namespace WebCore {
 
@@ -176,10 +173,11 @@ private:
     RenderGeometryMap m_geometryMap;
 };
 
-struct CompositingState {
-    CompositingState(RenderLayer* compAncestor, bool testOverlap)
+struct CompositingRecursionData {
+    CompositingRecursionData(RenderLayer* compAncestor, bool testOverlap)
         : m_compositingAncestor(compAncestor)
         , m_subtreeIsCompositing(false)
+        , m_hasUnisolatedCompositedBlendingDescendant(false)
         , m_testingOverlap(testOverlap)
 #ifndef NDEBUG
         , m_depth(0)
@@ -187,9 +185,10 @@ struct CompositingState {
     {
     }
 
-    CompositingState(const CompositingState& other)
+    CompositingRecursionData(const CompositingRecursionData& other)
         : m_compositingAncestor(other.m_compositingAncestor)
         , m_subtreeIsCompositing(other.m_subtreeIsCompositing)
+        , m_hasUnisolatedCompositedBlendingDescendant(other.m_hasUnisolatedCompositedBlendingDescendant)
         , m_testingOverlap(other.m_testingOverlap)
 #ifndef NDEBUG
         , m_depth(other.m_depth + 1)
@@ -199,6 +198,7 @@ struct CompositingState {
 
     RenderLayer* m_compositingAncestor;
     bool m_subtreeIsCompositing;
+    bool m_hasUnisolatedCompositedBlendingDescendant;
     bool m_testingOverlap;
 #ifndef NDEBUG
     int m_depth;
@@ -206,22 +206,13 @@ struct CompositingState {
 };
 
 
-static inline bool compositingLogEnabled()
-{
-#if !LOG_DISABLED
-    return LogCompositing.state == WTFLogChannelOn;
-#else
-    return false;
-#endif
-}
-
 RenderLayerCompositor::RenderLayerCompositor(RenderView* renderView)
     : m_renderView(renderView)
     , m_hasAcceleratedCompositing(true)
     , m_compositingTriggers(static_cast<ChromeClient::CompositingTriggerFlags>(ChromeClient::AllTriggers))
-    , m_compositedLayerCount(0)
     , m_showRepaintCounter(false)
-    , m_reevaluateCompositingAfterLayout(false)
+    , m_needsToRecomputeCompositingRequirements(false)
+    , m_needsToUpdateLayerTreeGeometry(false)
     , m_compositing(false)
     , m_compositingLayersNeedRebuild(false)
     , m_forceCompositingMode(false)
@@ -229,13 +220,6 @@ RenderLayerCompositor::RenderLayerCompositor(RenderView* renderView)
     , m_needsUpdateCompositingRequirementsState(false)
     , m_isTrackingRepaints(false)
     , m_rootLayerAttachment(RootLayerUnattached)
-#if !LOG_DISABLED
-    , m_rootLayerUpdateCount(0)
-    , m_obligateCompositedLayerCount(0)
-    , m_secondaryCompositedLayerCount(0)
-    , m_obligatoryBackingStoreBytes(0)
-    , m_secondaryBackingStoreBytes(0)
-#endif
 {
 }
 
@@ -263,15 +247,14 @@ void RenderLayerCompositor::cacheAcceleratedCompositingFlags()
     bool showRepaintCounter = false;
     bool forceCompositingMode = false;
 
-    if (Settings* settings = m_renderView->document()->settings()) {
+    if (Settings* settings = m_renderView->document().settings()) {
         hasAcceleratedCompositing = settings->acceleratedCompositingEnabled();
 
         // We allow the chrome to override the settings, in case the page is rendered
         // on a chrome that doesn't allow accelerated compositing.
         if (hasAcceleratedCompositing) {
             if (Page* page = this->page()) {
-                ChromeClient* chromeClient = page->chrome().client();
-                m_compositingTriggers = chromeClient->allowedCompositingTriggers();
+                m_compositingTriggers = page->chrome().client().allowedCompositingTriggers();
                 hasAcceleratedCompositing = m_compositingTriggers;
             }
         }
@@ -291,6 +274,14 @@ void RenderLayerCompositor::cacheAcceleratedCompositingFlags()
     m_forceCompositingMode = forceCompositingMode;
 }
 
+bool RenderLayerCompositor::layerSquashingEnabled() const
+{
+    if (Settings* settings = m_renderView->document().settings())
+        return settings->layerSquashingEnabled();
+
+    return false;
+}
+
 bool RenderLayerCompositor::canRender3DTransforms() const
 {
     return hasAcceleratedCompositing() && (m_compositingTriggers & ChromeClient::ThreeDTransformTrigger);
@@ -298,8 +289,11 @@ bool RenderLayerCompositor::canRender3DTransforms() const
 
 void RenderLayerCompositor::setCompositingLayersNeedRebuild(bool needRebuild)
 {
+    // FIXME: crbug,com/332248 ideally this could be merged with setNeedsCompositingUpdate().
     if (inCompositingMode())
         m_compositingLayersNeedRebuild = needRebuild;
+
+    m_renderView->frameView()->scheduleAnimation();
 }
 
 void RenderLayerCompositor::didChangeVisibleRect()
@@ -315,119 +309,157 @@ void RenderLayerCompositor::didChangeVisibleRect()
     IntRect visibleRect = m_containerLayer ? IntRect(IntPoint(), frameView->contentsSize()) : frameView->visibleContentRect();
     if (rootLayer->visibleRectChangeRequiresFlush(visibleRect)) {
         if (Page* page = this->page())
-            page->chrome().client()->scheduleCompositingLayerFlush();
+            page->chrome().client().scheduleCompositingLayerFlush();
     }
-}
-
-bool RenderLayerCompositor::hasAnyAdditionalCompositedLayers(const RenderLayer* rootLayer) const
-{
-    return m_compositedLayerCount > (rootLayer->isComposited() ? 1 : 0);
 }
 
 void RenderLayerCompositor::updateCompositingRequirementsState()
 {
-    TRACE_EVENT0("blink_rendering", "RenderLayerCompositor::updateCompositingRequirementsState");
-
     if (!m_needsUpdateCompositingRequirementsState)
         return;
+
+    TRACE_EVENT0("blink_rendering,comp-scroll", "RenderLayerCompositor::updateCompositingRequirementsState");
 
     m_needsUpdateCompositingRequirementsState = false;
 
     if (!rootRenderLayer() || !rootRenderLayer()->acceleratedCompositingForOverflowScrollEnabled())
         return;
 
+    for (HashSet<RenderLayer*>::iterator it = m_outOfFlowPositionedLayers.begin(); it != m_outOfFlowPositionedLayers.end(); ++it)
+        (*it)->updateHasUnclippedDescendant();
+
     const FrameView::ScrollableAreaSet* scrollableAreas = m_renderView->frameView()->scrollableAreas();
     if (!scrollableAreas)
         return;
-
-    for (HashSet<RenderLayer*>::iterator it = m_outOfFlowPositionedLayers.begin(); it != m_outOfFlowPositionedLayers.end(); ++it)
-        (*it)->updateHasUnclippedDescendant();
 
     for (FrameView::ScrollableAreaSet::iterator it = scrollableAreas->begin(); it != scrollableAreas->end(); ++it)
         (*it)->updateNeedsCompositedScrolling();
 }
 
-void RenderLayerCompositor::updateCompositingLayers(CompositingUpdateType updateType, RenderLayer* updateRoot)
+static RenderVideo* findFullscreenVideoRenderer(Document* document)
+{
+    Element* fullscreenElement = FullscreenElementStack::currentFullScreenElementFrom(document);
+    while (fullscreenElement && fullscreenElement->isFrameOwnerElement()) {
+        document = toHTMLFrameOwnerElement(fullscreenElement)->contentDocument();
+        if (!document)
+            return 0;
+        fullscreenElement = FullscreenElementStack::currentFullScreenElementFrom(document);
+    }
+    if (!fullscreenElement || !isHTMLVideoElement(fullscreenElement))
+        return 0;
+    RenderObject* renderer = fullscreenElement->renderer();
+    if (!renderer)
+        return 0;
+    return toRenderVideo(renderer);
+}
+
+void RenderLayerCompositor::finishCompositingUpdateForFrameTree(Frame* frame)
+{
+    for (Frame* child = frame->tree().firstChild(); child; child = child->tree().nextSibling())
+        finishCompositingUpdateForFrameTree(child);
+
+    // Update compositing for current frame after all descendant frames are updated.
+    if (frame && frame->contentRenderer()) {
+        RenderLayerCompositor* frameCompositor = frame->contentRenderer()->compositor();
+        if (frameCompositor && !frameCompositor->isMainFrame())
+            frame->contentRenderer()->compositor()->updateCompositingLayers(CompositingUpdateFinishAllDeferredWork);
+    }
+}
+
+void RenderLayerCompositor::updateCompositingLayers(CompositingUpdateType updateType)
 {
     // Avoid updating the layers with old values. Compositing layers will be updated after the layout is finished.
     if (m_renderView->needsLayout())
         return;
 
+    if (updateType == CompositingUpdateFinishAllDeferredWork && isMainFrame() && m_renderView->frameView())
+        finishCompositingUpdateForFrameTree(&m_renderView->frameView()->frame());
+
     if (m_forceCompositingMode && !m_compositing)
         enableCompositingMode(true);
 
-    if (!m_reevaluateCompositingAfterLayout && !m_compositing)
+    if (!m_needsToRecomputeCompositingRequirements && !m_compositing)
         return;
 
-    AnimationUpdateBlock animationUpdateBlock(m_renderView->frameView()->frame()->animation());
+    AnimationUpdateBlock animationUpdateBlock(m_renderView->frameView()->frame().animation());
 
     TemporaryChange<bool> postLayoutChange(m_inPostLayoutUpdate, true);
 
-    bool checkForHierarchyUpdate = m_reevaluateCompositingAfterLayout;
+    bool needCompositingRequirementsUpdate = false;
+    bool needHierarchyAndGeometryUpdate = false;
     bool needGeometryUpdate = false;
+    bool needsToUpdateScrollingCoordinator = false;
 
+    // CompositingUpdateFinishAllDeferredWork is the only updateType that will actually do any work in this
+    // function. All other updateTypes will simply mark that something needed updating, and defer the actual
+    // update. This way we only need to compute all compositing state once for every frame drawn (if needed).
     switch (updateType) {
     case CompositingUpdateAfterStyleChange:
     case CompositingUpdateAfterLayout:
-        checkForHierarchyUpdate = true;
+        m_needsToRecomputeCompositingRequirements = true;
         break;
     case CompositingUpdateOnScroll:
-        checkForHierarchyUpdate = true; // Overlap can change with scrolling, so need to check for hierarchy updates.
-        needGeometryUpdate = true;
+        m_needsToRecomputeCompositingRequirements = true; // Overlap can change with scrolling, so need to check for hierarchy updates.
+        m_needsToUpdateLayerTreeGeometry = true;
         break;
     case CompositingUpdateOnCompositedScroll:
-        needGeometryUpdate = true;
+        m_needsToUpdateLayerTreeGeometry = true;
+        break;
+    case CompositingUpdateFinishAllDeferredWork:
+        needCompositingRequirementsUpdate = m_needsToRecomputeCompositingRequirements;
+        needHierarchyAndGeometryUpdate = m_compositingLayersNeedRebuild;
+        needGeometryUpdate = m_needsToUpdateLayerTreeGeometry;
+        needsToUpdateScrollingCoordinator = scrollingCoordinator() ? scrollingCoordinator()->needsToUpdateAfterCompositingChange() : false;
         break;
     }
 
-    if (!checkForHierarchyUpdate && !needGeometryUpdate)
+    if (!needCompositingRequirementsUpdate && !needHierarchyAndGeometryUpdate && !needGeometryUpdate && !needsToUpdateScrollingCoordinator)
         return;
 
-    bool needHierarchyUpdate = m_compositingLayersNeedRebuild;
-    bool isFullUpdate = !updateRoot;
+    ASSERT(updateType == CompositingUpdateFinishAllDeferredWork);
 
-    // Only clear the flag if we're updating the entire hierarchy.
+    // Only clear the flags if we're updating the entire hierarchy.
     m_compositingLayersNeedRebuild = false;
-    updateRoot = rootRenderLayer();
+    m_needsToUpdateLayerTreeGeometry = false;
+    m_needsToRecomputeCompositingRequirements = false;
+    RenderLayer* updateRoot = rootRenderLayer();
 
-    if (isFullUpdate && updateType == CompositingUpdateAfterLayout)
-        m_reevaluateCompositingAfterLayout = false;
-
-#if !LOG_DISABLED
-    double startTime = 0;
-    if (compositingLogEnabled()) {
-        ++m_rootLayerUpdateCount;
-        startTime = currentTime();
-    }
-#endif
-
-    if (checkForHierarchyUpdate) {
+    if (needCompositingRequirementsUpdate) {
         // Go through the layers in presentation order, so that we can compute which RenderLayers need compositing layers.
         // FIXME: we could maybe do this and the hierarchy udpate in one pass, but the parenting logic would be more complex.
-        CompositingState compState(updateRoot, true);
+        CompositingRecursionData recursionData(updateRoot, true);
         bool layersChanged = false;
         bool saw3DTransform = false;
         {
             TRACE_EVENT0("blink_rendering", "RenderLayerCompositor::computeCompositingRequirements");
             OverlapMap overlapTestRequestMap;
-            computeCompositingRequirements(0, updateRoot, &overlapTestRequestMap, compState, layersChanged, saw3DTransform);
+
+            // FIXME: Passing these unclippedDescendants down and keeping track
+            // of them dynamically, we are requiring a full tree walk. This
+            // should be removed as soon as proper overlap testing based on
+            // scrolling and animation bounds is implemented (crbug.com/252472).
+            Vector<RenderLayer*> unclippedDescendants;
+            computeCompositingRequirements(0, updateRoot, &overlapTestRequestMap, recursionData, saw3DTransform, unclippedDescendants);
         }
-        needHierarchyUpdate |= layersChanged;
+
+        {
+            TRACE_EVENT0("blink_rendering", "RenderLayerCompositor::assignLayersToBackings");
+            assignLayersToBackings(updateRoot, layersChanged);
+        }
+
+        {
+            TRACE_EVENT0("blink_rendering", "RenderLayerCompositor::updateHasVisibleNonLayerContentLoop");
+            const FrameView::ScrollableAreaSet* scrollableAreas = m_renderView->frameView()->scrollableAreas();
+            if (scrollableAreas) {
+                for (FrameView::ScrollableAreaSet::iterator it = scrollableAreas->begin(); it != scrollableAreas->end(); ++it)
+                    (*it)->updateHasVisibleNonLayerContent();
+            }
+        }
+
+        needHierarchyAndGeometryUpdate |= layersChanged;
     }
 
-#if !LOG_DISABLED
-    if (compositingLogEnabled() && isFullUpdate && (needHierarchyUpdate || needGeometryUpdate)) {
-        m_obligateCompositedLayerCount = 0;
-        m_secondaryCompositedLayerCount = 0;
-        m_obligatoryBackingStoreBytes = 0;
-        m_secondaryBackingStoreBytes = 0;
-
-        Frame* frame = m_renderView->frameView()->frame();
-        LOG(Compositing, "\nUpdate %d of %s.\n", m_rootLayerUpdateCount, isMainFrame() ? "main frame" : frame->tree()->uniqueName().string().utf8().data());
-    }
-#endif
-
-    if (needHierarchyUpdate) {
+    if (needHierarchyAndGeometryUpdate) {
         // Update the hierarchy of the compositing layers.
         Vector<GraphicsLayer*> childList;
         {
@@ -436,75 +468,60 @@ void RenderLayerCompositor::updateCompositingLayers(CompositingUpdateType update
         }
 
         // Host the document layer in the RenderView's root layer.
-        if (isFullUpdate) {
-            // Even when childList is empty, don't drop out of compositing mode if there are
-            // composited layers that we didn't hit in our traversal (e.g. because of visibility:hidden).
-            if (childList.isEmpty() && !hasAnyAdditionalCompositedLayers(updateRoot))
-                destroyRootLayer();
-            else
-                m_rootContentLayer->setChildren(childList);
+        if (RuntimeEnabledFeatures::overlayFullscreenVideoEnabled() && isMainFrame()) {
+            RenderVideo* video = findFullscreenVideoRenderer(&m_renderView->document());
+            if (video && video->hasCompositedLayerMapping()) {
+                childList.clear();
+                childList.append(video->compositedLayerMapping()->mainGraphicsLayer());
+            }
         }
+
+        if (childList.isEmpty())
+            destroyRootLayer();
+        else
+            m_rootContentLayer->setChildren(childList);
     } else if (needGeometryUpdate) {
         // We just need to do a geometry update. This is only used for position:fixed scrolling;
         // most of the time, geometry is updated via RenderLayer::styleChanged().
-        updateLayerTreeGeometry(updateRoot, 0);
+        updateLayerTreeGeometry(updateRoot);
     }
 
-#if !LOG_DISABLED
-    if (compositingLogEnabled() && isFullUpdate && (needHierarchyUpdate || needGeometryUpdate)) {
-        double endTime = currentTime();
-        LOG(Compositing, "Total layers   primary   secondary   obligatory backing (KB)   secondary backing(KB)   total backing (KB)  update time (ms)\n");
-
-        LOG(Compositing, "%8d %11d %9d %20.2f %22.2f %22.2f %18.2f\n",
-            m_obligateCompositedLayerCount + m_secondaryCompositedLayerCount, m_obligateCompositedLayerCount,
-            m_secondaryCompositedLayerCount, m_obligatoryBackingStoreBytes / 1024, m_secondaryBackingStoreBytes / 1024, (m_obligatoryBackingStoreBytes + m_secondaryBackingStoreBytes) / 1024, 1000.0 * (endTime - startTime));
-    }
-#endif
     ASSERT(updateRoot || !m_compositingLayersNeedRebuild);
 
     if (!hasAcceleratedCompositing())
         enableCompositingMode(false);
 
-    // Inform the inspector that the layer tree has changed.
-    InspectorInstrumentation::layerTreeDidChange(page());
-}
+    // The scrolling coordinator may realize that it needs updating while compositing was being updated in this function.
+    needsToUpdateScrollingCoordinator |= scrollingCoordinator() ? scrollingCoordinator()->needsToUpdateAfterCompositingChange() : false;
+    if (needsToUpdateScrollingCoordinator && isMainFrame() && scrollingCoordinator() && inCompositingMode())
+        scrollingCoordinator()->updateAfterCompositingChange();
 
-void RenderLayerCompositor::layerBecameNonComposited(const RenderLayer* renderLayer)
-{
-    ASSERT(m_compositedLayerCount > 0);
-    --m_compositedLayerCount;
+    // Inform the inspector that the layer tree has changed.
+    if (isMainFrame())
+        InspectorInstrumentation::layerTreeDidChange(page());
 }
 
 static bool requiresCompositing(CompositingReasons reasons)
 {
+    // Any reasons other than overlap or assumed overlap will require the layer to be separately compositing.
+    return reasons & ~CompositingReasonComboAllOverlapReasons;
+}
+
+static bool requiresSquashing(CompositingReasons reasons)
+{
+    // If the layer has overlap or assumed overlap, but no other reasons, then it should be squashed.
+    return !requiresCompositing(reasons) && (reasons & CompositingReasonComboAllOverlapReasons);
+}
+
+static bool requiresCompositingOrSquashing(CompositingReasons reasons)
+{
+#ifndef NDEBUG
+    bool fastAnswer = reasons != CompositingReasonNone;
+    bool slowAnswer = requiresCompositing(reasons) || requiresSquashing(reasons);
+    ASSERT(fastAnswer == slowAnswer);
+#endif
     return reasons != CompositingReasonNone;
 }
-
-#if !LOG_DISABLED
-void RenderLayerCompositor::logLayerInfo(const RenderLayer* layer, int depth)
-{
-    if (!compositingLogEnabled())
-        return;
-
-    RenderLayerBacking* backing = layer->backing();
-    if (requiresCompositing(directReasonsForCompositing(layer)) || layer->isRootLayer()) {
-        ++m_obligateCompositedLayerCount;
-        m_obligatoryBackingStoreBytes += backing->backingStoreMemoryEstimate();
-    } else {
-        ++m_secondaryCompositedLayerCount;
-        m_secondaryBackingStoreBytes += backing->backingStoreMemoryEstimate();
-    }
-
-    String layerName;
-#ifndef NDEBUG
-    layerName = layer->debugName();
-#endif
-
-    LOG(Compositing, "%*p %dx%d %.2fKB (%s) %s\n", 12 + depth * 2, layer, backing->compositedBounds().width(), backing->compositedBounds().height(),
-        backing->backingStoreMemoryEstimate() / 1024,
-        logReasonsForCompositing(layer), layerName.utf8().data());
-}
-#endif
 
 void RenderLayerCompositor::addOutOfFlowPositionedLayer(RenderLayer* layer)
 {
@@ -516,98 +533,113 @@ void RenderLayerCompositor::removeOutOfFlowPositionedLayer(RenderLayer* layer)
     m_outOfFlowPositionedLayers.remove(layer);
 }
 
-bool RenderLayerCompositor::updateBacking(RenderLayer* layer, CompositingChangeRepaint shouldRepaint)
+bool RenderLayerCompositor::allocateOrClearCompositedLayerMapping(RenderLayer* layer)
 {
-    bool layerChanged = false;
+    bool compositedLayerMappingChanged = false;
     RenderLayer::ViewportConstrainedNotCompositedReason viewportConstrainedNotCompositedReason = RenderLayer::NoNotCompositedReason;
     requiresCompositingForPosition(layer->renderer(), layer, &viewportConstrainedNotCompositedReason);
 
     // FIXME: It would be nice to directly use the layer's compositing reason,
-    // but updateBacking() also gets called without having updated compositing
+    // but allocateOrClearCompositedLayerMapping also gets called without having updated compositing
     // requirements fully.
-    if (needsToBeComposited(layer)) {
+    if (needsOwnBacking(layer)) {
         enableCompositingMode();
 
-        if (!layer->backing()) {
-            // If we need to repaint, do so before making backing
-            if (shouldRepaint == CompositingChangeRepaintNow)
-                repaintOnCompositingChange(layer);
+        if (!layer->hasCompositedLayerMapping()) {
+            // If we need to repaint, do so before allocating the compositedLayerMapping
+            repaintOnCompositingChange(layer);
 
-            layer->ensureBacking();
+            layer->ensureCompositedLayerMapping();
+            compositedLayerMappingChanged = true;
 
             // At this time, the ScrollingCooridnator only supports the top-level frame.
-            if (layer->isRootLayer() && !isMainFrame()) {
+            if (layer->isRootLayer() && isMainFrame()) {
                 if (ScrollingCoordinator* scrollingCoordinator = this->scrollingCoordinator())
                     scrollingCoordinator->frameViewRootLayerDidChange(m_renderView->frameView());
             }
 
+            // If this layer was previously squashed, we need to remove its reference to a groupedMapping right away, so
+            // that computing repaint rects will know the layer's correct compositingState.
+            // FIXME: do we need to also remove the layer from it's location in the squashing list of its groupedMapping?
+            // Need to create a test where a squashed layer pops into compositing. And also to cover all other
+            // sorts of compositingState transitions.
+            layer->setGroupedMapping(0);
+
+            // FIXME: it seems premature to compute this before all compositing state has been updated?
             // This layer and all of its descendants have cached repaints rects that are relative to
             // the repaint container, so change when compositing changes; we need to update them here.
             if (layer->parent())
-                layer->computeRepaintRectsIncludingDescendants();
-
-            layerChanged = true;
+                layer->repainter().computeRepaintRectsIncludingDescendants();
         }
+
+        if (layer->compositedLayerMapping()->updateRequiresOwnBackingStoreForIntrinsicReasons())
+            compositedLayerMappingChanged = true;
     } else {
-        if (layer->backing()) {
-            // If we're removing backing on a reflection, clear the source GraphicsLayer's pointer to
+        if (layer->hasCompositedLayerMapping()) {
+            // If we're removing the compositedLayerMapping from a reflection, clear the source GraphicsLayer's pointer to
             // its replica GraphicsLayer. In practice this should never happen because reflectee and reflection
             // are both either composited, or not composited.
             if (layer->isReflection()) {
                 RenderLayer* sourceLayer = toRenderLayerModelObject(layer->renderer()->parent())->layer();
-                if (RenderLayerBacking* backing = sourceLayer->backing()) {
-                    ASSERT(backing->graphicsLayer()->replicaLayer() == layer->backing()->graphicsLayer());
-                    backing->graphicsLayer()->setReplicatedByLayer(0);
+                if (sourceLayer->hasCompositedLayerMapping()) {
+                    ASSERT(sourceLayer->compositedLayerMapping()->mainGraphicsLayer()->replicaLayer() == layer->compositedLayerMapping()->mainGraphicsLayer());
+                    sourceLayer->compositedLayerMapping()->mainGraphicsLayer()->setReplicatedByLayer(0);
                 }
             }
 
             removeViewportConstrainedLayer(layer);
 
-            layer->clearBacking();
-            layerChanged = true;
+            layer->clearCompositedLayerMapping();
+            compositedLayerMappingChanged = true;
 
             // This layer and all of its descendants have cached repaints rects that are relative to
             // the repaint container, so change when compositing changes; we need to update them here.
-            layer->computeRepaintRectsIncludingDescendants();
+            layer->repainter().computeRepaintRectsIncludingDescendants();
 
-            // If we need to repaint, do so now that we've removed the backing
-            if (shouldRepaint == CompositingChangeRepaintNow)
-                repaintOnCompositingChange(layer);
+            // If we need to repaint, do so now that we've removed the compositedLayerMapping
+            repaintOnCompositingChange(layer);
         }
     }
 
-    if (layerChanged && layer->renderer()->isRenderPart()) {
+    if (compositedLayerMappingChanged && layer->renderer()->isRenderPart()) {
         RenderLayerCompositor* innerCompositor = frameContentsCompositor(toRenderPart(layer->renderer()));
         if (innerCompositor && innerCompositor->inCompositingMode())
             innerCompositor->updateRootLayerAttachment();
     }
 
-    if (layerChanged)
-        layer->clearClipRectsIncludingDescendants(PaintingClipRects);
+    if (compositedLayerMappingChanged)
+        layer->clipper().clearClipRectsIncludingDescendants(PaintingClipRects);
 
-    // If a fixed position layer gained/lost a backing or the reason not compositing it changed,
+    // If a fixed position layer gained/lost a compositedLayerMapping or the reason not compositing it changed,
     // the scrolling coordinator needs to recalculate whether it can do fast scrolling.
+    bool nonCompositedReasonChanged = false;
     if (layer->renderer()->style()->position() == FixedPosition) {
         if (layer->viewportConstrainedNotCompositedReason() != viewportConstrainedNotCompositedReason) {
             layer->setViewportConstrainedNotCompositedReason(viewportConstrainedNotCompositedReason);
-            layerChanged = true;
+            nonCompositedReasonChanged = true;
         }
-        if (layerChanged) {
+        if (compositedLayerMappingChanged || nonCompositedReasonChanged) {
             if (ScrollingCoordinator* scrollingCoordinator = this->scrollingCoordinator())
                 scrollingCoordinator->frameViewFixedObjectsDidChange(m_renderView->frameView());
         }
     }
 
-    return layerChanged;
+    return compositedLayerMappingChanged || nonCompositedReasonChanged;
 }
 
-bool RenderLayerCompositor::updateLayerCompositingState(RenderLayer* layer, CompositingChangeRepaint shouldRepaint)
+bool RenderLayerCompositor::updateLayerCompositingState(RenderLayer* layer)
 {
-    bool layerChanged = updateBacking(layer, shouldRepaint);
+    updateDirectCompositingReasons(layer);
+    bool layerChanged = allocateOrClearCompositedLayerMapping(layer);
+
+    if (layerSquashingEnabled()) {
+        // FIXME: this is not correct... info may be out of date and squashing returning true doesn't indicate that the layer changed
+        layerChanged = requiresSquashing(layer->compositingReasons());
+    }
 
     // See if we need content or clipping layers. Methods called here should assume
     // that the compositing state of descendant layers has not been updated yet.
-    if (layer->backing() && layer->backing()->updateGraphicsLayerConfiguration())
+    if (layer->hasCompositedLayerMapping() && layer->compositedLayerMapping()->updateGraphicsLayerConfiguration())
         layerChanged = true;
 
     return layerChanged;
@@ -623,7 +655,7 @@ void RenderLayerCompositor::repaintOnCompositingChange(RenderLayer* layer)
     if (!repaintContainer)
         repaintContainer = m_renderView;
 
-    layer->repaintIncludingNonCompositingDescendants(repaintContainer);
+    layer->repainter().repaintIncludingNonCompositingDescendants(repaintContainer);
 }
 
 // This method assumes that layout is up-to-date, unlike repaintOnCompositingChange().
@@ -631,15 +663,21 @@ void RenderLayerCompositor::repaintInCompositedAncestor(RenderLayer* layer, cons
 {
     RenderLayer* compositedAncestor = layer->enclosingCompositingLayerForRepaint(false /*exclude self*/);
     if (compositedAncestor) {
-        ASSERT(compositedAncestor->backing());
-
+        // FIXME: make sure repaintRect is computed correctly for squashed scenario
         LayoutPoint offset;
         layer->convertToLayerCoords(compositedAncestor, offset);
 
         LayoutRect repaintRect = rect;
         repaintRect.moveBy(offset);
 
-        compositedAncestor->setBackingNeedsRepaintInRect(repaintRect);
+        if (compositedAncestor->compositingState() == PaintsIntoOwnBacking) {
+            compositedAncestor->repainter().setBackingNeedsRepaintInRect(repaintRect);
+        } else if (compositedAncestor->compositingState() == PaintsIntoGroupedBacking) {
+            // FIXME: Need to perform the correct coordinate conversion for repaintRect here, including transforms
+            compositedAncestor->groupedMapping()->squashingLayer()->setNeedsDisplayInRect(repaintRect);
+        } else {
+            ASSERT_NOT_REACHED();
+        }
     }
 }
 
@@ -666,11 +704,11 @@ void RenderLayerCompositor::layerWasAdded(RenderLayer* /*parent*/, RenderLayer* 
 
 void RenderLayerCompositor::layerWillBeRemoved(RenderLayer* parent, RenderLayer* child)
 {
-    if (!child->isComposited() || parent->renderer()->documentBeingDestroyed())
+    if (!child->hasCompositedLayerMapping() || parent->renderer()->documentBeingDestroyed())
         return;
 
     removeViewportConstrainedLayer(child);
-    repaintInCompositedAncestor(child, child->backing()->compositedBounds());
+    repaintInCompositedAncestor(child, child->compositedLayerMapping()->compositedBounds());
 
     setCompositingParent(child, 0);
     setCompositingLayersNeedRebuild();
@@ -679,7 +717,7 @@ void RenderLayerCompositor::layerWillBeRemoved(RenderLayer* parent, RenderLayer*
 RenderLayer* RenderLayerCompositor::enclosingNonStackingClippingLayer(const RenderLayer* layer) const
 {
     for (RenderLayer* curr = layer->parent(); curr != 0; curr = curr->parent()) {
-        if (curr->isStackingContainer())
+        if (curr->stackingNode()->isStackingContainer())
             return 0;
 
         if (curr->renderer()->hasClipOrOverflowClip())
@@ -703,7 +741,7 @@ void RenderLayerCompositor::addToOverlapMap(OverlapMap& overlapMap, RenderLayer*
         boundsComputed = true;
     }
 
-    IntRect clipRect = pixelSnappedIntRect(layer->backgroundClipRect(RenderLayer::ClipRectsContext(rootRenderLayer(), 0, AbsoluteClipRects)).rect()); // FIXME: Incorrect for CSS regions.
+    IntRect clipRect = pixelSnappedIntRect(layer->backgroundClipRect(ClipRectsContext(rootRenderLayer(), 0, AbsoluteClipRects)).rect()); // FIXME: Incorrect for CSS regions.
     clipRect.intersect(layerBounds);
     overlapMap.add(layer, clipRect);
 }
@@ -722,36 +760,12 @@ void RenderLayerCompositor::addToOverlapMapRecursive(OverlapMap& overlapMap, Ren
     addToOverlapMap(overlapMap, layer, bounds, haveComputedBounds);
 
 #if !ASSERT_DISABLED
-    LayerListMutationDetector mutationChecker(layer);
+    LayerListMutationDetector mutationChecker(layer->stackingNode());
 #endif
 
-    if (layer->isStackingContainer()) {
-        if (Vector<RenderLayer*>* negZOrderList = layer->negZOrderList()) {
-            size_t listSize = negZOrderList->size();
-            for (size_t i = 0; i < listSize; ++i) {
-                RenderLayer* curLayer = negZOrderList->at(i);
-                addToOverlapMapRecursive(overlapMap, curLayer, layer);
-            }
-        }
-    }
-
-    if (Vector<RenderLayer*>* normalFlowList = layer->normalFlowList()) {
-        size_t listSize = normalFlowList->size();
-        for (size_t i = 0; i < listSize; ++i) {
-            RenderLayer* curLayer = normalFlowList->at(i);
-            addToOverlapMapRecursive(overlapMap, curLayer, layer);
-        }
-    }
-
-    if (layer->isStackingContainer()) {
-        if (Vector<RenderLayer*>* posZOrderList = layer->posZOrderList()) {
-            size_t listSize = posZOrderList->size();
-            for (size_t i = 0; i < listSize; ++i) {
-                RenderLayer* curLayer = posZOrderList->at(i);
-                addToOverlapMapRecursive(overlapMap, curLayer, layer);
-            }
-        }
-    }
+    RenderLayerStackingNodeIterator iterator(*layer->stackingNode(), AllChildren);
+    while (RenderLayerStackingNode* curNode = iterator.next())
+        addToOverlapMapRecursive(overlapMap, curNode->layer(), layer);
 
     if (ancestorLayer)
         overlapMap.geometryMap().popMappingsToAncestor(ancestorLayer);
@@ -766,15 +780,16 @@ void RenderLayerCompositor::addToOverlapMapRecursive(OverlapMap& overlapMap, Ren
 //      must be compositing so that its contents render over that child.
 //      This implies that its positive z-index children must also be compositing.
 //
-void RenderLayerCompositor::computeCompositingRequirements(RenderLayer* ancestorLayer, RenderLayer* layer, OverlapMap* overlapMap, CompositingState& compositingState, bool& layersChanged, bool& descendantHas3DTransform)
+void RenderLayerCompositor::computeCompositingRequirements(RenderLayer* ancestorLayer, RenderLayer* layer, OverlapMap* overlapMap, CompositingRecursionData& currentRecursionData, bool& descendantHas3DTransform, Vector<RenderLayer*>& unclippedDescendants)
 {
-    layer->updateLayerListsIfNeeded();
+    layer->stackingNode()->updateLayerListsIfNeeded();
 
     if (overlapMap)
         overlapMap->geometryMap().pushMappingsToAncestor(layer, ancestorLayer);
 
     // Clear the flag
     layer->setHasCompositingDescendant(false);
+    layer->setHasNonCompositedChild(false);
 
     // Start by assuming this layer will not need to composite.
     CompositingReasons reasonsToComposite = CompositingReasonNone;
@@ -786,23 +801,46 @@ void RenderLayerCompositor::computeCompositingRequirements(RenderLayer* ancestor
     // RenderLayer children and whose children can't use its backing to render
     // into. These children (the controls) always need to be promoted into their
     // own layers to draw on top of the accelerated video.
-    if (compositingState.m_compositingAncestor && compositingState.m_compositingAncestor->renderer()->isVideo())
+    if (currentRecursionData.m_compositingAncestor && currentRecursionData.m_compositingAncestor->renderer()->isVideo())
         directReasons |= CompositingReasonLayerForVideoOverlay;
 
-    if (canBeComposited(layer)) {
+    if (canBeComposited(layer))
         reasonsToComposite |= directReasons;
-        reasonsToComposite |= (inCompositingMode() && layer->isRootLayer()) ? CompositingReasonRoot : CompositingReasonNone;
-    }
 
     // Next, accumulate reasons related to overlap.
     // If overlap testing is used, this reason will be overridden. If overlap testing is not
     // used, we must assume we overlap if there is anything composited behind us in paint-order.
-    CompositingReasons overlapCompositingReason = compositingState.m_subtreeIsCompositing ? CompositingReasonAssumedOverlap : CompositingReasonNone;
+    CompositingReasons overlapCompositingReason = currentRecursionData.m_subtreeIsCompositing ? CompositingReasonAssumedOverlap : CompositingReasonNone;
+
+    if (rootRenderLayer()->compositorDrivenAcceleratedScrollingEnabled()) {
+        Vector<size_t> unclippedDescendantsToRemove;
+        for (size_t i = 0; i < unclippedDescendants.size(); i++) {
+            RenderLayer* unclippedDescendant = unclippedDescendants.at(i);
+            // If we've reached the containing block of one of the unclipped
+            // descendants, that element is no longer relevant to whether or not we
+            // should opt in. Unfortunately we can't easily remove from the list
+            // while we're iterating, so we have to store it for later removal.
+            if (unclippedDescendant->renderer()->containingBlock() == layer->renderer()) {
+                unclippedDescendantsToRemove.append(i);
+                continue;
+            }
+            if (layer->scrollsWithRespectTo(unclippedDescendant))
+                reasonsToComposite |= CompositingReasonAssumedOverlap;
+        }
+
+        // Remove irrelevant unclipped descendants in reverse order so our stored
+        // indices remain valid.
+        for (size_t i = 0; i < unclippedDescendantsToRemove.size(); i++)
+            unclippedDescendants.remove(unclippedDescendantsToRemove.at(unclippedDescendantsToRemove.size() - i - 1));
+
+        if (reasonsToComposite & CompositingReasonOutOfFlowClipping)
+            unclippedDescendants.append(layer);
+    }
 
     bool haveComputedBounds = false;
     IntRect absBounds;
     // If we know for sure the layer is going to be composited, don't bother looking it up in the overlap map.
-    if (overlapMap && !overlapMap->isEmpty() && compositingState.m_testingOverlap && !requiresCompositing(directReasons)) {
+    if (overlapMap && !overlapMap->isEmpty() && currentRecursionData.m_testingOverlap && !requiresCompositingOrSquashing(directReasons)) {
         // If we're testing for overlap, we only need to composite if we overlap something that is already composited.
         absBounds = enclosingIntRect(overlapMap->geometryMap().absoluteRect(layer->overlapBounds()));
 
@@ -818,15 +856,15 @@ void RenderLayerCompositor::computeCompositingRequirements(RenderLayer* ancestor
     // The children of this layer don't need to composite, unless there is
     // a compositing layer among them, so start by inheriting the compositing
     // ancestor with m_subtreeIsCompositing set to false.
-    CompositingState childState(compositingState);
-    childState.m_subtreeIsCompositing = false;
+    CompositingRecursionData childRecursionData(currentRecursionData);
+    childRecursionData.m_subtreeIsCompositing = false;
 
-    bool willBeComposited = canBeComposited(layer) && requiresCompositing(reasonsToComposite);
+    bool willBeComposited = canBeComposited(layer) && requiresCompositingOrSquashing(reasonsToComposite);
     if (willBeComposited) {
         // Tell the parent it has compositing descendants.
-        compositingState.m_subtreeIsCompositing = true;
+        currentRecursionData.m_subtreeIsCompositing = true;
         // This layer now acts as the ancestor for kids.
-        childState.m_compositingAncestor = layer;
+        childRecursionData.m_compositingAncestor = layer;
 
         // Here we know that all children and the layer's own contents can blindly paint into
         // this layer's backing, until a descendant is composited. So, we don't need to check
@@ -835,47 +873,44 @@ void RenderLayerCompositor::computeCompositingRequirements(RenderLayer* ancestor
             overlapMap->beginNewOverlapTestingContext();
         // This layer is going to be composited, so children can safely ignore the fact that there's an
         // animation running behind this layer, meaning they can rely on the overlap map testing again.
-        childState.m_testingOverlap = true;
+        childRecursionData.m_testingOverlap = true;
     }
 
 #if !ASSERT_DISABLED
-    LayerListMutationDetector mutationChecker(layer);
+    LayerListMutationDetector mutationChecker(layer->stackingNode());
 #endif
 
     bool anyDescendantHas3DTransform = false;
     bool willHaveForegroundLayer = false;
 
-    if (layer->isStackingContainer()) {
-        if (Vector<RenderLayer*>* negZOrderList = layer->negZOrderList()) {
-            size_t listSize = negZOrderList->size();
-            for (size_t i = 0; i < listSize; ++i) {
-                RenderLayer* curLayer = negZOrderList->at(i);
-                computeCompositingRequirements(layer, curLayer, overlapMap, childState, layersChanged, anyDescendantHas3DTransform);
+    if (layer->stackingNode()->isStackingContainer()) {
+        RenderLayerStackingNodeIterator iterator(*layer->stackingNode(), NegativeZOrderChildren);
+        while (RenderLayerStackingNode* curNode = iterator.next()) {
+            computeCompositingRequirements(layer, curNode->layer(), overlapMap, childRecursionData, anyDescendantHas3DTransform, unclippedDescendants);
 
-                // If we have to make a layer for this child, make one now so we can have a contents layer
-                // (since we need to ensure that the -ve z-order child renders underneath our contents).
-                if (childState.m_subtreeIsCompositing) {
-                    reasonsToComposite |= CompositingReasonNegativeZIndexChildren;
+            // If we have to make a layer for this child, make one now so we can have a contents layer
+            // (since we need to ensure that the -ve z-order child renders underneath our contents).
+            if (childRecursionData.m_subtreeIsCompositing) {
+                reasonsToComposite |= CompositingReasonNegativeZIndexChildren;
 
-                    if (!willBeComposited) {
-                        // make layer compositing
-                        childState.m_compositingAncestor = layer;
+                if (!willBeComposited) {
+                    // make layer compositing
+                    childRecursionData.m_compositingAncestor = layer;
+                    overlapMap->beginNewOverlapTestingContext();
+                    willBeComposited = true;
+                    willHaveForegroundLayer = true;
+
+                    // FIXME: temporary solution for the first negative z-index composited child:
+                    //        re-compute the absBounds for the child so that we can add the
+                    //        negative z-index child's bounds to the new overlap context.
+                    if (overlapMap) {
+                        overlapMap->geometryMap().pushMappingsToAncestor(curNode->layer(), layer);
+                        IntRect childAbsBounds = enclosingIntRect(overlapMap->geometryMap().absoluteRect(curNode->layer()->overlapBounds()));
+                        bool boundsComputed = true;
                         overlapMap->beginNewOverlapTestingContext();
-                        willBeComposited = true;
-                        willHaveForegroundLayer = true;
-
-                        // FIXME: temporary solution for the first negative z-index composited child:
-                        //        re-compute the absBounds for the child so that we can add the
-                        //        negative z-index child's bounds to the new overlap context.
-                        if (overlapMap) {
-                            overlapMap->geometryMap().pushMappingsToAncestor(curLayer, layer);
-                            IntRect childAbsBounds = enclosingIntRect(overlapMap->geometryMap().absoluteRect(curLayer->overlapBounds()));
-                            bool boundsComputed = true;
-                            overlapMap->beginNewOverlapTestingContext();
-                            addToOverlapMap(*overlapMap, curLayer, childAbsBounds, boundsComputed);
-                            overlapMap->finishCurrentOverlapTestingContext();
-                            overlapMap->geometryMap().popMappingsToAncestor(layer);
-                        }
+                        addToOverlapMap(*overlapMap, curNode->layer(), childAbsBounds, boundsComputed);
+                        overlapMap->finishCurrentOverlapTestingContext();
+                        overlapMap->geometryMap().popMappingsToAncestor(layer);
                     }
                 }
             }
@@ -892,26 +927,12 @@ void RenderLayerCompositor::computeCompositingRequirements(RenderLayer* ancestor
         overlapMap->beginNewOverlapTestingContext();
         // This layer is going to be composited, so children can safely ignore the fact that there's an
         // animation running behind this layer, meaning they can rely on the overlap map testing again
-        childState.m_testingOverlap = true;
+        childRecursionData.m_testingOverlap = true;
     }
 
-    if (Vector<RenderLayer*>* normalFlowList = layer->normalFlowList()) {
-        size_t listSize = normalFlowList->size();
-        for (size_t i = 0; i < listSize; ++i) {
-            RenderLayer* curLayer = normalFlowList->at(i);
-            computeCompositingRequirements(layer, curLayer, overlapMap, childState, layersChanged, anyDescendantHas3DTransform);
-        }
-    }
-
-    if (layer->isStackingContainer()) {
-        if (Vector<RenderLayer*>* posZOrderList = layer->posZOrderList()) {
-            size_t listSize = posZOrderList->size();
-            for (size_t i = 0; i < listSize; ++i) {
-                RenderLayer* curLayer = posZOrderList->at(i);
-                computeCompositingRequirements(layer, curLayer, overlapMap, childState, layersChanged, anyDescendantHas3DTransform);
-            }
-        }
-    }
+    RenderLayerStackingNodeIterator iterator(*layer->stackingNode(), NormalFlowChildren | PositiveZOrderChildren);
+    while (RenderLayerStackingNode* curNode = iterator.next())
+        computeCompositingRequirements(layer, curNode->layer(), overlapMap, childRecursionData, anyDescendantHas3DTransform, unclippedDescendants);
 
     // Now that the subtree has been traversed, we can check for compositing reasons that depended on the state of the subtree.
 
@@ -922,16 +943,23 @@ void RenderLayerCompositor::computeCompositingRequirements(RenderLayer* ancestor
     }
 
     // All layers (even ones that aren't being composited) need to get added to
-    // the overlap map. Layers that do not composite will draw into their
+    // the overlap map. Layers that are not separately composited will paint into their
     // compositing ancestor's backing, and so are still considered for overlap.
-    if (overlapMap && childState.m_compositingAncestor && !childState.m_compositingAncestor->isRootLayer())
+    if (overlapMap && childRecursionData.m_compositingAncestor && !childRecursionData.m_compositingAncestor->isRootLayer())
         addToOverlapMap(*overlapMap, layer, absBounds, haveComputedBounds);
 
+    if (layer->stackingNode()->isStackingContext()) {
+        layer->setShouldIsolateCompositedDescendants(childRecursionData.m_hasUnisolatedCompositedBlendingDescendant);
+    } else {
+        layer->setShouldIsolateCompositedDescendants(false);
+        currentRecursionData.m_hasUnisolatedCompositedBlendingDescendant = childRecursionData.m_hasUnisolatedCompositedBlendingDescendant;
+    }
+
     // Now check for reasons to become composited that depend on the state of descendant layers.
-    CompositingReasons subtreeCompositingReasons = subtreeReasonsForCompositing(layer->renderer(), childState.m_subtreeIsCompositing, anyDescendantHas3DTransform);
+    CompositingReasons subtreeCompositingReasons = subtreeReasonsForCompositing(layer->renderer(), childRecursionData.m_subtreeIsCompositing, anyDescendantHas3DTransform);
     reasonsToComposite |= subtreeCompositingReasons;
-    if (!willBeComposited && canBeComposited(layer) && requiresCompositing(subtreeCompositingReasons)) {
-        childState.m_compositingAncestor = layer;
+    if (!willBeComposited && canBeComposited(layer) && requiresCompositingOrSquashing(subtreeCompositingReasons)) {
+        childRecursionData.m_compositingAncestor = layer;
         if (overlapMap) {
             // FIXME: this context push is effectively a no-op but needs to exist for
             // now, because the code is designed to push overlap information to the
@@ -943,49 +971,50 @@ void RenderLayerCompositor::computeCompositingRequirements(RenderLayer* ancestor
     }
 
     // If the original layer is composited, the reflection needs to be, too.
-    if (layer->reflectionLayer()) {
+    if (layer->reflectionInfo()) {
         // FIXME: Shouldn't we call computeCompositingRequirements to handle a reflection overlapping with another renderer?
         CompositingReasons reflectionCompositingReason = willBeComposited ? CompositingReasonReflectionOfCompositedParent : CompositingReasonNone;
-        layer->reflectionLayer()->setCompositingReasons(layer->reflectionLayer()->compositingReasons() | reflectionCompositingReason);
+        layer->reflectionInfo()->reflectionLayer()->setCompositingReasons(layer->reflectionInfo()->reflectionLayer()->compositingReasons() | reflectionCompositingReason);
     }
 
     // Subsequent layers in the parent's stacking context may also need to composite.
-    if (childState.m_subtreeIsCompositing)
-        compositingState.m_subtreeIsCompositing = true;
+    if (childRecursionData.m_subtreeIsCompositing)
+        currentRecursionData.m_subtreeIsCompositing = true;
+
+    if (willBeComposited && layer->hasBlendMode())
+        currentRecursionData.m_hasUnisolatedCompositedBlendingDescendant = true;
 
     // Set the flag to say that this SC has compositing children.
-    layer->setHasCompositingDescendant(childState.m_subtreeIsCompositing);
-
+    layer->setHasCompositingDescendant(childRecursionData.m_subtreeIsCompositing);
 
     // Turn overlap testing off for later layers if it's already off, or if we have an animating transform.
     // Note that if the layer clips its descendants, there's no reason to propagate the child animation to the parent layers. That's because
     // we know for sure the animation is contained inside the clipping rectangle, which is already added to the overlap map.
     bool isCompositedClippingLayer = canBeComposited(layer) && (reasonsToComposite & CompositingReasonClipsCompositingDescendants);
-    if ((!childState.m_testingOverlap && !isCompositedClippingLayer) || isRunningAcceleratedTransformAnimation(layer->renderer()))
-        compositingState.m_testingOverlap = false;
+    if ((!childRecursionData.m_testingOverlap && !isCompositedClippingLayer) || isRunningAcceleratedTransformAnimation(layer->renderer()))
+        currentRecursionData.m_testingOverlap = false;
 
-    if (overlapMap && childState.m_compositingAncestor == layer && !layer->isRootLayer())
+    if (overlapMap && childRecursionData.m_compositingAncestor == layer && !layer->isRootLayer())
         overlapMap->finishCurrentOverlapTestingContext();
 
-    // If we're back at the root, and no other layers need to be composited, and the root layer itself doesn't need
-    // to be composited, then we can drop out of compositing mode altogether. However, don't drop out of compositing mode
-    // if there are composited layers that we didn't hit in our traversal (e.g. because of visibility:hidden).
-    // FIXME: hasAnyAdditionalCompositedLayers() code seems fishy. We need to make root layer logic more obvious.
-    if (layer->isRootLayer() && !childState.m_subtreeIsCompositing && !requiresCompositing(directReasons) && !m_forceCompositingMode && !hasAnyAdditionalCompositedLayers(layer)) {
-        enableCompositingMode(false);
-        willBeComposited = false;
-        reasonsToComposite = CompositingReasonNone;
+    if (layer->isRootLayer()) {
+        // The root layer needs to be composited if anything else in the tree is composited.
+        // Otherwise, we can disable compositing entirely.
+        if (childRecursionData.m_subtreeIsCompositing || requiresCompositingOrSquashing(reasonsToComposite) || m_forceCompositingMode) {
+            willBeComposited = true;
+            reasonsToComposite |= CompositingReasonRoot;
+        } else {
+            enableCompositingMode(false);
+            willBeComposited = false;
+            reasonsToComposite = CompositingReasonNone;
+        }
     }
 
     // At this point we have finished collecting all reasons to composite this layer.
     layer->setCompositingReasons(reasonsToComposite);
 
-    // Update backing now, so that we can use isComposited() reliably during tree traversal in rebuildCompositingLayerTree().
-    if (updateBacking(layer, CompositingChangeRepaintNow))
-        layersChanged = true;
-
-    if (layer->reflectionLayer() && updateLayerCompositingState(layer->reflectionLayer(), CompositingChangeRepaintNow))
-        layersChanged = true;
+    if (!willBeComposited && layer->parent())
+        layer->parent()->setHasNonCompositedChild(true);
 
     descendantHas3DTransform |= anyDescendantHas3DTransform || layer->has3DTransform();
 
@@ -993,31 +1022,116 @@ void RenderLayerCompositor::computeCompositingRequirements(RenderLayer* ancestor
         overlapMap->geometryMap().popMappingsToAncestor(ancestorLayer);
 }
 
+void RenderLayerCompositor::SquashingState::updateSquashingStateForNewMapping(CompositedLayerMappingPtr newCompositedLayerMapping, bool hasNewCompositedLayerMapping, IntPoint newOffsetFromAbsolute)
+{
+    // The most recent backing is done accumulating any more squashing layers.
+    if (hasMostRecentMapping)
+        mostRecentMapping->finishAccumulatingSquashingLayers(nextSquashedLayerIndex);
+
+    nextSquashedLayerIndex = 0;
+    mostRecentMapping = newCompositedLayerMapping;
+    hasMostRecentMapping = hasNewCompositedLayerMapping;
+    offsetFromAbsolute = newOffsetFromAbsolute;
+}
+
+static IntPoint computeOffsetFromAbsolute(RenderLayer* layer)
+{
+    TransformState transformState(TransformState::ApplyTransformDirection, FloatPoint());
+    layer->renderer()->mapLocalToContainer(0, transformState, ApplyContainerFlip);
+    transformState.flatten();
+    return roundedIntPoint(transformState.lastPlanarPoint());
+}
+
+void RenderLayerCompositor::assignLayersToBackings(RenderLayer* updateRoot, bool& layersChanged)
+{
+    SquashingState squashingState;
+    assignLayersToBackingsInternal(updateRoot, squashingState, layersChanged);
+    if (squashingState.hasMostRecentMapping)
+        squashingState.mostRecentMapping->finishAccumulatingSquashingLayers(squashingState.nextSquashedLayerIndex);
+}
+
+void RenderLayerCompositor::assignLayersToBackingsInternal(RenderLayer* layer, SquashingState& squashingState, bool& layersChanged)
+{
+    if (allocateOrClearCompositedLayerMapping(layer))
+        layersChanged = true;
+
+    if (layer->reflectionInfo() && updateLayerCompositingState(layer->reflectionInfo()->reflectionLayer()))
+        layersChanged = true;
+
+    // Add this layer to a squashing backing if needed.
+    if (layerSquashingEnabled()) {
+        // NOTE: In the future as we generalize this, the background of this layer may need to be assigned to a different backing than
+        // the layer's own primary contents. This would happen when we have a composited negative z-index element that needs to
+        // paint on top of the background, but below the layer's main contents. For now, because we always composite layers
+        // when they have a composited negative z-index child, such layers will never need squashing so it is not yet an issue.
+        if (requiresSquashing(layer->compositingReasons())) {
+            // A layer that is squashed with other layers cannot have its own CompositedLayerMapping.
+            ASSERT(!layer->hasCompositedLayerMapping());
+            ASSERT(squashingState.hasMostRecentMapping);
+
+            IntPoint offsetFromAbsolute = computeOffsetFromAbsolute(layer);
+
+            // FIXME: see if we can refactor this to be clearer
+            IntSize offsetFromTargetBacking(offsetFromAbsolute.x() - squashingState.offsetFromAbsolute.x(),
+                offsetFromAbsolute.y() - squashingState.offsetFromAbsolute.y());
+
+            squashingState.mostRecentMapping->addRenderLayerToSquashingGraphicsLayer(layer, offsetFromTargetBacking, squashingState.nextSquashedLayerIndex);
+            squashingState.nextSquashedLayerIndex++;
+
+            // FIXME: does this need to be true here? Do we need more logic to decide when it should be true?
+            layersChanged = true;
+
+            // FIXME: this should be conditioned on whether this layer actually changed status
+            layer->clipper().clearClipRectsIncludingDescendants();
+        }
+    }
+
+    if (layer->stackingNode()->isStackingContainer()) {
+        RenderLayerStackingNodeIterator iterator(*layer->stackingNode(), NegativeZOrderChildren);
+        while (RenderLayerStackingNode* curNode = iterator.next())
+            assignLayersToBackingsInternal(curNode->layer(), squashingState, layersChanged);
+    }
+
+    if (layerSquashingEnabled()) {
+        // At this point, if the layer is to be "separately" composited, then its backing becomes the most recent in paint-order.
+        if (layer->compositingState() == PaintsIntoOwnBacking || layer->compositingState() == HasOwnBackingButPaintsIntoAncestor) {
+            ASSERT(!requiresSquashing(layer->compositingReasons()));
+            IntPoint offsetFromAbsolute = computeOffsetFromAbsolute(layer);
+            squashingState.updateSquashingStateForNewMapping(layer->compositedLayerMapping(), layer->hasCompositedLayerMapping(), offsetFromAbsolute);
+        }
+    }
+
+    RenderLayerStackingNodeIterator iterator(*layer->stackingNode(), NormalFlowChildren | PositiveZOrderChildren);
+    while (RenderLayerStackingNode* curNode = iterator.next())
+        assignLayersToBackingsInternal(curNode->layer(), squashingState, layersChanged);
+}
+
 void RenderLayerCompositor::setCompositingParent(RenderLayer* childLayer, RenderLayer* parentLayer)
 {
     ASSERT(!parentLayer || childLayer->ancestorCompositingLayer() == parentLayer);
-    ASSERT(childLayer->isComposited());
+    ASSERT(childLayer->hasCompositedLayerMapping());
 
     // It's possible to be called with a parent that isn't yet composited when we're doing
     // partial updates as required by painting or hit testing. Just bail in that case;
     // we'll do a full layer update soon.
-    if (!parentLayer || !parentLayer->isComposited())
+    if (!parentLayer || !parentLayer->hasCompositedLayerMapping())
         return;
 
     if (parentLayer) {
-        GraphicsLayer* hostingLayer = parentLayer->backing()->parentForSublayers();
-        GraphicsLayer* hostedLayer = childLayer->backing()->childForSuperlayers();
+        GraphicsLayer* hostingLayer = parentLayer->compositedLayerMapping()->parentForSublayers();
+        GraphicsLayer* hostedLayer = childLayer->compositedLayerMapping()->childForSuperlayers();
 
         hostingLayer->addChild(hostedLayer);
-    } else
-        childLayer->backing()->childForSuperlayers()->removeFromParent();
+    } else {
+        childLayer->compositedLayerMapping()->childForSuperlayers()->removeFromParent();
+    }
 }
 
 void RenderLayerCompositor::removeCompositedChildren(RenderLayer* layer)
 {
-    ASSERT(layer->isComposited());
+    ASSERT(layer->hasCompositedLayerMapping());
 
-    GraphicsLayer* hostingLayer = layer->backing()->parentForSublayers();
+    GraphicsLayer* hostingLayer = layer->compositedLayerMapping()->parentForSublayers();
     hostingLayer->removeAllChildren();
 }
 
@@ -1035,6 +1149,8 @@ void RenderLayerCompositor::rebuildCompositingLayerTree(RenderLayer* layer, Vect
     // Note that we can only do work here that is independent of whether the descendant layers
     // have been processed. computeCompositingRequirements() will already have done the repaint if necessary.
 
+    layer->stackingNode()->updateLayerListsIfNeeded();
+
     // Used for gathering UMA data about the effect on memory usage of promoting all layers
     // that have a webkit-transition on opacity or transform and intersect the viewport.
     static double pixelsWithoutPromotingAllTransitions = 0.0;
@@ -1045,30 +1161,27 @@ void RenderLayerCompositor::rebuildCompositingLayerTree(RenderLayer* layer, Vect
         pixelsAddedByPromotingAllTransitions = 0.0;
     }
 
-    RenderLayerBacking* layerBacking = layer->backing();
-    if (layerBacking) {
+    const bool hasCompositedLayerMapping = layer->hasCompositedLayerMapping();
+    CompositedLayerMappingPtr currentCompositedLayerMapping = layer->compositedLayerMapping();
+    if (hasCompositedLayerMapping) {
         // The compositing state of all our children has been updated already, so now
         // we can compute and cache the composited bounds for this layer.
-        layerBacking->updateCompositedBounds();
+        currentCompositedLayerMapping->updateCompositedBounds();
 
-        if (RenderLayer* reflection = layer->reflectionLayer()) {
-            if (reflection->backing())
-                reflection->backing()->updateCompositedBounds();
+        if (layer->reflectionInfo()) {
+            RenderLayer* reflectionLayer = layer->reflectionInfo()->reflectionLayer();
+            if (reflectionLayer->hasCompositedLayerMapping())
+                reflectionLayer->compositedLayerMapping()->updateCompositedBounds();
         }
 
-        layerBacking->updateGraphicsLayerConfiguration();
-        layerBacking->updateGraphicsLayerGeometry();
+        currentCompositedLayerMapping->updateGraphicsLayerConfiguration();
+        currentCompositedLayerMapping->updateGraphicsLayerGeometry();
 
         if (!layer->parent())
             updateRootLayerPosition();
 
-#if !LOG_DISABLED
-        logLayerInfo(layer, depth);
-#else
-        UNUSED_PARAM(depth);
-#endif
-        if (layerBacking->hasUnpositionedOverflowControlsLayers())
-            layer->positionNewlyCreatedOverflowControls();
+        if (currentCompositedLayerMapping->hasUnpositionedOverflowControlsLayers())
+            layer->scrollableArea()->positionOverflowControls();
 
         pixelsWithoutPromotingAllTransitions += layer->size().height() * layer->size().width();
     } else {
@@ -1078,80 +1191,62 @@ void RenderLayerCompositor::rebuildCompositingLayerTree(RenderLayer* layer, Vect
             pixelsAddedByPromotingAllTransitions += layer->size().height() * layer->size().width();
     }
 
-    // If this layer has backing, then we are collecting its children, otherwise appending
-    // to the compositing child list of an enclosing layer.
+    // If this layer has a compositedLayerMapping, then that is where we place subsequent children GraphicsLayers.
+    // Otherwise children continue to append to the child list of the enclosing layer.
     Vector<GraphicsLayer*> layerChildren;
-    Vector<GraphicsLayer*>& childList = layerBacking ? layerChildren : childLayersOfEnclosingLayer;
+    Vector<GraphicsLayer*>& childList = hasCompositedLayerMapping ? layerChildren : childLayersOfEnclosingLayer;
 
 #if !ASSERT_DISABLED
-    LayerListMutationDetector mutationChecker(layer);
+    LayerListMutationDetector mutationChecker(layer->stackingNode());
 #endif
 
-    if (layer->isStackingContainer()) {
-        if (Vector<RenderLayer*>* negZOrderList = layer->negZOrderList()) {
-            size_t listSize = negZOrderList->size();
-            for (size_t i = 0; i < listSize; ++i) {
-                RenderLayer* curLayer = negZOrderList->at(i);
-                rebuildCompositingLayerTree(curLayer, childList, depth + 1);
-            }
-        }
+    if (layer->stackingNode()->isStackingContainer()) {
+        RenderLayerStackingNodeIterator iterator(*layer->stackingNode(), NegativeZOrderChildren);
+        while (RenderLayerStackingNode* curNode = iterator.next())
+            rebuildCompositingLayerTree(curNode->layer(), childList, depth + 1);
 
         // If a negative z-order child is compositing, we get a foreground layer which needs to get parented.
-        if (layerBacking && layerBacking->foregroundLayer())
-            childList.append(layerBacking->foregroundLayer());
+        if (hasCompositedLayerMapping && currentCompositedLayerMapping->foregroundLayer())
+            childList.append(currentCompositedLayerMapping->foregroundLayer());
     }
 
-    if (Vector<RenderLayer*>* normalFlowList = layer->normalFlowList()) {
-        size_t listSize = normalFlowList->size();
-        for (size_t i = 0; i < listSize; ++i) {
-            RenderLayer* curLayer = normalFlowList->at(i);
-            rebuildCompositingLayerTree(curLayer, childList, depth + 1);
-        }
-    }
+    RenderLayerStackingNodeIterator iterator(*layer->stackingNode(), NormalFlowChildren | PositiveZOrderChildren);
+    while (RenderLayerStackingNode* curNode = iterator.next())
+        rebuildCompositingLayerTree(curNode->layer(), childList, depth + 1);
 
-    if (layer->isStackingContainer()) {
-        if (Vector<RenderLayer*>* posZOrderList = layer->posZOrderList()) {
-            size_t listSize = posZOrderList->size();
-            for (size_t i = 0; i < listSize; ++i) {
-                RenderLayer* curLayer = posZOrderList->at(i);
-                rebuildCompositingLayerTree(curLayer, childList, depth + 1);
-            }
-        }
-    }
-
-    if (layerBacking) {
+    if (hasCompositedLayerMapping) {
         bool parented = false;
         if (layer->renderer()->isRenderPart())
             parented = parentFrameContentLayers(toRenderPart(layer->renderer()));
 
         if (!parented)
-            layerBacking->parentForSublayers()->setChildren(layerChildren);
+            currentCompositedLayerMapping->parentForSublayers()->setChildren(layerChildren);
 
         // If the layer has a clipping layer the overflow controls layers will be siblings of the clipping layer.
         // Otherwise, the overflow control layers are normal children.
-        if (!layerBacking->hasClippingLayer() && !layerBacking->hasScrollingLayer()) {
-            if (GraphicsLayer* overflowControlLayer = layerBacking->layerForHorizontalScrollbar()) {
+        if (!currentCompositedLayerMapping->hasClippingLayer() && !currentCompositedLayerMapping->hasScrollingLayer()) {
+            if (GraphicsLayer* overflowControlLayer = currentCompositedLayerMapping->layerForHorizontalScrollbar()) {
                 overflowControlLayer->removeFromParent();
-                layerBacking->parentForSublayers()->addChild(overflowControlLayer);
+                currentCompositedLayerMapping->parentForSublayers()->addChild(overflowControlLayer);
             }
 
-            if (GraphicsLayer* overflowControlLayer = layerBacking->layerForVerticalScrollbar()) {
+            if (GraphicsLayer* overflowControlLayer = currentCompositedLayerMapping->layerForVerticalScrollbar()) {
                 overflowControlLayer->removeFromParent();
-                layerBacking->parentForSublayers()->addChild(overflowControlLayer);
+                currentCompositedLayerMapping->parentForSublayers()->addChild(overflowControlLayer);
             }
 
-            if (GraphicsLayer* overflowControlLayer = layerBacking->layerForScrollCorner()) {
+            if (GraphicsLayer* overflowControlLayer = currentCompositedLayerMapping->layerForScrollCorner()) {
                 overflowControlLayer->removeFromParent();
-                layerBacking->parentForSublayers()->addChild(overflowControlLayer);
+                currentCompositedLayerMapping->parentForSublayers()->addChild(overflowControlLayer);
             }
         }
 
-        childLayersOfEnclosingLayer.append(layerBacking->childForSuperlayers());
+        childLayersOfEnclosingLayer.append(currentCompositedLayerMapping->childForSuperlayers());
     }
 
     if (!depth) {
         int percentageIncreaseInPixels = static_cast<int>(pixelsAddedByPromotingAllTransitions / pixelsWithoutPromotingAllTransitions * 100);
-        HistogramSupport::histogramCustomCounts("Renderer.PixelIncreaseFromTransitions", percentageIncreaseInPixels, 0, 1000, 50);
+        blink::Platform::current()->histogramCustomCounts("Renderer.PixelIncreaseFromTransitions", percentageIncreaseInPixels, 0, 1000, 50);
     }
 }
 
@@ -1169,13 +1264,15 @@ void RenderLayerCompositor::frameViewDidChangeSize()
 
         frameViewDidScroll();
         updateOverflowControlsLayers();
-
-#if ENABLE(RUBBER_BANDING)
-        if (m_layerForOverhangAreas)
-            m_layerForOverhangAreas->setSize(frameView->frameRect().size());
-#endif
     }
 }
+
+enum AcceleratedFixedRootBackgroundHistogramBuckets {
+    ScrolledMainFrameBucket = 0,
+    ScrolledMainFrameWithAcceleratedFixedRootBackground = 1,
+    ScrolledMainFrameWithUnacceleratedFixedRootBackground = 2,
+    AcceleratedFixedRootBackgroundHistogramMax = 3
+};
 
 void RenderLayerCompositor::frameViewDidScroll()
 {
@@ -1187,7 +1284,7 @@ void RenderLayerCompositor::frameViewDidScroll()
 
     bool scrollingCoordinatorHandlesOffset = false;
     if (ScrollingCoordinator* scrollingCoordinator = this->scrollingCoordinator()) {
-        if (Settings* settings = m_renderView->document()->settings()) {
+        if (Settings* settings = m_renderView->document().settings()) {
             if (isMainFrame() || settings->compositedScrollingForFramesEnabled())
                 scrollingCoordinatorHandlesOffset = scrollingCoordinator->scrollableAreaScrollLayerDidChange(frameView);
         }
@@ -1200,10 +1297,30 @@ void RenderLayerCompositor::frameViewDidScroll()
         m_scrollLayer->setPosition(-frameView->minimumScrollPosition());
     else
         m_scrollLayer->setPosition(-scrollPosition);
+
+
+    blink::Platform::current()->histogramEnumeration("Renderer.AcceleratedFixedRootBackground",
+        ScrolledMainFrameBucket,
+        AcceleratedFixedRootBackgroundHistogramMax);
+
+    if (!m_renderView->rootBackgroundIsEntirelyFixed())
+        return;
+
+    blink::Platform::current()->histogramEnumeration("Renderer.AcceleratedFixedRootBackground",
+        !!fixedRootBackgroundLayer()
+            ? ScrolledMainFrameWithAcceleratedFixedRootBackground
+            : ScrolledMainFrameWithUnacceleratedFixedRootBackground,
+        AcceleratedFixedRootBackgroundHistogramMax);
 }
 
 void RenderLayerCompositor::frameViewDidLayout()
 {
+}
+
+void RenderLayerCompositor::frameViewScrollbarsExistenceDidChange()
+{
+    if (m_containerLayer)
+        updateOverflowControlsLayers();
 }
 
 void RenderLayerCompositor::rootFixedBackgroundsChanged()
@@ -1231,13 +1348,14 @@ void RenderLayerCompositor::rootFixedBackgroundsChanged()
 bool RenderLayerCompositor::scrollingLayerDidChange(RenderLayer* layer)
 {
     if (ScrollingCoordinator* scrollingCoordinator = this->scrollingCoordinator())
-        return scrollingCoordinator->scrollableAreaScrollLayerDidChange(layer);
+        return scrollingCoordinator->scrollableAreaScrollLayerDidChange(layer->scrollableArea());
     return false;
 }
 
 String RenderLayerCompositor::layerTreeAsText(LayerTreeFlags flags)
 {
-    updateCompositingLayers(CompositingUpdateAfterLayout);
+    // Before dumping the layer tree, finish any pending compositing update.
+    updateCompositingLayers(CompositingUpdateFinishAllDeferredWork);
 
     if (!m_rootContentLayer)
         return String();
@@ -1253,11 +1371,8 @@ String RenderLayerCompositor::layerTreeAsText(LayerTreeFlags flags)
 
     // The true root layer is not included in the dump, so if we want to report
     // its repaint rects, they must be included here.
-    if (flags & LayerTreeIncludesRepaintRects) {
-        String layerTreeTextWithRootRepaintRects = m_renderView->frameView()->trackedRepaintRectsAsText();
-        layerTreeTextWithRootRepaintRects.append(layerTreeText);
-        return layerTreeTextWithRootRepaintRects;
-    }
+    if (flags & LayerTreeIncludesRepaintRects)
+        return m_renderView->frameView()->trackedRepaintRectsAsText() + layerTreeText;
 
     return layerTreeText;
 }
@@ -1267,7 +1382,7 @@ RenderLayerCompositor* RenderLayerCompositor::frameContentsCompositor(RenderPart
     if (!renderer->node()->isFrameOwnerElement())
         return 0;
 
-    HTMLFrameOwnerElement* element = toFrameOwnerElement(renderer->node());
+    HTMLFrameOwnerElement* element = toHTMLFrameOwnerElement(renderer->node());
     if (Document* contentDocument = element->contentDocument()) {
         if (RenderView* view = contentDocument->renderView())
             return view->compositor();
@@ -1282,11 +1397,11 @@ bool RenderLayerCompositor::parentFrameContentLayers(RenderPart* renderer)
         return false;
 
     RenderLayer* layer = renderer->layer();
-    if (!layer->isComposited())
+    if (!layer->hasCompositedLayerMapping())
         return false;
 
-    RenderLayerBacking* backing = layer->backing();
-    GraphicsLayer* hostingLayer = backing->parentForSublayers();
+    CompositedLayerMappingPtr compositedLayerMapping = layer->compositedLayerMapping();
+    GraphicsLayer* hostingLayer = compositedLayerMapping->parentForSublayers();
     GraphicsLayer* rootLayer = innerCompositor->rootGraphicsLayer();
     if (hostingLayer->children().size() != 1 || hostingLayer->children()[0] != rootLayer) {
         hostingLayer->removeAllChildren();
@@ -1296,107 +1411,69 @@ bool RenderLayerCompositor::parentFrameContentLayers(RenderPart* renderer)
 }
 
 // This just updates layer geometry without changing the hierarchy.
-void RenderLayerCompositor::updateLayerTreeGeometry(RenderLayer* layer, int depth)
+void RenderLayerCompositor::updateLayerTreeGeometry(RenderLayer* layer)
 {
-    if (RenderLayerBacking* layerBacking = layer->backing()) {
+    if (layer->hasCompositedLayerMapping()) {
+        CompositedLayerMappingPtr compositedLayerMapping = layer->compositedLayerMapping();
         // The compositing state of all our children has been updated already, so now
         // we can compute and cache the composited bounds for this layer.
-        layerBacking->updateCompositedBounds();
+        compositedLayerMapping->updateCompositedBounds();
 
-        if (RenderLayer* reflection = layer->reflectionLayer()) {
-            if (reflection->backing())
-                reflection->backing()->updateCompositedBounds();
+        if (layer->reflectionInfo()) {
+            RenderLayer* reflectionLayer = layer->reflectionInfo()->reflectionLayer();
+            if (reflectionLayer->hasCompositedLayerMapping())
+                reflectionLayer->compositedLayerMapping()->updateCompositedBounds();
         }
 
-        layerBacking->updateGraphicsLayerConfiguration();
-        layerBacking->updateGraphicsLayerGeometry();
+        compositedLayerMapping->updateGraphicsLayerConfiguration();
+        compositedLayerMapping->updateGraphicsLayerGeometry();
 
         if (!layer->parent())
             updateRootLayerPosition();
-
-#if !LOG_DISABLED
-        logLayerInfo(layer, depth);
-#else
-        UNUSED_PARAM(depth);
-#endif
     }
 
 #if !ASSERT_DISABLED
-    LayerListMutationDetector mutationChecker(layer);
+    LayerListMutationDetector mutationChecker(layer->stackingNode());
 #endif
 
-    if (layer->isStackingContainer()) {
-        if (Vector<RenderLayer*>* negZOrderList = layer->negZOrderList()) {
-            size_t listSize = negZOrderList->size();
-            for (size_t i = 0; i < listSize; ++i)
-                updateLayerTreeGeometry(negZOrderList->at(i), depth + 1);
-        }
-    }
-
-    if (Vector<RenderLayer*>* normalFlowList = layer->normalFlowList()) {
-        size_t listSize = normalFlowList->size();
-        for (size_t i = 0; i < listSize; ++i)
-            updateLayerTreeGeometry(normalFlowList->at(i), depth + 1);
-    }
-
-    if (layer->isStackingContainer()) {
-        if (Vector<RenderLayer*>* posZOrderList = layer->posZOrderList()) {
-            size_t listSize = posZOrderList->size();
-            for (size_t i = 0; i < listSize; ++i)
-                updateLayerTreeGeometry(posZOrderList->at(i), depth + 1);
-        }
-    }
+    RenderLayerStackingNodeIterator iterator(*layer->stackingNode(), AllChildren);
+    while (RenderLayerStackingNode* curNode = iterator.next())
+        updateLayerTreeGeometry(curNode->layer());
 }
 
 // Recurs down the RenderLayer tree until its finds the compositing descendants of compositingAncestor and updates their geometry.
-void RenderLayerCompositor::updateCompositingDescendantGeometry(RenderLayer* compositingAncestor, RenderLayer* layer, bool compositedChildrenOnly)
+void RenderLayerCompositor::updateCompositingDescendantGeometry(RenderLayerStackingNode* compositingAncestor, RenderLayer* layer, bool compositedChildrenOnly)
 {
-    if (layer != compositingAncestor) {
-        if (RenderLayerBacking* layerBacking = layer->backing()) {
-            layerBacking->updateCompositedBounds();
+    if (layer->stackingNode() != compositingAncestor) {
+        if (layer->hasCompositedLayerMapping()) {
+            CompositedLayerMappingPtr compositedLayerMapping = layer->compositedLayerMapping();
+            compositedLayerMapping->updateCompositedBounds();
 
-            if (RenderLayer* reflection = layer->reflectionLayer()) {
-                if (reflection->backing())
-                    reflection->backing()->updateCompositedBounds();
+            if (layer->reflectionInfo()) {
+                RenderLayer* reflectionLayer = layer->reflectionInfo()->reflectionLayer();
+                if (reflectionLayer->hasCompositedLayerMapping())
+                    reflectionLayer->compositedLayerMapping()->updateCompositedBounds();
             }
 
-            layerBacking->updateGraphicsLayerGeometry();
+            compositedLayerMapping->updateGraphicsLayerGeometry();
             if (compositedChildrenOnly)
                 return;
         }
     }
 
-    if (layer->reflectionLayer())
-        updateCompositingDescendantGeometry(compositingAncestor, layer->reflectionLayer(), compositedChildrenOnly);
+    if (layer->reflectionInfo())
+        updateCompositingDescendantGeometry(compositingAncestor, layer->reflectionInfo()->reflectionLayer(), compositedChildrenOnly);
 
     if (!layer->hasCompositingDescendant())
         return;
 
 #if !ASSERT_DISABLED
-    LayerListMutationDetector mutationChecker(layer);
+    LayerListMutationDetector mutationChecker(layer->stackingNode());
 #endif
 
-    if (layer->isStackingContainer()) {
-        if (Vector<RenderLayer*>* negZOrderList = layer->negZOrderList()) {
-            size_t listSize = negZOrderList->size();
-            for (size_t i = 0; i < listSize; ++i)
-                updateCompositingDescendantGeometry(compositingAncestor, negZOrderList->at(i), compositedChildrenOnly);
-        }
-    }
-
-    if (Vector<RenderLayer*>* normalFlowList = layer->normalFlowList()) {
-        size_t listSize = normalFlowList->size();
-        for (size_t i = 0; i < listSize; ++i)
-            updateCompositingDescendantGeometry(compositingAncestor, normalFlowList->at(i), compositedChildrenOnly);
-    }
-
-    if (layer->isStackingContainer()) {
-        if (Vector<RenderLayer*>* posZOrderList = layer->posZOrderList()) {
-            size_t listSize = posZOrderList->size();
-            for (size_t i = 0; i < listSize; ++i)
-                updateCompositingDescendantGeometry(compositingAncestor, posZOrderList->at(i), compositedChildrenOnly);
-        }
-    }
+    RenderLayerStackingNodeIterator iterator(*layer->stackingNode(), AllChildren);
+    while (RenderLayerStackingNode* curNode = iterator.next())
+        updateCompositingDescendantGeometry(compositingAncestor, curNode->layer(), compositedChildrenOnly);
 }
 
 
@@ -1408,54 +1485,28 @@ void RenderLayerCompositor::repaintCompositedLayers(const IntRect* absRect)
 void RenderLayerCompositor::recursiveRepaintLayer(RenderLayer* layer, const IntRect* rect)
 {
     // FIXME: This method does not work correctly with transforms.
-    if (layer->isComposited() && !layer->backing()->paintsIntoCompositedAncestor()) {
+    if (layer->compositingState() == PaintsIntoOwnBacking) {
         if (rect)
-            layer->setBackingNeedsRepaintInRect(*rect);
+            layer->repainter().setBackingNeedsRepaintInRect(*rect);
         else
-            layer->setBackingNeedsRepaint();
+            layer->repainter().setBackingNeedsRepaint();
     }
 
 #if !ASSERT_DISABLED
-    LayerListMutationDetector mutationChecker(layer);
+    LayerListMutationDetector mutationChecker(layer->stackingNode());
 #endif
 
-    if (layer->hasCompositingDescendant()) {
-        if (Vector<RenderLayer*>* negZOrderList = layer->negZOrderList()) {
-            size_t listSize = negZOrderList->size();
-            for (size_t i = 0; i < listSize; ++i) {
-                RenderLayer* curLayer = negZOrderList->at(i);
-                if (rect) {
-                    IntRect childRect(*rect);
-                    curLayer->convertToPixelSnappedLayerCoords(layer, childRect);
-                    recursiveRepaintLayer(curLayer, &childRect);
-                } else
-                    recursiveRepaintLayer(curLayer);
-            }
-        }
-
-        if (Vector<RenderLayer*>* posZOrderList = layer->posZOrderList()) {
-            size_t listSize = posZOrderList->size();
-            for (size_t i = 0; i < listSize; ++i) {
-                RenderLayer* curLayer = posZOrderList->at(i);
-                if (rect) {
-                    IntRect childRect(*rect);
-                    curLayer->convertToPixelSnappedLayerCoords(layer, childRect);
-                    recursiveRepaintLayer(curLayer, &childRect);
-                } else
-                    recursiveRepaintLayer(curLayer);
-            }
-        }
-    }
-    if (Vector<RenderLayer*>* normalFlowList = layer->normalFlowList()) {
-        size_t listSize = normalFlowList->size();
-        for (size_t i = 0; i < listSize; ++i) {
-            RenderLayer* curLayer = normalFlowList->at(i);
-            if (rect) {
-                IntRect childRect(*rect);
-                curLayer->convertToPixelSnappedLayerCoords(layer, childRect);
-                recursiveRepaintLayer(curLayer, &childRect);
-            } else
-                recursiveRepaintLayer(curLayer);
+    unsigned childrenToVisit = NormalFlowChildren;
+    if (layer->hasCompositingDescendant())
+        childrenToVisit |= PositiveZOrderChildren | NegativeZOrderChildren;
+    RenderLayerStackingNodeIterator iterator(*layer->stackingNode(), childrenToVisit);
+    while (RenderLayerStackingNode* curNode = iterator.next()) {
+        if (rect) {
+            IntRect childRect(*rect);
+            curNode->layer()->convertToPixelSnappedLayerCoords(layer, childRect);
+            recursiveRepaintLayer(curNode->layer(), &childRect);
+        } else {
+            recursiveRepaintLayer(curNode->layer());
         }
     }
 }
@@ -1496,23 +1547,23 @@ void RenderLayerCompositor::setIsInWindow(bool isInWindow)
     }
 }
 
-void RenderLayerCompositor::clearBackingForLayerIncludingDescendants(RenderLayer* layer)
+void RenderLayerCompositor::clearMappingForRenderLayerIncludingDescendants(RenderLayer* layer)
 {
     if (!layer)
         return;
 
-    if (layer->isComposited()) {
+    if (layer->hasCompositedLayerMapping()) {
         removeViewportConstrainedLayer(layer);
-        layer->clearBacking();
+        layer->clearCompositedLayerMapping();
     }
 
     for (RenderLayer* currLayer = layer->firstChild(); currLayer; currLayer = currLayer->nextSibling())
-        clearBackingForLayerIncludingDescendants(currLayer);
+        clearMappingForRenderLayerIncludingDescendants(currLayer);
 }
 
-void RenderLayerCompositor::clearBackingForAllLayers()
+void RenderLayerCompositor::clearMappingForAllRenderLayers()
 {
-    clearBackingForLayerIncludingDescendants(m_renderView->layer());
+    clearMappingForRenderLayerIncludingDescendants(m_renderView->layer());
 }
 
 void RenderLayerCompositor::updateRootLayerPosition()
@@ -1521,6 +1572,10 @@ void RenderLayerCompositor::updateRootLayerPosition()
         const IntRect& documentRect = m_renderView->documentRect();
         m_rootContentLayer->setSize(documentRect.size());
         m_rootContentLayer->setPosition(documentRect.location());
+#if USE(RUBBER_BANDING)
+        if (m_layerForOverhangShadow)
+            OverscrollTheme::theme()->updateOverhangShadowLayer(m_layerForOverhangShadow.get(), m_rootContentLayer.get());
+#endif
     }
     if (m_containerLayer) {
         FrameView* frameView = m_renderView->frameView();
@@ -1533,12 +1588,24 @@ bool RenderLayerCompositor::has3DContent() const
     return layerHas3DContent(rootRenderLayer());
 }
 
-bool RenderLayerCompositor::needsToBeComposited(const RenderLayer* layer) const
+void RenderLayerCompositor::updateDirectCompositingReasons(RenderLayer* layer)
+{
+    CompositingReasons layerReasons = layer->compositingReasons();
+
+    layerReasons &= ~CompositingReasonComboAllDirectReasons;
+    layerReasons |= directReasonsForCompositing(layer);
+    layer->setCompositingReasons(layerReasons);
+}
+
+bool RenderLayerCompositor::needsOwnBacking(const RenderLayer* layer) const
 {
     if (!canBeComposited(layer))
         return false;
 
-    return requiresCompositing(directReasonsForCompositing(layer)) || requiresCompositing(layer->compositingReasons()) || (inCompositingMode() && layer->isRootLayer());
+    // If squashing is disabled, then layers that would have been squashed should just be separately composited.
+    bool needsOwnBackingForDisabledSquashing = !layerSquashingEnabled() && requiresSquashing(layer->compositingReasons());
+
+    return requiresCompositing(layer->compositingReasons()) || needsOwnBackingForDisabledSquashing || (inCompositingMode() && layer->isRootLayer());
 }
 
 bool RenderLayerCompositor::canBeComposited(const RenderLayer* layer) const
@@ -1546,45 +1613,6 @@ bool RenderLayerCompositor::canBeComposited(const RenderLayer* layer) const
     // FIXME: We disable accelerated compositing for elements in a RenderFlowThread as it doesn't work properly.
     // See http://webkit.org/b/84900 to re-enable it.
     return m_hasAcceleratedCompositing && layer->isSelfPaintingLayer() && layer->renderer()->flowThreadState() == RenderObject::NotInsideFlowThread;
-}
-
-bool RenderLayerCompositor::requiresOwnBackingStore(const RenderLayer* layer, const RenderLayer* compositingAncestorLayer) const
-{
-    RenderObject* renderer = layer->renderer();
-    if (compositingAncestorLayer
-        && !(compositingAncestorLayer->backing()->graphicsLayer()->drawsContent()
-            || compositingAncestorLayer->backing()->paintsIntoCompositedAncestor()))
-        return true;
-
-    if (layer->isRootLayer()
-        || layer->transform() // note: excludes perspective and transformStyle3D.
-        || requiresCompositingForVideo(renderer)
-        || requiresCompositingForCanvas(renderer)
-        || requiresCompositingForPlugin(renderer)
-        || requiresCompositingForFrame(renderer)
-        || requiresCompositingForBackfaceVisibilityHidden(renderer)
-        || requiresCompositingForAnimation(renderer)
-        || requiresCompositingForTransition(renderer)
-        || requiresCompositingForFilters(renderer)
-        || requiresCompositingForBlending(renderer)
-        || requiresCompositingForPosition(renderer, layer)
-        || requiresCompositingForOverflowScrolling(layer)
-        || renderer->isTransparent()
-        || renderer->hasMask()
-        || renderer->hasReflection()
-        || renderer->hasFilter())
-        return true;
-
-    CompositingReasons indirectReasonsThatNeedBacking = CompositingReasonOverlap
-        | CompositingReasonAssumedOverlap
-        | CompositingReasonNegativeZIndexChildren
-        | CompositingReasonTransformWithCompositedDescendants
-        | CompositingReasonOpacityWithCompositedDescendants
-        | CompositingReasonMaskWithCompositedDescendants
-        | CompositingReasonFilterWithCompositedDescendants
-        | CompositingReasonBlendingWithCompositedDescendants
-        | CompositingReasonPreserve3D; // preserve-3d has to create backing store to ensure that 3d-transformed elements intersect.
-    return layer->compositingReasons() & indirectReasonsThatNeedBacking;
 }
 
 CompositingReasons RenderLayerCompositor::directReasonsForCompositing(const RenderLayer* layer) const
@@ -1623,121 +1651,37 @@ CompositingReasons RenderLayerCompositor::directReasonsForCompositing(const Rend
     if (requiresCompositingForOverflowScrolling(layer))
         directReasons |= CompositingReasonOverflowScrollingTouch;
 
-    if (requiresCompositingForBlending(renderer))
-        directReasons |= CompositingReasonBlending;
+    if (requiresCompositingForOverflowScrollingParent(layer))
+        directReasons |= CompositingReasonOverflowScrollingParent;
+
+    if (requiresCompositingForOutOfFlowClipping(layer))
+        directReasons |= CompositingReasonOutOfFlowClipping;
 
     return directReasons;
 }
-
-CompositingReasons RenderLayerCompositor::reasonsForCompositing(const RenderLayer* layer) const
-{
-    CompositingReasons reasons = CompositingReasonNone;
-
-    if (!layer || !layer->isComposited())
-        return reasons;
-
-    return layer->compositingReasons();
-}
-
-#if !LOG_DISABLED
-const char* RenderLayerCompositor::logReasonsForCompositing(const RenderLayer* layer)
-{
-    CompositingReasons reasons = reasonsForCompositing(layer);
-
-    if (reasons & CompositingReason3DTransform)
-        return "3D transform";
-
-    if (reasons & CompositingReasonVideo)
-        return "video";
-    else if (reasons & CompositingReasonCanvas)
-        return "canvas";
-    else if (reasons & CompositingReasonPlugin)
-        return "plugin";
-    else if (reasons & CompositingReasonIFrame)
-        return "iframe";
-
-    if (reasons & CompositingReasonBackfaceVisibilityHidden)
-        return "backface-visibility: hidden";
-
-    if (reasons & CompositingReasonClipsCompositingDescendants)
-        return "clips compositing descendants";
-
-    if (reasons & CompositingReasonAnimation)
-        return "animation";
-
-    if (reasons & CompositingReasonFilters)
-        return "filters";
-
-    if (reasons & CompositingReasonPositionFixed)
-        return "position: fixed";
-
-    if (reasons & CompositingReasonPositionSticky)
-        return "position: sticky";
-
-    if (reasons & CompositingReasonOverflowScrollingTouch)
-        return "-webkit-overflow-scrolling: touch";
-
-    if (reasons & CompositingReasonAssumedOverlap)
-        return "stacking";
-
-    if (reasons & CompositingReasonOverlap)
-        return "overlap";
-
-    if (reasons & CompositingReasonNegativeZIndexChildren)
-        return "negative z-index children";
-
-    if (reasons & CompositingReasonTransformWithCompositedDescendants)
-        return "transform with composited descendants";
-
-    if (reasons & CompositingReasonOpacityWithCompositedDescendants)
-        return "opacity with composited descendants";
-
-    if (reasons & CompositingReasonMaskWithCompositedDescendants)
-        return "mask with composited descendants";
-
-    if (reasons & CompositingReasonReflectionWithCompositedDescendants)
-        return "reflection with composited descendants";
-
-    if (reasons & CompositingReasonFilterWithCompositedDescendants)
-        return "filter with composited descendants";
-
-    if (reasons & CompositingReasonBlendingWithCompositedDescendants)
-        return "blending with composited descendants";
-
-    if (reasons & CompositingReasonPerspective)
-        return "perspective";
-
-    if (reasons & CompositingReasonPreserve3D)
-        return "preserve-3d";
-
-    if (reasons & CompositingReasonRoot)
-        return "root";
-
-    return "";
-}
-#endif
 
 // Return true if the given layer has some ancestor in the RenderLayer hierarchy that clips,
 // up to the enclosing compositing ancestor. This is required because compositing layers are parented
 // according to the z-order hierarchy, yet clipping goes down the renderer hierarchy.
 // Thus, a RenderLayer can be clipped by a RenderLayer that is an ancestor in the renderer hierarchy,
 // but a sibling in the z-order hierarchy.
-bool RenderLayerCompositor::clippedByAncestor(RenderLayer* layer) const
+bool RenderLayerCompositor::clippedByAncestor(const RenderLayer* layer) const
 {
-    if (!layer->isComposited() || !layer->parent())
+    if (!layer->hasCompositedLayerMapping() || !layer->parent())
         return false;
 
-    RenderLayer* compositingAncestor = layer->ancestorCompositingLayer();
+    // FIXME: need to double-check if semantics of ancestorCompositingLayer() work correctly here?
+    const RenderLayer* compositingAncestor = layer->ancestorCompositingLayer();
     if (!compositingAncestor)
         return false;
 
     // If the compositingAncestor clips, that will be taken care of by clipsCompositingDescendants(),
     // so we only care about clipping between its first child that is our ancestor (the computeClipRoot),
     // and layer.
-    RenderLayer* computeClipRoot = 0;
-    RenderLayer* curr = layer;
+    const RenderLayer* computeClipRoot = 0;
+    const RenderLayer* curr = layer;
     while (curr) {
-        RenderLayer* next = curr->parent();
+        const RenderLayer* next = curr->parent();
         if (next == compositingAncestor) {
             computeClipRoot = curr;
             break;
@@ -1748,7 +1692,7 @@ bool RenderLayerCompositor::clippedByAncestor(RenderLayer* layer) const
     if (!computeClipRoot || computeClipRoot == layer)
         return false;
 
-    return layer->backgroundClipRect(RenderLayer::ClipRectsContext(computeClipRoot, 0, TemporaryClipRects)).rect() != PaintInfo::infiniteRect(); // FIXME: Incorrect for CSS regions.
+    return layer->backgroundClipRect(ClipRectsContext(computeClipRoot, 0, TemporaryClipRects)).rect() != PaintInfo::infiniteRect(); // FIXME: Incorrect for CSS regions.
 }
 
 // Return true if the given layer is a stacking context and has compositing child
@@ -1786,6 +1730,12 @@ bool RenderLayerCompositor::requiresCompositingForTransform(RenderObject* render
 
 bool RenderLayerCompositor::requiresCompositingForVideo(RenderObject* renderer) const
 {
+    if (RuntimeEnabledFeatures::overlayFullscreenVideoEnabled() && renderer->isVideo()) {
+        HTMLMediaElement* media = toHTMLMediaElement(renderer->node());
+        if (media->isFullscreen())
+            return true;
+    }
+
     if (!(m_compositingTriggers & ChromeClient::VideoTrigger))
         return false;
 
@@ -1803,12 +1753,7 @@ bool RenderLayerCompositor::requiresCompositingForCanvas(RenderObject* renderer)
 
     if (renderer->isCanvas()) {
         HTMLCanvasElement* canvas = toHTMLCanvasElement(renderer->node());
-#if USE(COMPOSITING_FOR_SMALL_CANVASES)
-        bool isCanvasLargeEnoughToForceCompositing = true;
-#else
-        bool isCanvasLargeEnoughToForceCompositing = canvas->size().area() >= canvasAreaThresholdRequiringCompositing;
-#endif
-        return canvas->renderingContext() && canvas->renderingContext()->isAccelerated() && (canvas->renderingContext()->is3d() || isCanvasLargeEnoughToForceCompositing);
+        return canvas->renderingContext() && canvas->renderingContext()->isAccelerated();
     }
     return false;
 }
@@ -1822,12 +1767,13 @@ bool RenderLayerCompositor::requiresCompositingForPlugin(RenderObject* renderer)
     if (!composite)
         return false;
 
-    m_reevaluateCompositingAfterLayout = true;
+    // FIXME: this seems bogus. If we don't know the layout position/size of the plugin yet, would't that be handled elsewhere?
+    m_needsToRecomputeCompositingRequirements = true;
 
     RenderWidget* pluginRenderer = toRenderWidget(renderer);
     // If we can't reliably know the size of the plugin yet, don't change compositing state.
     if (pluginRenderer->needsLayout())
-        return pluginRenderer->hasLayer() && pluginRenderer->layer()->isComposited();
+        return pluginRenderer->hasLayer() && pluginRenderer->layer()->hasCompositedLayerMapping();
 
     // Don't go into compositing mode if height or width are zero, or size is 1x1.
     IntRect contentBox = pixelSnappedIntRect(pluginRenderer->contentBoxRect());
@@ -1844,7 +1790,11 @@ bool RenderLayerCompositor::requiresCompositingForFrame(RenderObject* renderer) 
     if (!frameRenderer->requiresAcceleratedCompositing())
         return false;
 
-    m_reevaluateCompositingAfterLayout = true;
+    if (frameRenderer->node() && frameRenderer->node()->isFrameOwnerElement() && toHTMLFrameOwnerElement(frameRenderer->node())->contentFrame() && toHTMLFrameOwnerElement(frameRenderer->node())->contentFrame()->remotePlatformLayer())
+        return true;
+
+    // FIXME: this seems bogus. If we don't know the layout position/size of the frame yet, wouldn't that be handled elsehwere?
+    m_needsToRecomputeCompositingRequirements = true;
 
     RenderLayerCompositor* innerCompositor = frameContentsCompositor(frameRenderer);
     if (!innerCompositor)
@@ -1852,7 +1802,7 @@ bool RenderLayerCompositor::requiresCompositingForFrame(RenderObject* renderer) 
 
     // If we can't reliably know the size of the iframe yet, don't change compositing state.
     if (renderer->needsLayout())
-        return frameRenderer->hasLayer() && frameRenderer->layer()->isComposited();
+        return frameRenderer->hasLayer() && frameRenderer->layer()->hasCompositedLayerMapping();
 
     // Don't go into compositing mode if height or width are zero.
     IntRect contentBox = pixelSnappedIntRect(frameRenderer->contentBoxRect());
@@ -1869,9 +1819,10 @@ bool RenderLayerCompositor::requiresCompositingForAnimation(RenderObject* render
     if (!(m_compositingTriggers & ChromeClient::AnimationTrigger))
         return false;
 
-    if (AnimationController* animController = renderer->animation())
-        return animController->isRunningAcceleratableAnimationOnRenderer(renderer);
-    return false;
+    if (!RuntimeEnabledFeatures::webAnimationsCSSEnabled())
+        return renderer->animation().isRunningAcceleratableAnimationOnRenderer(renderer);
+
+    return shouldCompositeForActiveAnimations(*renderer);
 }
 
 bool RenderLayerCompositor::requiresCompositingForTransition(RenderObject* renderer) const
@@ -1879,7 +1830,7 @@ bool RenderLayerCompositor::requiresCompositingForTransition(RenderObject* rende
     if (!(m_compositingTriggers & ChromeClient::AnimationTrigger))
         return false;
 
-    if (Settings* settings = m_renderView->document()->settings()) {
+    if (Settings* settings = m_renderView->document().settings()) {
         if (!settings->acceleratedCompositingForTransitionEnabled())
             return false;
     }
@@ -1901,6 +1852,11 @@ CompositingReasons RenderLayerCompositor::subtreeReasonsForCompositing(RenderObj
     if (hasCompositedDescendants) {
         if (layer->transform())
             subtreeReasons |= CompositingReasonTransformWithCompositedDescendants;
+
+        if (layer->shouldIsolateCompositedDescendants()) {
+            ASSERT(layer->stackingNode()->isStackingContext());
+            subtreeReasons |= CompositingReasonIsolateCompositedDescendants;
+        }
 
         // If the implementation of createsGroup changes, we need to be aware of that in this part of code.
         ASSERT((renderer->isTransparent() || renderer->hasMask() || renderer->hasFilter() || renderer->hasBlendMode()) == renderer->createsGroup());
@@ -1942,9 +1898,14 @@ bool RenderLayerCompositor::requiresCompositingForFilters(RenderObject* renderer
     return renderer->hasFilter();
 }
 
-bool RenderLayerCompositor::requiresCompositingForBlending(RenderObject* renderer) const
+bool RenderLayerCompositor::requiresCompositingForOverflowScrollingParent(const RenderLayer* layer) const
 {
-    return renderer->hasBlendMode();
+    return !!layer->scrollParent();
+}
+
+bool RenderLayerCompositor::requiresCompositingForOutOfFlowClipping(const RenderLayer* layer) const
+{
+    return layer->compositorDrivenAcceleratedScrollingEnabled() && layer->isUnclippedDescendant();
 }
 
 bool RenderLayerCompositor::requiresCompositingForPosition(RenderObject* renderer, const RenderLayer* layer, RenderLayer::ViewportConstrainedNotCompositedReason* viewportConstrainedNotCompositedReason) const
@@ -1957,7 +1918,7 @@ bool RenderLayerCompositor::requiresCompositingForPosition(RenderObject* rendere
 
     EPosition position = renderer->style()->position();
     bool isFixed = renderer->isOutOfFlowPositioned() && position == FixedPosition;
-    if (isFixed && !layer->isStackingContainer())
+    if (isFixed && !layer->stackingNode()->isStackingContainer())
         return false;
 
     bool isSticky = renderer->isInFlowPositioned() && position == StickyPosition;
@@ -1965,7 +1926,7 @@ bool RenderLayerCompositor::requiresCompositingForPosition(RenderObject* rendere
         return false;
 
     // FIXME: acceleratedCompositingForFixedPositionEnabled should probably be renamed acceleratedCompositingForViewportConstrainedPositionEnabled().
-    if (Settings* settings = m_renderView->document()->settings()) {
+    if (Settings* settings = m_renderView->document().settings()) {
         if (!settings->acceleratedCompositingForFixedPositionEnabled())
             return false;
     }
@@ -1976,7 +1937,7 @@ bool RenderLayerCompositor::requiresCompositingForPosition(RenderObject* rendere
     RenderObject* container = renderer->container();
     // If the renderer is not hooked up yet then we have to wait until it is.
     if (!container) {
-        m_reevaluateCompositingAfterLayout = true;
+        m_needsToRecomputeCompositingRequirements = true;
         return false;
     }
 
@@ -2001,7 +1962,7 @@ bool RenderLayerCompositor::requiresCompositingForPosition(RenderObject* rendere
 
     RenderLayer* ancestor = layer->parent();
     while (ancestor && !hasScrollableAncestor) {
-        if (frameView->containsScrollableArea(ancestor))
+        if (frameView->containsScrollableArea(ancestor->scrollableArea()))
             hasScrollableAncestor = true;
         if (ancestor->renderer() == m_renderView)
             break;
@@ -2016,8 +1977,8 @@ bool RenderLayerCompositor::requiresCompositingForPosition(RenderObject* rendere
 
     // Subsequent tests depend on layout. If we can't tell now, just keep things the way they are until layout is done.
     if (!m_inPostLayoutUpdate) {
-        m_reevaluateCompositingAfterLayout = true;
-        return layer->isComposited();
+        m_needsToRecomputeCompositingRequirements = true;
+        return layer->hasCompositedLayerMapping();
     }
 
     bool paintsContent = layer->isVisuallyNonEmpty() || layer->hasVisibleDescendant();
@@ -2030,11 +1991,17 @@ bool RenderLayerCompositor::requiresCompositingForPosition(RenderObject* rendere
     // Fixed position elements that are invisible in the current view don't get their own layer.
     if (FrameView* frameView = m_renderView->frameView()) {
         LayoutRect viewBounds = frameView->viewportConstrainedVisibleContentRect();
-        LayoutRect layerBounds = layer->calculateLayerBounds(rootRenderLayer(), 0, RenderLayer::DefaultCalculateLayerBoundsFlags
-            | RenderLayer::ExcludeHiddenDescendants | RenderLayer::DontConstrainForMask | RenderLayer::IncludeCompositedDescendants);
+        LayoutRect layerBounds = layer->calculateLayerBounds(rootRenderLayer(), 0,
+            RenderLayer::DefaultCalculateLayerBoundsFlags
+            | RenderLayer::ExcludeHiddenDescendants
+            | RenderLayer::DontConstrainForMask
+            | RenderLayer::IncludeCompositedDescendants
+            | RenderLayer::PretendLayerHasOwnBacking);
         if (!viewBounds.intersects(enclosingIntRect(layerBounds))) {
-            if (viewportConstrainedNotCompositedReason)
+            if (viewportConstrainedNotCompositedReason) {
                 *viewportConstrainedNotCompositedReason = RenderLayer::NotCompositedForBoundsOutOfView;
+                m_needsToRecomputeCompositingRequirements = true;
+            }
             return false;
         }
     }
@@ -2051,11 +2018,9 @@ bool RenderLayerCompositor::isRunningAcceleratedTransformAnimation(RenderObject*
 {
     if (!(m_compositingTriggers & ChromeClient::AnimationTrigger))
         return false;
-
-    if (AnimationController* animController = renderer->animation())
-        return animController->isRunningAnimationOnRenderer(renderer, CSSPropertyWebkitTransform);
-
-    return false;
+    if (!RuntimeEnabledFeatures::webAnimationsCSSEnabled())
+        return renderer->animation().isRunningAnimationOnRenderer(renderer, CSSPropertyWebkitTransform);
+    return hasActiveAnimations(*renderer, CSSPropertyWebkitTransform);
 }
 
 // If an element has negative z-index children, those children render in front of the
@@ -2063,7 +2028,7 @@ bool RenderLayerCompositor::isRunningAcceleratedTransformAnimation(RenderObject*
 // object.
 bool RenderLayerCompositor::needsContentsCompositingLayer(const RenderLayer* layer) const
 {
-    return layer->hasNegativeZOrderList();
+    return layer->stackingNode()->hasNegativeZOrderList();
 }
 
 static void paintScrollbar(Scrollbar* scrollbar, GraphicsContext& context, const IntRect& clip)
@@ -2094,17 +2059,12 @@ void RenderLayerCompositor::paintContents(const GraphicsLayer* graphicsLayer, Gr
         transformedClip.moveBy(scrollCorner.location());
         m_renderView->frameView()->paintScrollCorner(&context, transformedClip);
         context.restore();
-#if ENABLE(RUBBER_BANDING)
-    } else if (graphicsLayer == layerForOverhangAreas()) {
-        ScrollView* view = m_renderView->frameView();
-        view->calculateAndPaintOverhangAreas(&context, clip);
-#endif
     }
 }
 
 bool RenderLayerCompositor::supportsFixedRootBackgroundCompositing() const
 {
-    if (Settings* settings = m_renderView->document()->settings()) {
+    if (Settings* settings = m_renderView->document().settings()) {
         if (settings->acceleratedCompositingForFixedRootBackgroundEnabled())
             return true;
     }
@@ -2121,13 +2081,13 @@ bool RenderLayerCompositor::needsFixedRootBackgroundLayer(const RenderLayer* lay
 
 GraphicsLayer* RenderLayerCompositor::fixedRootBackgroundLayer() const
 {
-    // Get the fixed root background from the RenderView layer's backing.
+    // Get the fixed root background from the RenderView layer's compositedLayerMapping.
     RenderLayer* viewLayer = m_renderView->layer();
     if (!viewLayer)
         return 0;
 
-    if (viewLayer->isComposited() && viewLayer->backing()->backgroundLayerPaintsFixedRootBackground())
-        return viewLayer->backing()->backgroundLayer();
+    if (viewLayer->compositingState() == PaintsIntoOwnBacking && viewLayer->compositedLayerMapping()->backgroundLayerPaintsFixedRootBackground())
+        return viewLayer->compositedLayerMapping()->backgroundLayer();
 
     return 0;
 }
@@ -2147,6 +2107,9 @@ static void resetTrackedRepaintRectsRecursive(GraphicsLayer* graphicsLayer)
 
     if (GraphicsLayer* maskLayer = graphicsLayer->maskLayer())
         resetTrackedRepaintRectsRecursive(maskLayer);
+
+    if (GraphicsLayer* clippingMaskLayer = graphicsLayer->contentsClippingMaskLayer())
+        resetTrackedRepaintRectsRecursive(clippingMaskLayer);
 }
 
 void RenderLayerCompositor::resetTrackedRepaintRects()
@@ -2157,6 +2120,7 @@ void RenderLayerCompositor::resetTrackedRepaintRects()
 
 void RenderLayerCompositor::setTracksRepaints(bool tracksRepaints)
 {
+    updateCompositingLayers(CompositingUpdateFinishAllDeferredWork);
     m_isTrackingRepaints = tracksRepaints;
 }
 
@@ -2172,7 +2136,7 @@ void RenderLayerCompositor::didCommitChangesForLayer(const GraphicsLayer*) const
 
 static bool shouldCompositeOverflowControls(FrameView* view)
 {
-    if (Page* page = view->frame()->page()) {
+    if (Page* page = view->frame().page()) {
         if (ScrollingCoordinator* scrollingCoordinator = page->scrollingCoordinator())
             if (scrollingCoordinator->coordinatesScrollingForFrameView(view))
                 return true;
@@ -2199,8 +2163,8 @@ bool RenderLayerCompositor::requiresScrollCornerLayer() const
     return shouldCompositeOverflowControls(view) && view->isScrollCornerVisible();
 }
 
-#if ENABLE(RUBBER_BANDING)
-bool RenderLayerCompositor::requiresOverhangAreasLayer() const
+#if USE(RUBBER_BANDING)
+bool RenderLayerCompositor::requiresOverhangLayers() const
 {
     // We don't want a layer if this is a subframe.
     if (!isMainFrame())
@@ -2217,32 +2181,25 @@ bool RenderLayerCompositor::requiresOverhangAreasLayer() const
 
 void RenderLayerCompositor::updateOverflowControlsLayers()
 {
-#if ENABLE(RUBBER_BANDING)
-    if (requiresOverhangAreasLayer()) {
-        if (!m_layerForOverhangAreas) {
-            m_layerForOverhangAreas = GraphicsLayer::create(graphicsLayerFactory(), this);
-#ifndef NDEBUG
-            m_layerForOverhangAreas->setName("overhang areas");
-#endif
-            m_layerForOverhangAreas->setDrawsContent(false);
-            m_layerForOverhangAreas->setSize(m_renderView->frameView()->frameRect().size());
-
-            // We want the overhang areas layer to be positioned below the frame contents,
-            // so insert it below the clip layer.
-            m_overflowControlsHostLayer->addChildBelow(m_layerForOverhangAreas.get(), m_containerLayer.get());
+#if USE(RUBBER_BANDING)
+    if (requiresOverhangLayers()) {
+        if (!m_layerForOverhangShadow) {
+            m_layerForOverhangShadow = GraphicsLayer::create(graphicsLayerFactory(), this);
+            OverscrollTheme::theme()->setUpOverhangShadowLayer(m_layerForOverhangShadow.get());
+            OverscrollTheme::theme()->updateOverhangShadowLayer(m_layerForOverhangShadow.get(), m_rootContentLayer.get());
+            m_scrollLayer->addChild(m_layerForOverhangShadow.get());
         }
-    } else if (m_layerForOverhangAreas) {
-        m_layerForOverhangAreas->removeFromParent();
-        m_layerForOverhangAreas = nullptr;
+    } else {
+        if (m_layerForOverhangShadow) {
+            m_layerForOverhangShadow->removeFromParent();
+            m_layerForOverhangShadow = nullptr;
+        }
     }
 #endif
 
     if (requiresHorizontalScrollbarLayer()) {
         if (!m_layerForHorizontalScrollbar) {
             m_layerForHorizontalScrollbar = GraphicsLayer::create(graphicsLayerFactory(), this);
-#ifndef NDEBUG
-            m_layerForHorizontalScrollbar->setName("horizontal scrollbar");
-#endif
             m_overflowControlsHostLayer->addChild(m_layerForHorizontalScrollbar.get());
 
             if (ScrollingCoordinator* scrollingCoordinator = this->scrollingCoordinator())
@@ -2259,9 +2216,6 @@ void RenderLayerCompositor::updateOverflowControlsLayers()
     if (requiresVerticalScrollbarLayer()) {
         if (!m_layerForVerticalScrollbar) {
             m_layerForVerticalScrollbar = GraphicsLayer::create(graphicsLayerFactory(), this);
-#ifndef NDEBUG
-            m_layerForVerticalScrollbar->setName("vertical scrollbar");
-#endif
             m_overflowControlsHostLayer->addChild(m_layerForVerticalScrollbar.get());
 
             if (ScrollingCoordinator* scrollingCoordinator = this->scrollingCoordinator())
@@ -2278,9 +2232,6 @@ void RenderLayerCompositor::updateOverflowControlsLayers()
     if (requiresScrollCornerLayer()) {
         if (!m_layerForScrollCorner) {
             m_layerForScrollCorner = GraphicsLayer::create(graphicsLayerFactory(), this);
-#ifndef NDEBUG
-            m_layerForScrollCorner->setName("scroll corner");
-#endif
             m_overflowControlsHostLayer->addChild(m_layerForScrollCorner.get());
         }
     } else if (m_layerForScrollCorner) {
@@ -2299,9 +2250,6 @@ void RenderLayerCompositor::ensureRootLayer()
 
     if (!m_rootContentLayer) {
         m_rootContentLayer = GraphicsLayer::create(graphicsLayerFactory(), this);
-#ifndef NDEBUG
-        m_rootContentLayer->setName("content root");
-#endif
         IntRect overflowRect = m_renderView->pixelSnappedLayoutOverflowRect();
         m_rootContentLayer->setSize(FloatSize(overflowRect.maxX(), overflowRect.maxY()));
         m_rootContentLayer->setPosition(FloatPoint());
@@ -2316,22 +2264,17 @@ void RenderLayerCompositor::ensureRootLayer()
 
         // Create a layer to host the clipping layer and the overflow controls layers.
         m_overflowControlsHostLayer = GraphicsLayer::create(graphicsLayerFactory(), this);
-#ifndef NDEBUG
-        m_overflowControlsHostLayer->setName("overflow controls host");
-#endif
 
-        // Create a clipping layer if this is an iframe
+        // Create a clipping layer if this is an iframe or settings require to clip.
         m_containerLayer = GraphicsLayer::create(graphicsLayerFactory(), this);
-#ifndef NDEBUG
-        m_containerLayer->setName("frame clipping");
-#endif
-        if (!isMainFrame())
-            m_containerLayer->setMasksToBounds(true);
+        bool containerMasksToBounds = !isMainFrame();
+        if (Settings* settings = m_renderView->document().settings()) {
+            if (settings->mainFrameClipsContent())
+                containerMasksToBounds = true;
+        }
+        m_containerLayer->setMasksToBounds(containerMasksToBounds);
 
         m_scrollLayer = GraphicsLayer::create(graphicsLayerFactory(), this);
-#ifndef NDEBUG
-        m_scrollLayer->setName("frame scrolling");
-#endif
         if (ScrollingCoordinator* scrollingCoordinator = this->scrollingCoordinator())
             scrollingCoordinator->setLayerIsContainerForFixedPositionLayers(m_scrollLayer.get(), true);
 
@@ -2358,10 +2301,10 @@ void RenderLayerCompositor::destroyRootLayer()
 
     detachRootLayer();
 
-#if ENABLE(RUBBER_BANDING)
-    if (m_layerForOverhangAreas) {
-        m_layerForOverhangAreas->removeFromParent();
-        m_layerForOverhangAreas = nullptr;
+#if USE(RUBBER_BANDING)
+    if (m_layerForOverhangShadow) {
+        m_layerForOverhangShadow->removeFromParent();
+        m_layerForOverhangShadow = nullptr;
     }
 #endif
 
@@ -2407,18 +2350,17 @@ void RenderLayerCompositor::attachRootLayer(RootLayerAttachment attachment)
             ASSERT_NOT_REACHED();
             break;
         case RootLayerAttachedViaChromeClient: {
-            Frame* frame = m_renderView->frameView()->frame();
-            Page* page = frame ? frame->page() : 0;
+            Frame& frame = m_renderView->frameView()->frame();
+            Page* page = frame.page();
             if (!page)
                 return;
-
-            page->chrome().client()->attachRootGraphicsLayer(frame, rootGraphicsLayer());
+            page->chrome().client().attachRootGraphicsLayer(&frame, rootGraphicsLayer());
             break;
         }
         case RootLayerAttachedViaEnclosingFrame: {
-            // The layer will get hooked up via RenderLayerBacking::updateGraphicsLayerConfiguration()
+            // The layer will get hooked up via CompositedLayerMapping::updateGraphicsLayerConfiguration()
             // for the frame's renderer in the parent document.
-            m_renderView->document()->ownerElement()->scheduleLayerUpdate();
+            m_renderView->document().ownerElement()->scheduleLayerUpdate();
             break;
         }
     }
@@ -2433,24 +2375,23 @@ void RenderLayerCompositor::detachRootLayer()
 
     switch (m_rootLayerAttachment) {
     case RootLayerAttachedViaEnclosingFrame: {
-        // The layer will get unhooked up via RenderLayerBacking::updateGraphicsLayerConfiguration()
+        // The layer will get unhooked up via CompositedLayerMapping::updateGraphicsLayerConfiguration()
         // for the frame's renderer in the parent document.
         if (m_overflowControlsHostLayer)
             m_overflowControlsHostLayer->removeFromParent();
         else
             m_rootContentLayer->removeFromParent();
 
-        if (HTMLFrameOwnerElement* ownerElement = m_renderView->document()->ownerElement())
+        if (HTMLFrameOwnerElement* ownerElement = m_renderView->document().ownerElement())
             ownerElement->scheduleLayerUpdate();
         break;
     }
     case RootLayerAttachedViaChromeClient: {
-        Frame* frame = m_renderView->frameView()->frame();
-        Page* page = frame ? frame->page() : 0;
+        Frame& frame = m_renderView->frameView()->frame();
+        Page* page = frame.page();
         if (!page)
             return;
-
-        page->chrome().client()->attachRootGraphicsLayer(frame, 0);
+        page->chrome().client().attachRootGraphicsLayer(&frame, 0);
     }
     break;
     case RootLayerUnattached:
@@ -2467,7 +2408,8 @@ void RenderLayerCompositor::updateRootLayerAttachment()
 
 bool RenderLayerCompositor::isMainFrame() const
 {
-    return !m_renderView->document()->ownerElement();
+    // FIXME: Frame::isMainFrame() is probably better.
+    return !m_renderView->document().ownerElement();
 }
 
 // IFrames are special, because we hook compositing layers together across iframe boundaries
@@ -2475,24 +2417,25 @@ bool RenderLayerCompositor::isMainFrame() const
 // to use a synthetic style change to get the iframes into RenderLayers in order to allow them to composite.
 void RenderLayerCompositor::notifyIFramesOfCompositingChange()
 {
-    Frame* frame = m_renderView->frameView() ? m_renderView->frameView()->frame() : 0;
-    if (!frame)
+    if (!m_renderView->frameView())
         return;
+    Frame& frame = m_renderView->frameView()->frame();
 
-    for (Frame* child = frame->tree()->firstChild(); child; child = child->tree()->traverseNext(frame)) {
+    for (Frame* child = frame.tree().firstChild(); child; child = child->tree().traverseNext(&frame)) {
         if (child->document() && child->document()->ownerElement())
             child->document()->ownerElement()->scheduleLayerUpdate();
     }
 
     // Compositing also affects the answer to RenderIFrame::requiresAcceleratedCompositing(), so
     // we need to schedule a style recalc in our parent document.
-    if (HTMLFrameOwnerElement* ownerElement = m_renderView->document()->ownerElement())
+    if (HTMLFrameOwnerElement* ownerElement = m_renderView->document().ownerElement())
         ownerElement->scheduleLayerUpdate();
 }
 
 bool RenderLayerCompositor::layerHas3DContent(const RenderLayer* layer) const
 {
     const RenderStyle* style = layer->renderer()->style();
+    RenderLayerStackingNode* stackingNode = const_cast<RenderLayer*>(layer)->stackingNode();
 
     if (style &&
         (style->transformStyle3D() == TransformStyle3DPreserve3D ||
@@ -2500,40 +2443,18 @@ bool RenderLayerCompositor::layerHas3DContent(const RenderLayer* layer) const
          style->transform().has3DOperation()))
         return true;
 
-    const_cast<RenderLayer*>(layer)->updateLayerListsIfNeeded();
+    stackingNode->updateLayerListsIfNeeded();
 
 #if !ASSERT_DISABLED
-    LayerListMutationDetector mutationChecker(const_cast<RenderLayer*>(layer));
+    LayerListMutationDetector mutationChecker(stackingNode);
 #endif
 
-    if (layer->isStackingContainer()) {
-        if (Vector<RenderLayer*>* negZOrderList = layer->negZOrderList()) {
-            size_t listSize = negZOrderList->size();
-            for (size_t i = 0; i < listSize; ++i) {
-                RenderLayer* curLayer = negZOrderList->at(i);
-                if (layerHas3DContent(curLayer))
-                    return true;
-            }
-        }
-
-        if (Vector<RenderLayer*>* posZOrderList = layer->posZOrderList()) {
-            size_t listSize = posZOrderList->size();
-            for (size_t i = 0; i < listSize; ++i) {
-                RenderLayer* curLayer = posZOrderList->at(i);
-                if (layerHas3DContent(curLayer))
-                    return true;
-            }
-        }
+    RenderLayerStackingNodeIterator iterator(*layer->stackingNode(), AllChildren);
+    while (RenderLayerStackingNode* curNode = iterator.next()) {
+        if (layerHas3DContent(curNode->layer()))
+            return true;
     }
 
-    if (Vector<RenderLayer*>* normalFlowList = layer->normalFlowList()) {
-        size_t listSize = normalFlowList->size();
-        for (size_t i = 0; i < listSize; ++i) {
-            RenderLayer* curLayer = normalFlowList->at(i);
-            if (layerHas3DContent(curLayer))
-                return true;
-        }
-    }
     return false;
 }
 
@@ -2545,8 +2466,8 @@ static bool isRootmostFixedOrStickyLayer(RenderLayer* layer)
     if (layer->renderer()->style()->position() != FixedPosition)
         return false;
 
-    for (RenderLayer* stackingContainer = layer->ancestorStackingContainer(); stackingContainer; stackingContainer = stackingContainer->ancestorStackingContainer()) {
-        if (stackingContainer->isComposited() && stackingContainer->renderer()->style()->position() == FixedPosition)
+    for (RenderLayerStackingNode* stackingContainerNode = layer->stackingNode()->ancestorStackingContainerNode(); stackingContainerNode; stackingContainerNode = stackingContainerNode->ancestorStackingContainerNode()) {
+        if (stackingContainerNode->layer()->hasCompositedLayerMapping() && stackingContainerNode->layer()->renderer()->style()->position() == FixedPosition)
             return false;
     }
 
@@ -2576,14 +2497,14 @@ void RenderLayerCompositor::removeViewportConstrainedLayer(RenderLayer* layer)
 
 FixedPositionViewportConstraints RenderLayerCompositor::computeFixedViewportConstraints(RenderLayer* layer) const
 {
-    ASSERT(layer->isComposited());
+    ASSERT(layer->hasCompositedLayerMapping());
 
     FrameView* frameView = m_renderView->frameView();
     LayoutRect viewportRect = frameView->viewportConstrainedVisibleContentRect();
 
     FixedPositionViewportConstraints constraints;
 
-    GraphicsLayer* graphicsLayer = layer->backing()->graphicsLayer();
+    GraphicsLayer* graphicsLayer = layer->compositedLayerMapping()->mainGraphicsLayer();
 
     constraints.setLayerPositionAtLastLayout(graphicsLayer->position());
     constraints.setViewportRectAtLastLayout(viewportRect);
@@ -2614,7 +2535,7 @@ FixedPositionViewportConstraints RenderLayerCompositor::computeFixedViewportCons
 
 StickyPositionViewportConstraints RenderLayerCompositor::computeStickyViewportConstraints(RenderLayer* layer) const
 {
-    ASSERT(layer->isComposited());
+    ASSERT(layer->hasCompositedLayerMapping());
 
     FrameView* frameView = m_renderView->frameView();
     LayoutRect viewportRect = frameView->viewportConstrainedVisibleContentRect();
@@ -2625,7 +2546,7 @@ StickyPositionViewportConstraints RenderLayerCompositor::computeStickyViewportCo
 
     renderer->computeStickyPositionConstraints(constraints, viewportRect);
 
-    GraphicsLayer* graphicsLayer = layer->backing()->graphicsLayer();
+    GraphicsLayer* graphicsLayer = layer->compositedLayerMapping()->mainGraphicsLayer();
 
     constraints.setLayerPositionAtLastLayout(graphicsLayer->position());
     constraints.setStickyOffsetAtLastLayout(renderer->stickyPositionOffset());
@@ -2644,17 +2565,41 @@ ScrollingCoordinator* RenderLayerCompositor::scrollingCoordinator() const
 GraphicsLayerFactory* RenderLayerCompositor::graphicsLayerFactory() const
 {
     if (Page* page = this->page())
-        return page->chrome().client()->graphicsLayerFactory();
-
+        return page->chrome().client().graphicsLayerFactory();
     return 0;
 }
 
 Page* RenderLayerCompositor::page() const
 {
-    if (Frame* frame = m_renderView->frameView()->frame())
-        return frame->page();
+    return m_renderView->frameView()->frame().page();
+}
 
-    return 0;
+String RenderLayerCompositor::debugName(const GraphicsLayer* graphicsLayer)
+{
+    String name;
+    if (graphicsLayer == m_rootContentLayer.get()) {
+        name = "Content Root Layer";
+#if USE(RUBBER_BANDING)
+    } else if (graphicsLayer == m_layerForOverhangShadow.get()) {
+        name = "Overhang Areas Shadow";
+#endif
+    } else if (graphicsLayer == m_overflowControlsHostLayer.get()) {
+        name = "Overflow Controls Host Layer";
+    } else if (graphicsLayer == m_layerForHorizontalScrollbar.get()) {
+        name = "Horizontal Scrollbar Layer";
+    } else if (graphicsLayer == m_layerForVerticalScrollbar.get()) {
+        name = "Vertical Scrollbar Layer";
+    } else if (graphicsLayer == m_layerForScrollCorner.get()) {
+        name = "Scroll Corner Layer";
+    } else if (graphicsLayer == m_containerLayer.get()) {
+        name = "Frame Clipping Layer";
+    } else if (graphicsLayer == m_scrollLayer.get()) {
+        name = "Frame Scrolling Layer";
+    } else {
+        ASSERT_NOT_REACHED();
+    }
+
+    return name;
 }
 
 } // namespace WebCore

@@ -1,5 +1,6 @@
 /*
  * Copyright 2011, The Android Open Source Project
+ * Copyright (C) 2014, Sony Mobile Communications AB
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -116,7 +117,7 @@ SkBitmap* ImageTexture::convertBitmap(SkBitmap* bitmap)
     SkCanvas canvas(*img);
     SkRect dest;
     dest.set(0, 0, w, h);
-    img->setIsOpaque(false);
+    img->setAlphaType(kPremul_SkAlphaType);
     img->eraseARGB(0, 0, 0, 0);
     canvas.drawBitmapRect(*bitmap, 0, dest);
 

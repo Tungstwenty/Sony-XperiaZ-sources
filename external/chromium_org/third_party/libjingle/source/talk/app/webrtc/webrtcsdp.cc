@@ -42,6 +42,7 @@
 #include "talk/media/base/codec.h"
 #include "talk/media/base/constants.h"
 #include "talk/media/base/cryptoparams.h"
+#include "talk/media/sctp/sctpdataengine.h"
 #include "talk/p2p/base/candidate.h"
 #include "talk/p2p/base/constants.h"
 #include "talk/p2p/base/port.h"
@@ -141,8 +142,10 @@ static const char kAttributeCandidateUsername[] = "username";
 static const char kAttributeCandidatePassword[] = "password";
 static const char kAttributeCandidateGeneration[] = "generation";
 static const char kAttributeFingerprint[] = "fingerprint";
+static const char kAttributeSetup[] = "setup";
 static const char kAttributeFmtp[] = "fmtp";
 static const char kAttributeRtpmap[] = "rtpmap";
+static const char kAttributeSctpmap[] = "sctpmap";
 static const char kAttributeRtcp[] = "rtcp";
 static const char kAttributeIceUfrag[] = "ice-ufrag";
 static const char kAttributeIcePwd[] = "ice-pwd";
@@ -208,7 +211,7 @@ static const int kIsacWbDefaultRate = 32000;  // From acm_common_defs.h
 static const int kIsacSwbDefaultRate = 56000;  // From acm_common_defs.h
 
 static const int kDefaultSctpFmt = 5000;
-static const char kDefaultSctpFmtProtocol[] = "webrtc-datachannel";
+static const char kDefaultSctpmapProtocol[] = "webrtc-datachannel";
 
 struct SsrcInfo {
   SsrcInfo()
@@ -318,6 +321,9 @@ static bool ParseExtmap(const std::string& line,
 static bool ParseFingerprintAttribute(const std::string& line,
                                       talk_base::SSLFingerprint** fingerprint,
                                       SdpParseError* error);
+static bool ParseDtlsSetup(const std::string& line,
+                           cricket::ConnectionRole* role,
+                           SdpParseError* error);
 
 // Helper functions
 
@@ -335,13 +341,15 @@ static bool ParseFailed(const std::string& message,
                         const std::string& description,
                         SdpParseError* error) {
   // Get the first line of |message| from |line_start|.
-  std::string first_line = message;
+  std::string first_line;
   size_t line_end = message.find(kNewLine, line_start);
   if (line_end != std::string::npos) {
     if (line_end > 0 && (message.at(line_end - 1) == kReturn)) {
       --line_end;
     }
     first_line = message.substr(line_start, (line_end - line_start));
+  } else {
+    first_line = message.substr(line_start);
   }
 
   if (error) {
@@ -902,7 +910,8 @@ bool SdpDeserialize(const std::string& message,
                     SdpParseError* error) {
   std::string session_id;
   std::string session_version;
-  TransportDescription session_td(NS_JINGLE_ICE_UDP, Candidates());
+  TransportDescription session_td(NS_JINGLE_ICE_UDP,
+                                  std::string(), std::string());
   RtpHeaderExtensions session_extmaps;
   cricket::SessionDescription* desc = new cricket::SessionDescription();
   std::vector<JsepIceCandidate*> candidates;
@@ -1226,8 +1235,20 @@ void BuildMediaDescription(const ContentInfo* content_info,
       os << kSdpDelimiterColon
          << fp->algorithm << kSdpDelimiterSpace
          << fp->GetRfc4572Fingerprint();
-
       AddLine(os.str(), message);
+
+      // Inserting setup attribute.
+      if (transport_info->description.connection_role !=
+              cricket::CONNECTIONROLE_NONE) {
+        // Making sure we are not using "passive" mode.
+        cricket::ConnectionRole role =
+            transport_info->description.connection_role;
+        std::string dtls_role_str;
+        VERIFY(cricket::ConnectionRoleToString(role, &dtls_role_str));
+        InitAttrLine(kAttributeSetup, &os);
+        os << kSdpDelimiterColon << dtls_role_str;
+        AddLine(os.str(), message);
+      }
     }
   }
 
@@ -1247,10 +1268,14 @@ void BuildMediaDescription(const ContentInfo* content_info,
 }
 
 void BuildSctpContentAttributes(std::string* message) {
-  cricket::DataCodec sctp_codec(kDefaultSctpFmt, kDefaultSctpFmtProtocol, 0);
-  sctp_codec.SetParam(kCodecParamSctpProtocol, kDefaultSctpFmtProtocol);
-  sctp_codec.SetParam(kCodecParamSctpStreams, cricket::kMaxSctpSid + 1);
-  AddFmtpLine(sctp_codec, message);
+  // draft-ietf-mmusic-sctp-sdp-04
+  // a=sctpmap:sctpmap-number  protocol  [streams]
+  std::ostringstream os;
+  InitAttrLine(kAttributeSctpmap, &os);
+  os << kSdpDelimiterColon << kDefaultSctpFmt << kSdpDelimiterSpace
+     << kDefaultSctpmapProtocol << kSdpDelimiterSpace
+     << (cricket::kMaxSctpSid + 1);
+  AddLine(os.str(), message);
 }
 
 void BuildRtpContentAttributes(
@@ -1296,7 +1321,16 @@ void BuildRtpContentAttributes(
 
   // RFC 4566
   // b=AS:<bandwidth>
-  if (media_desc->bandwidth() >= 1000) {
+  // We should always use the default bandwidth for RTP-based data
+  // channels.  Don't allow SDP to set the bandwidth, because that
+  // would give JS the opportunity to "break the Internet".
+  // TODO(pthatcher): But we need to temporarily allow the SDP to control
+  // this for backwards-compatibility.  Once we don't need that any
+  // more, remove this.
+  bool support_dc_sdp_bandwidth_temporarily = true;
+  if (media_desc->bandwidth() >= 1000 &&
+      (media_type != cricket::MEDIA_TYPE_DATA ||
+       support_dc_sdp_bandwidth_temporarily)) {
     InitLine(kLineTypeSessionBandwidth, kApplicationSpecificMaximum, &os);
     os << kSdpDelimiterColon << (media_desc->bandwidth() / 1000);
     AddLine(os.str(), message);
@@ -1796,6 +1830,10 @@ bool ParseSessionDescription(const std::string& message, size_t* pos,
         return false;
       }
       session_td->identity_fingerprint.reset(fingerprint);
+    } else if (HasAttribute(line, kAttributeSetup)) {
+      if (!ParseDtlsSetup(line, &(session_td->connection_role), error)) {
+        return false;
+      }
     } else if (HasAttribute(line, kAttributeMsidSemantics)) {
       std::string semantics;
       if (!GetValue(line, kAttributeMsidSemantics, &semantics, error)) {
@@ -1873,6 +1911,24 @@ static bool ParseFingerprintAttribute(const std::string& line,
                        error);
   }
 
+  return true;
+}
+
+static bool ParseDtlsSetup(const std::string& line,
+                           cricket::ConnectionRole* role,
+                           SdpParseError* error) {
+  // setup-attr           =  "a=setup:" role
+  // role                 =  "active" / "passive" / "actpass" / "holdconn"
+  std::vector<std::string> fields;
+  talk_base::split(line.substr(kLinePrefixLength), kSdpDelimiterColon, &fields);
+  const size_t expected_fields = 2;
+  if (fields.size() != expected_fields) {
+    return ParseFailedExpectFieldNum(line, expected_fields, error);
+  }
+  std::string role_str = fields[1];
+  if (!cricket::StringToConnectionRole(role_str, role)) {
+    return ParseFailed(line, "Invalid attribute value.", error);
+  }
   return true;
 }
 
@@ -2039,6 +2095,7 @@ bool ParseMediaDescription(const std::string& message,
                                    session_td.ice_ufrag,
                                    session_td.ice_pwd,
                                    session_td.ice_mode,
+                                   session_td.connection_role,
                                    session_td.identity_fingerprint.get(),
                                    Candidates());
 
@@ -2058,10 +2115,35 @@ bool ParseMediaDescription(const std::string& message,
           codec_preference,
           static_cast<AudioContentDescription*>(content.get()));
     } else if (HasAttribute(line, kMediaTypeData)) {
-      content.reset(ParseContentDescription<DataContentDescription>(
+      DataContentDescription* desc =
+          ParseContentDescription<DataContentDescription>(
                     message, cricket::MEDIA_TYPE_DATA, mline_index, protocol,
                     codec_preference, pos, &content_name,
-                    &transport, candidates, error));
+                    &transport, candidates, error);
+
+      if (protocol == cricket::kMediaProtocolDtlsSctp) {
+        // Add the SCTP Port number as a pseudo-codec "port" parameter
+        cricket::DataCodec codec_port(
+            cricket::kGoogleSctpDataCodecId, cricket::kGoogleSctpDataCodecName,
+            0);
+        codec_port.SetParam(cricket::kCodecParamPort, fields[3]);
+        LOG(INFO) << "ParseMediaDescription: Got SCTP Port Number "
+                  << fields[3];
+        desc->AddCodec(codec_port);
+      }
+
+      content.reset(desc);
+
+      // We should always use the default bandwidth for RTP-based data
+      // channels.  Don't allow SDP to set the bandwidth, because that
+      // would give JS the opportunity to "break the Internet".
+      // TODO(pthatcher): But we need to temporarily allow the SDP to control
+      // this for backwards-compatibility.  Once we don't need that any
+      // more, remove this.
+      bool support_dc_sdp_bandwidth_temporarily = true;
+      if (content.get() && !support_dc_sdp_bandwidth_temporarily) {
+        content->set_bandwidth(cricket::kAutoBandwidth);
+      }
     } else {
       LOG(LS_WARNING) << "Unsupported media type: " << line;
       continue;
@@ -2107,6 +2189,12 @@ bool ParseMediaDescription(const std::string& message,
                   << content_name;
       return ParseFailed("", description.str(), error);
     }
+  }
+
+  size_t end_of_message = message.size();
+  if (mline_index == -1 && *pos != end_of_message) {
+    ParseFailed(message, *pos, "Expects m line.", error);
+    return false;
   }
   return true;
 }
@@ -2301,7 +2389,7 @@ bool ParseContent(const std::string& message,
       if (*pos >= message.size()) {
         break;  // Done parsing
       } else {
-        return ParseFailed(message, *pos, "Can't find valid SDP line.", error);
+        return ParseFailed(message, *pos, "Invalid SDP line.", error);
       }
     }
 
@@ -2378,6 +2466,10 @@ bool ParseContent(const std::string& message,
         return false;
       }
       transport->identity_fingerprint.reset(fingerprint);
+    } else if (HasAttribute(line, kAttributeSetup)) {
+      if (!ParseDtlsSetup(line, &(transport->connection_role), error)) {
+        return false;
+      }
     } else if (is_rtp) {
       //
       // RTP specific attrubtes

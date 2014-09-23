@@ -30,13 +30,13 @@ class SVGLinearGradientElement;
 
 class RenderSVGResourceLinearGradient FINAL : public RenderSVGResourceGradient {
 public:
-    RenderSVGResourceLinearGradient(SVGLinearGradientElement*);
+    explicit RenderSVGResourceLinearGradient(SVGLinearGradientElement*);
     virtual ~RenderSVGResourceLinearGradient();
 
     virtual const char* renderName() const { return "RenderSVGResourceLinearGradient"; }
 
     virtual RenderSVGResourceType resourceType() const { return s_resourceType; }
-    static RenderSVGResourceType s_resourceType;
+    static const RenderSVGResourceType s_resourceType;
 
     virtual SVGUnitTypes::SVGUnitType gradientUnits() const { return m_attributes.gradientUnits(); }
     virtual void calculateGradientTransform(AffineTransform& transform) { transform = m_attributes.gradientTransform(); }

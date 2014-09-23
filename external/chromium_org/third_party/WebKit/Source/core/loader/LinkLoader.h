@@ -32,20 +32,21 @@
 #ifndef LinkLoader_h
 #define LinkLoader_h
 
+#include "core/fetch/ResourceClient.h"
+#include "core/fetch/ResourceOwner.h"
 #include "core/loader/LinkLoaderClient.h"
-#include "core/loader/cache/ResourceClient.h"
-#include "core/loader/cache/ResourcePtr.h"
-#include "core/platform/PrerenderClient.h"
-#include "core/platform/Timer.h"
-#include "wtf/RefPtr.h"
+#include "platform/PrerenderClient.h"
+#include "platform/Timer.h"
+#include "wtf/OwnPtr.h"
 
 namespace WebCore {
 
+class Document;
 class LinkRelAttribute;
 class PrerenderHandle;
 
 // The LinkLoader can load link rel types icon, dns-prefetch, subresource, prefetch and prerender.
-class LinkLoader : public ResourceClient, public PrerenderClient {
+class LinkLoader : public ResourceOwner<Resource, ResourceClient>, public PrerenderClient {
 
 public:
     explicit LinkLoader(LinkLoaderClient*);
@@ -61,7 +62,7 @@ public:
     virtual void didSendDOMContentLoadedForPrerender() OVERRIDE;
 
     void released();
-    bool loadLink(const LinkRelAttribute&, const String& type, const KURL&, Document*);
+    bool loadLink(const LinkRelAttribute&, const String& type, const KURL&, Document&);
 
 private:
     void linkLoadTimerFired(Timer<LinkLoader>*);
@@ -69,11 +70,10 @@ private:
 
     LinkLoaderClient* m_client;
 
-    ResourcePtr<Resource> m_cachedLinkResource;
     Timer<LinkLoader> m_linkLoadTimer;
     Timer<LinkLoader> m_linkLoadingErrorTimer;
 
-    RefPtr<PrerenderHandle> m_prerenderHandle;
+    OwnPtr<PrerenderHandle> m_prerender;
 };
 
 }

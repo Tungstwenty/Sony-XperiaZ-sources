@@ -83,18 +83,14 @@ PassRefPtr<RenderStyle> RenderTextControlMultiLine::createInnerTextStyle(const R
     textBlockStyle->inheritFrom(startStyle);
     adjustInnerTextStyle(textBlockStyle.get());
     textBlockStyle->setDisplay(BLOCK);
+    textBlockStyle->setUnique();
 
     return textBlockStyle.release();
 }
 
-RenderStyle* RenderTextControlMultiLine::textBaseStyle() const
+RenderObject* RenderTextControlMultiLine::layoutSpecialExcludedChild(bool relayoutChildren, SubtreeLayoutScope& layoutScope)
 {
-    return style();
-}
-
-RenderObject* RenderTextControlMultiLine::layoutSpecialExcludedChild(bool relayoutChildren)
-{
-    RenderObject* placeholderRenderer = RenderTextControl::layoutSpecialExcludedChild(relayoutChildren);
+    RenderObject* placeholderRenderer = RenderTextControl::layoutSpecialExcludedChild(relayoutChildren, layoutScope);
     if (!placeholderRenderer)
         return 0;
     if (!placeholderRenderer->isBox())

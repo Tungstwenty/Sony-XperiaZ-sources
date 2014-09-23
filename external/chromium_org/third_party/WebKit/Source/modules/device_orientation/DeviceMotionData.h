@@ -26,11 +26,11 @@
 #ifndef DeviceMotionData_h
 #define DeviceMotionData_h
 
-#include <wtf/PassRefPtr.h>
-#include <wtf/RefCounted.h>
-#include <wtf/RefPtr.h>
+#include "wtf/PassRefPtr.h"
+#include "wtf/RefCounted.h"
+#include "wtf/RefPtr.h"
 
-namespace WebKit {
+namespace blink {
 class WebDeviceMotionData;
 }
 
@@ -89,7 +89,7 @@ public:
     static PassRefPtr<DeviceMotionData> create();
     static PassRefPtr<DeviceMotionData> create(PassRefPtr<Acceleration> acceleration, PassRefPtr<Acceleration> accelerationIncludingGravity,
                                                PassRefPtr<RotationRate> rotationRate, bool canProvideInterval, double interval);
-    static PassRefPtr<DeviceMotionData> create(const WebKit::WebDeviceMotionData&);
+    static PassRefPtr<DeviceMotionData> create(const blink::WebDeviceMotionData&);
 
     PassRefPtr<Acceleration> acceleration() const { return m_acceleration; }
     PassRefPtr<Acceleration> accelerationIncludingGravity() const { return m_accelerationIncludingGravity; }

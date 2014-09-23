@@ -35,10 +35,12 @@
 #include "Assertions.h"
 
 #include "Compiler.h"
-#include "OwnArrayPtr.h"
+#include "OwnPtr.h"
+#include "PassOwnPtr.h"
 
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdlib.h>
 #include <string.h>
 
 #if HAVE(SIGNAL_H)
@@ -58,18 +60,19 @@
 #include <crtdbg.h>
 #endif
 
-#if OS(WINDOWS)
+#if OS(WIN)
 #include <windows.h>
+#define HAVE_ISDEBUGGERPRESENT 1
 #endif
 
-#if (OS(DARWIN) || (OS(LINUX) && !defined(__UCLIBC__))) && !OS(ANDROID)
+#if OS(MACOSX) || (OS(LINUX) && !defined(__UCLIBC__))
 #include <cxxabi.h>
 #include <dlfcn.h>
 #include <execinfo.h>
 #endif
 
 #if OS(ANDROID)
-#include "android/log.h"
+#include <android/log.h>
 #endif
 
 extern "C" {
@@ -77,7 +80,7 @@ extern "C" {
 WTF_ATTRIBUTE_PRINTF(1, 0)
 static void vprintf_stderr_common(const char* format, va_list args)
 {
-#if USE(CF) && !OS(WINDOWS)
+#if USE(CF) && !OS(WIN)
     if (strstr(format, "%@")) {
         CFStringRef cfFormat = CFStringCreateWithCString(NULL, format, kCFStringEncodingUTF8);
 
@@ -149,7 +152,7 @@ static void vprintf_stderr_with_prefix(const char* prefix, const char* format, v
 {
     size_t prefixLength = strlen(prefix);
     size_t formatLength = strlen(format);
-    OwnArrayPtr<char> formatWithPrefix = adoptArrayPtr(new char[prefixLength + formatLength + 1]);
+    OwnPtr<char[]> formatWithPrefix = adoptArrayPtr(new char[prefixLength + formatLength + 1]);
     memcpy(formatWithPrefix.get(), prefix, prefixLength);
     memcpy(formatWithPrefix.get() + prefixLength, format, formatLength);
     formatWithPrefix[prefixLength + formatLength] = 0;
@@ -165,7 +168,7 @@ static void vprintf_stderr_with_trailing_newline(const char* format, va_list arg
         return;
     }
 
-    OwnArrayPtr<char> formatWithNewline = adoptArrayPtr(new char[formatLength + 2]);
+    OwnPtr<char[]> formatWithNewline = adoptArrayPtr(new char[formatLength + 2]);
     memcpy(formatWithNewline.get(), format, formatLength);
     formatWithNewline[formatLength] = '\n';
     formatWithNewline[formatLength + 1] = 0;
@@ -188,7 +191,7 @@ static void printf_stderr_common(const char* format, ...)
 
 static void printCallSite(const char* file, int line, const char* function)
 {
-#if OS(WINDOWS) && defined(_DEBUG)
+#if OS(WIN) && defined(_DEBUG)
     _CrtDbgReport(_CRT_WARN, file, line, NULL, "%s\n", function);
 #else
     // By using this format, which matches the format used by MSVC for compiler errors, developers
@@ -225,9 +228,9 @@ void WTFReportArgumentAssertionFailure(const char* file, int line, const char* f
 
 void WTFGetBacktrace(void** stack, int* size)
 {
-#if (OS(DARWIN) || (OS(LINUX) && !defined(__UCLIBC__))) && !OS(ANDROID)
+#if OS(MACOSX) || (OS(LINUX) && !defined(__UCLIBC__))
     *size = backtrace(stack, *size);
-#elif OS(WINDOWS)
+#elif OS(WIN)
     // The CaptureStackBackTrace function is available in XP, but it is not defined
     // in the Windows Server 2003 R2 Platform SDK. So, we'll grab the function
     // through GetProcAddress.
@@ -248,11 +251,11 @@ void WTFGetBacktrace(void** stack, int* size)
 #endif
 }
 
-void WTFReportBacktrace()
+void WTFReportBacktrace(int framesToShow)
 {
-    static const int framesToShow = 31;
     static const int framesToSkip = 2;
-    void* samples[framesToShow + framesToSkip];
+    // Use alloca to allocate on the stack since this function is used in OOM situations.
+    void** samples = static_cast<void**>(alloca((framesToShow + framesToSkip) * sizeof(void *)));
     int frames = framesToShow + framesToSkip;
 
     WTFGetBacktrace(samples, &frames);
@@ -264,7 +267,7 @@ void WTFPrintBacktrace(void** stack, int size)
     for (int i = 0; i < size; ++i) {
         const char* mangledName = 0;
         char* cxaDemangled = 0;
-#if OS(DARWIN) || (OS(LINUX) && !OS(ANDROID))
+#if OS(MACOSX) || OS(LINUX)
         Dl_info info;
         if (dladdr(stack[i], &info) && info.dli_sname)
             mangledName = info.dli_sname;

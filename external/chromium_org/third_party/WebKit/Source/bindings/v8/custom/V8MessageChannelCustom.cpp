@@ -35,31 +35,28 @@
 #include "bindings/v8/V8Binding.h"
 #include "bindings/v8/V8HiddenPropertyName.h"
 #include "bindings/v8/V8Utilities.h"
-#include "core/dom/Document.h"
 #include "core/dom/MessageChannel.h"
-#include "core/page/Frame.h"
 #include "core/workers/WorkerGlobalScope.h"
-
 #include "wtf/RefPtr.h"
 
 namespace WebCore {
 
-void V8MessageChannel::constructorCustom(const v8::FunctionCallbackInfo<v8::Value>& args)
+void V8MessageChannel::constructorCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    ScriptExecutionContext* context = getScriptExecutionContext();
+    ExecutionContext* context = getExecutionContext();
 
     RefPtr<MessageChannel> obj = MessageChannel::create(context);
 
-    v8::Local<v8::Object> wrapper = args.Holder();
+    v8::Local<v8::Object> wrapper = info.Holder();
 
     // Create references from the MessageChannel wrapper to the two
     // MessagePort wrappers to make sure that the MessagePort wrappers
     // stay alive as long as the MessageChannel wrapper is around.
-    V8HiddenPropertyName::setNamedHiddenReference(wrapper, "port1", toV8(obj->port1(), args.Holder(), args.GetIsolate()));
-    V8HiddenPropertyName::setNamedHiddenReference(wrapper, "port2", toV8(obj->port2(), args.Holder(), args.GetIsolate()));
+    V8HiddenPropertyName::setNamedHiddenReference(wrapper, "port1", toV8(obj->port1(), info.Holder(), info.GetIsolate()));
+    V8HiddenPropertyName::setNamedHiddenReference(wrapper, "port2", toV8(obj->port2(), info.Holder(), info.GetIsolate()));
 
-    V8DOMWrapper::associateObjectWithWrapper<V8MessageChannel>(obj.release(), &info, wrapper, args.GetIsolate(), WrapperConfiguration::Dependent);
-    args.GetReturnValue().Set(wrapper);
+    V8DOMWrapper::associateObjectWithWrapper<V8MessageChannel>(obj.release(), &wrapperTypeInfo, wrapper, info.GetIsolate(), WrapperConfiguration::Dependent);
+    info.GetReturnValue().Set(wrapper);
 }
 
 } // namespace WebCore

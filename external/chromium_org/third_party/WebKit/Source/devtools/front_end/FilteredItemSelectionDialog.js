@@ -32,7 +32,7 @@
  * @constructor
  * @extends {WebInspector.DialogDelegate}
  * @implements {WebInspector.ViewportControl.Provider}
- * @param {WebInspector.SelectionDialogContentProvider} delegate
+ * @param {!WebInspector.SelectionDialogContentProvider} delegate
  */
 WebInspector.FilteredItemSelectionDialog = function(delegate)
 {
@@ -57,20 +57,22 @@ WebInspector.FilteredItemSelectionDialog = function(delegate)
     this._filteredItems = [];
     this._viewportControl = new WebInspector.ViewportControl(this);
     this._itemElementsContainer = this._viewportControl.element;
-    this._itemElementsContainer.addStyleClass("container");
-    this._itemElementsContainer.addStyleClass("monospace");
+    this._itemElementsContainer.classList.add("container");
+    this._itemElementsContainer.classList.add("monospace");
     this._itemElementsContainer.addEventListener("click", this._onClick.bind(this), false);
     this.element.appendChild(this._itemElementsContainer);
 
     this._delegate = delegate;
     this._delegate.setRefreshCallback(this._itemsLoaded.bind(this));
     this._itemsLoaded();
+
+    this._shouldShowMatchingItems = true;
 }
 
 WebInspector.FilteredItemSelectionDialog.prototype = {
     /**
-     * @param {Element} element
-     * @param {Element} relativeToElement
+     * @param {!Element} element
+     * @param {!Element} relativeToElement
      */
     position: function(element, relativeToElement)
     {
@@ -80,12 +82,14 @@ WebInspector.FilteredItemSelectionDialog.prototype = {
         var height = Math.max(relativeToElement.offsetHeight * 2 / 3, minHeight);
 
         this.element.style.width = width + "px";
-        this.element.style.height = height + "px";
 
         const shadowPadding = 20; // shadow + padding
         element.positionAt(
             relativeToElement.totalOffsetLeft() + Math.max((relativeToElement.offsetWidth - width - 2 * shadowPadding) / 2, shadowPadding),
             relativeToElement.totalOffsetTop() + Math.max((relativeToElement.offsetHeight - height - 2 * shadowPadding) / 2, shadowPadding));
+        this._dialogHeight = height;
+
+        this._updateShowMatchingItems();
     },
 
     focus: function()
@@ -133,7 +137,7 @@ WebInspector.FilteredItemSelectionDialog.prototype = {
 
     /**
      * @param {number} index
-     * @return {Element}
+     * @return {!Element}
      */
     _createItemElement: function(index)
     {
@@ -192,6 +196,10 @@ WebInspector.FilteredItemSelectionDialog.prototype = {
             return b - a;
         }
 
+        /**
+         * @param {number} fromIndex
+         * @this {WebInspector.FilteredItemSelectionDialog}
+         */
         function scoreItems(fromIndex)
         {
             var maxWorkItems = 1000;
@@ -245,7 +253,15 @@ WebInspector.FilteredItemSelectionDialog.prototype = {
 
     _onInput: function(event)
     {
+        this._shouldShowMatchingItems = this._delegate.shouldShowMatchingItems(this._promptElement.value);
+        this._updateShowMatchingItems();
         this._scheduleFilter();
+    },
+
+    _updateShowMatchingItems: function()
+    {
+        this._itemElementsContainer.enableStyleClass("hidden", !this._shouldShowMatchingItems);
+        this.element.style.height = this._shouldShowMatchingItems ? this._dialogHeight + "px" : "auto";
     },
 
     _onKeyDown: function(event)
@@ -294,12 +310,12 @@ WebInspector.FilteredItemSelectionDialog.prototype = {
     { 
         var element = this._viewportControl.renderedElementAt(this._selectedIndexInFiltered);
         if (element)
-            element.removeStyleClass("selected");
+            element.classList.remove("selected");
         this._viewportControl.scrollItemIntoView(index, makeLast);
         this._selectedIndexInFiltered = index;
         element = this._viewportControl.renderedElementAt(index);
         if (element)
-            element.addStyleClass("selected");
+            element.classList.add("selected");
     },
 
     _onClick: function(event)
@@ -321,14 +337,14 @@ WebInspector.FilteredItemSelectionDialog.prototype = {
 
     /**
      * @param {number} index
-     * @return {Element}
+     * @return {!Element}
      */
     itemElement: function(index)
     {
         var delegateIndex = this._filteredItems[index];
         var element = this._createItemElement(delegateIndex);
         if (index === this._selectedIndexInFiltered)
-            element.addStyleClass("selected");
+            element.classList.add("selected");
         return element;
     },
 
@@ -349,6 +365,15 @@ WebInspector.SelectionDialogContentProvider.prototype = {
     setRefreshCallback: function(refreshCallback)
     {
         this._refreshCallback = refreshCallback;
+    },
+
+    /**
+     * @param {string} query
+     * @return {boolean}
+     */
+    shouldShowMatchingItems: function(query)
+    {
+        return true;
     },
 
     /**
@@ -381,15 +406,15 @@ WebInspector.SelectionDialogContentProvider.prototype = {
     /**
      * @param {number} itemIndex
      * @param {string} query
-     * @param {Element} titleElement
-     * @param {Element} subtitleElement
+     * @param {!Element} titleElement
+     * @param {!Element} subtitleElement
      */
     renderItem: function(itemIndex, query, titleElement, subtitleElement)
     {
     },
 
     /**
-     * @param {Element} element
+     * @param {!Element} element
      * @param {string} query
      * @return {boolean}
      */
@@ -401,7 +426,7 @@ WebInspector.SelectionDialogContentProvider.prototype = {
         /**
          * @param {string} text
          * @param {string} query
-         * @return {?Array.<{offset:number, length:number}>}
+         * @return {?Array.<!WebInspector.SourceRange>}
          */
         function rangesForMatch(text, query)
         {
@@ -412,7 +437,7 @@ WebInspector.SelectionDialogContentProvider.prototype = {
             for (var i = 0; i < opcodes.length; ++i) {
                 var opcode = opcodes[i];
                 if (opcode[0] === "equal")
-                    ranges.push({offset: opcode[3], length: opcode[4] - opcode[3]});
+                    ranges.push(new WebInspector.SourceRange(opcode[3], opcode[4] - opcode[3]));
                 else if (opcode[0] !== "insert")
                     return null;
             }
@@ -460,37 +485,38 @@ WebInspector.SelectionDialogContentProvider.prototype = {
 /**
  * @constructor
  * @extends {WebInspector.SelectionDialogContentProvider}
- * @param {WebInspector.View} view
- * @param {WebInspector.ContentProvider} contentProvider
+ * @param {!WebInspector.View} view
+ * @param {!WebInspector.ContentProvider} contentProvider
+ * @param {function(number, number)} selectItemCallback
  */
-WebInspector.JavaScriptOutlineDialog = function(view, contentProvider)
+WebInspector.JavaScriptOutlineDialog = function(view, contentProvider, selectItemCallback)
 {
     WebInspector.SelectionDialogContentProvider.call(this);
 
     this._functionItems = [];
     this._view = view;
+    this._selectItemCallback = selectItemCallback;
     contentProvider.requestContent(this._contentAvailable.bind(this));
 }
 
 /**
- * @param {WebInspector.View} view
- * @param {WebInspector.ContentProvider} contentProvider
+ * @param {!WebInspector.View} view
+ * @param {!WebInspector.ContentProvider} contentProvider
+ * @param {function(number, number)} selectItemCallback
  */
-WebInspector.JavaScriptOutlineDialog.show = function(view, contentProvider)
+WebInspector.JavaScriptOutlineDialog.show = function(view, contentProvider, selectItemCallback)
 {
     if (WebInspector.Dialog.currentInstance())
         return null;
-    var filteredItemSelectionDialog = new WebInspector.FilteredItemSelectionDialog(new WebInspector.JavaScriptOutlineDialog(view, contentProvider));
+    var filteredItemSelectionDialog = new WebInspector.FilteredItemSelectionDialog(new WebInspector.JavaScriptOutlineDialog(view, contentProvider, selectItemCallback));
     WebInspector.Dialog.show(view.element, filteredItemSelectionDialog);
 }
 
 WebInspector.JavaScriptOutlineDialog.prototype = {
     /**
      * @param {?string} content
-     * @param {boolean} contentEncoded
-     * @param {string} mimeType
      */
-    _contentAvailable: function(content, contentEncoded, mimeType)
+    _contentAvailable: function(content)
     {
         this._outlineWorker = new Worker("ScriptFormatterWorker.js");
         this._outlineWorker.onmessage = this._didBuildOutlineChunk.bind(this);
@@ -542,8 +568,8 @@ WebInspector.JavaScriptOutlineDialog.prototype = {
     /**
      * @param {number} itemIndex
      * @param {string} query
-     * @param {Element} titleElement
-     * @param {Element} subtitleElement
+     * @param {!Element} titleElement
+     * @param {!Element} subtitleElement
      */
     renderItem: function(itemIndex, query, titleElement, subtitleElement)
     {
@@ -561,8 +587,7 @@ WebInspector.JavaScriptOutlineDialog.prototype = {
     {
         var lineNumber = this._functionItems[itemIndex].line;
         if (!isNaN(lineNumber) && lineNumber >= 0)
-            this._view.highlightPosition(lineNumber, this._functionItems[itemIndex].column);
-        this._view.focus();
+            this._selectItemCallback(lineNumber, this._functionItems[itemIndex].column);
     },
 
     dispose: function()
@@ -579,7 +604,7 @@ WebInspector.JavaScriptOutlineDialog.prototype = {
 /**
  * @constructor
  * @extends {WebInspector.SelectionDialogContentProvider}
- * @param {Map.<WebInspector.UISourceCode, number>=} defaultScores
+ * @param {!Map.<!WebInspector.UISourceCode, number>=} defaultScores
  */
 WebInspector.SelectUISourceCodeDialog = function(defaultScores)
 {
@@ -597,7 +622,7 @@ WebInspector.SelectUISourceCodeDialog = function(defaultScores)
 
 WebInspector.SelectUISourceCodeDialog.prototype = {
     /**
-     * @param {WebInspector.UISourceCode} uiSourceCode
+     * @param {?WebInspector.UISourceCode} uiSourceCode
      * @param {number=} lineNumber
      */
     uiSourceCodeSelected: function(uiSourceCode, lineNumber)
@@ -606,7 +631,7 @@ WebInspector.SelectUISourceCodeDialog.prototype = {
     },
 
     /**
-     * @param {WebInspector.Project} project
+     * @param {!WebInspector.Project} project
      */
     filterProject: function(project)
     {
@@ -655,8 +680,8 @@ WebInspector.SelectUISourceCodeDialog.prototype = {
     /**
      * @param {number} itemIndex
      * @param {string} query
-     * @param {Element} titleElement
-     * @param {Element} subtitleElement
+     * @param {!Element} titleElement
+     * @param {!Element} subtitleElement
      */
     renderItem: function(itemIndex, query, titleElement, subtitleElement)
     {
@@ -686,6 +711,12 @@ WebInspector.SelectUISourceCodeDialog.prototype = {
      */
     selectItem: function(itemIndex, promptValue)
     {
+        if (/^:\d+$/.test(promptValue.trimRight())) {
+            var lineNumber = parseInt(promptValue.trimRight().substring(1), 10) - 1;
+            if (!isNaN(lineNumber) && lineNumber >= 0)
+                this.uiSourceCodeSelected(null, lineNumber);
+            return;
+        }
         var lineNumberMatch = promptValue.match(/[^:]+\:([\d]*)$/);
         var lineNumber = lineNumberMatch ? Math.max(parseInt(lineNumberMatch[1], 10) - 1, 0) : undefined;
         this.uiSourceCodeSelected(this._uiSourceCodes[itemIndex], lineNumber);
@@ -706,11 +737,11 @@ WebInspector.SelectUISourceCodeDialog.prototype = {
     },
 
     /**
-     * @param {WebInspector.Event} event
+     * @param {!WebInspector.Event} event
      */
     _uiSourceCodeAdded: function(event)
     {
-        var uiSourceCode = /** @type {WebInspector.UISourceCode} */ (event.data);
+        var uiSourceCode = /** @type {!WebInspector.UISourceCode} */ (event.data);
         if (!this.filterProject(uiSourceCode.project()))
             return;
         this._uiSourceCodes.push(uiSourceCode)
@@ -728,8 +759,8 @@ WebInspector.SelectUISourceCodeDialog.prototype = {
 /**
  * @constructor
  * @extends {WebInspector.SelectUISourceCodeDialog}
- * @param {WebInspector.ScriptsPanel} panel
- * @param {Map.<WebInspector.UISourceCode, number>=} defaultScores
+ * @param {!WebInspector.SourcesPanel} panel
+ * @param {!Map.<!WebInspector.UISourceCode, number>=} defaultScores
  */
 WebInspector.OpenResourceDialog = function(panel, defaultScores)
 {
@@ -740,16 +771,29 @@ WebInspector.OpenResourceDialog = function(panel, defaultScores)
 WebInspector.OpenResourceDialog.prototype = {
 
     /**
-     * @param {WebInspector.UISourceCode} uiSourceCode
+     * @param {?WebInspector.UISourceCode} uiSourceCode
      * @param {number=} lineNumber
      */
     uiSourceCodeSelected: function(uiSourceCode, lineNumber)
     {
+        if (!uiSourceCode)
+            uiSourceCode = this._panel.currentUISourceCode();
+        if (!uiSourceCode)
+            return;
         this._panel.showUISourceCode(uiSourceCode, lineNumber);
     },
 
     /**
-     * @param {WebInspector.Project} project
+     * @param {string} query
+     * @return {boolean}
+     */
+    shouldShowMatchingItems: function(query)
+    {
+        return !query.startsWith(":");
+    },
+
+    /**
+     * @param {!WebInspector.Project} project
      */
     filterProject: function(project)
     {
@@ -760,10 +804,10 @@ WebInspector.OpenResourceDialog.prototype = {
 }
 
 /**
- * @param {WebInspector.ScriptsPanel} panel
- * @param {Element} relativeToElement
+ * @param {!WebInspector.SourcesPanel} panel
+ * @param {!Element} relativeToElement
  * @param {string=} name
- * @param {Map.<WebInspector.UISourceCode, number>=} defaultScores
+ * @param {!Map.<!WebInspector.UISourceCode, number>=} defaultScores
  */
 WebInspector.OpenResourceDialog.show = function(panel, relativeToElement, name, defaultScores)
 {
@@ -781,7 +825,7 @@ WebInspector.OpenResourceDialog.show = function(panel, relativeToElement, name, 
  * @constructor
  * @extends {WebInspector.SelectUISourceCodeDialog}
  * @param {string} type
- * @param {function(WebInspector.UISourceCode)} callback
+ * @param {function(!WebInspector.UISourceCode)} callback
  */
 WebInspector.SelectUISourceCodeForProjectTypeDialog = function(type, callback)
 {
@@ -792,7 +836,7 @@ WebInspector.SelectUISourceCodeForProjectTypeDialog = function(type, callback)
 
 WebInspector.SelectUISourceCodeForProjectTypeDialog.prototype = {
     /**
-     * @param {WebInspector.UISourceCode} uiSourceCode
+     * @param {!WebInspector.UISourceCode} uiSourceCode
      * @param {number=} lineNumber
      */
     uiSourceCodeSelected: function(uiSourceCode, lineNumber)
@@ -801,7 +845,7 @@ WebInspector.SelectUISourceCodeForProjectTypeDialog.prototype = {
     },
 
     /**
-     * @param {WebInspector.Project} project
+     * @param {!WebInspector.Project} project
      */
     filterProject: function(project)
     {
@@ -813,8 +857,8 @@ WebInspector.SelectUISourceCodeForProjectTypeDialog.prototype = {
 
 /**
  * @param {string} type
- * @param {function(WebInspector.UISourceCode)} callback
- * @param {Element} relativeToElement
+ * @param {function(!WebInspector.UISourceCode)} callback
+ * @param {!Element} relativeToElement
  */
 WebInspector.SelectUISourceCodeForProjectTypeDialog.show = function(name, type, callback, relativeToElement)
 {

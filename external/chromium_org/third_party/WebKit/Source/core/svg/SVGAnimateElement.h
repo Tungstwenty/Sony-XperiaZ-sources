@@ -23,6 +23,7 @@
 #ifndef SVGAnimateElement_h
 #define SVGAnimateElement_h
 
+#include "SVGNames.h"
 #include "core/svg/SVGAnimationElement.h"
 #include "wtf/OwnPtr.h"
 
@@ -34,13 +35,13 @@ class SVGAnimatedTypeAnimator;
 
 class SVGAnimateElement : public SVGAnimationElement {
 public:
-    static PassRefPtr<SVGAnimateElement> create(const QualifiedName&, Document*);
+    static PassRefPtr<SVGAnimateElement> create(Document&);
     virtual ~SVGAnimateElement();
 
     AnimatedPropertyType determineAnimatedPropertyType(SVGElement*) const;
 
 protected:
-    SVGAnimateElement(const QualifiedName&, Document*);
+    SVGAnimateElement(const QualifiedName&, Document&);
 
     virtual void resetAnimatedType();
     virtual void clearAnimatedType(SVGElement* targetElement);
@@ -61,6 +62,7 @@ protected:
 private:
     void resetAnimatedPropertyType();
     SVGAnimatedTypeAnimator* ensureAnimator();
+    bool animatedPropertyTypeSupportsAddition() const;
 
     virtual bool hasValidAttributeType();
 
@@ -72,6 +74,16 @@ private:
     SVGElementAnimatedPropertyList m_animatedProperties;
     OwnPtr<SVGAnimatedTypeAnimator> m_animator;
 };
+
+inline bool isSVGAnimateElement(const Node& node)
+{
+    return node.hasTagName(SVGNames::animateTag)
+        || node.hasTagName(SVGNames::animateColorTag)
+        || node.hasTagName(SVGNames::animateTransformTag)
+        || node.hasTagName(SVGNames::setTag);
+}
+
+DEFINE_NODE_TYPE_CASTS_WITH_FUNCTION(SVGAnimateElement);
 
 } // namespace WebCore
 

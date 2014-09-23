@@ -35,8 +35,6 @@
 #include "messages.h"
 #include "scopeinfo.h"
 
-#include "allocation-inl.h"
-
 namespace v8 {
 namespace internal {
 
@@ -129,7 +127,7 @@ Scope::Scope(Scope* inner_scope,
              ScopeType scope_type,
              Handle<ScopeInfo> scope_info,
              Zone* zone)
-    : isolate_(Isolate::Current()),
+    : isolate_(zone->isolate()),
       inner_scopes_(4, zone),
       variables_(zone),
       internals_(4, zone),
@@ -152,7 +150,7 @@ Scope::Scope(Scope* inner_scope,
 
 
 Scope::Scope(Scope* inner_scope, Handle<String> catch_variable_name, Zone* zone)
-    : isolate_(Isolate::Current()),
+    : isolate_(zone->isolate()),
       inner_scopes_(1, zone),
       variables_(zone),
       internals_(0, zone),
@@ -437,8 +435,8 @@ Variable* Scope::LookupFunctionVar(Handle<String> name,
         this, name, mode, true /* is valid LHS */,
         Variable::NORMAL, kCreatedInitialized);
     VariableProxy* proxy = factory->NewVariableProxy(var);
-    VariableDeclaration* declaration =
-        factory->NewVariableDeclaration(proxy, mode, this);
+    VariableDeclaration* declaration = factory->NewVariableDeclaration(
+        proxy, mode, this, RelocInfo::kNoPosition);
     DeclareFunctionVar(declaration);
     var->AllocateTo(Variable::CONTEXT, index);
     return var;
@@ -907,26 +905,32 @@ void Scope::Print(int n) {
   PrintF("%d heap slots\n", num_heap_slots_); }
 
   // Print locals.
-  Indent(n1, "// function var\n");
   if (function_ != NULL) {
+    Indent(n1, "// function var:\n");
     PrintVar(n1, function_->proxy()->var());
   }
 
-  Indent(n1, "// temporary vars\n");
-  for (int i = 0; i < temps_.length(); i++) {
-    PrintVar(n1, temps_[i]);
+  if (temps_.length() > 0) {
+    Indent(n1, "// temporary vars:\n");
+    for (int i = 0; i < temps_.length(); i++) {
+      PrintVar(n1, temps_[i]);
+    }
   }
 
-  Indent(n1, "// internal vars\n");
-  for (int i = 0; i < internals_.length(); i++) {
-    PrintVar(n1, internals_[i]);
+  if (internals_.length() > 0) {
+    Indent(n1, "// internal vars:\n");
+    for (int i = 0; i < internals_.length(); i++) {
+      PrintVar(n1, internals_[i]);
+    }
   }
 
-  Indent(n1, "// local vars\n");
-  PrintMap(n1, &variables_);
+  if (variables_.Start() != NULL) {
+    Indent(n1, "// local vars:\n");
+    PrintMap(n1, &variables_);
+  }
 
-  Indent(n1, "// dynamic vars\n");
   if (dynamics_ != NULL) {
+    Indent(n1, "// dynamic vars:\n");
     PrintMap(n1, dynamics_->GetMap(DYNAMIC));
     PrintMap(n1, dynamics_->GetMap(DYNAMIC_LOCAL));
     PrintMap(n1, dynamics_->GetMap(DYNAMIC_GLOBAL));
@@ -1086,7 +1090,7 @@ bool Scope::ResolveVariable(CompilationInfo* info,
     // Assignment to const. Throw a syntax error.
     MessageLocation location(
         info->script(), proxy->position(), proxy->position());
-    Isolate* isolate = Isolate::Current();
+    Isolate* isolate = info->isolate();
     Factory* factory = isolate->factory();
     Handle<JSArray> array = factory->NewJSArray(0);
     Handle<Object> result =
@@ -1117,7 +1121,7 @@ bool Scope::ResolveVariable(CompilationInfo* info,
       // TODO(rossberg): generate more helpful error message.
       MessageLocation location(
           info->script(), proxy->position(), proxy->position());
-      Isolate* isolate = Isolate::Current();
+      Isolate* isolate = info->isolate();
       Factory* factory = isolate->factory();
       Handle<JSArray> array = factory->NewJSArray(1);
       USE(JSObject::SetElement(array, 0, var->name(), NONE, kStrictMode));
@@ -1296,7 +1300,7 @@ void Scope::AllocateParameterLocals() {
 
 void Scope::AllocateNonParameterLocal(Variable* var) {
   ASSERT(var->scope() == this);
-  ASSERT(!var->IsVariable(isolate_->factory()->result_string()) ||
+  ASSERT(!var->IsVariable(isolate_->factory()->dot_result_string()) ||
          !var->IsStackLocal());
   if (var->IsUnallocated() && MustAllocate(var)) {
     if (MustAllocateInContext(var)) {

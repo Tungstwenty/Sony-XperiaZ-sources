@@ -29,18 +29,19 @@
 #include "core/html/canvas/Canvas2DContextAttributes.h"
 #include "core/html/canvas/CanvasPathMethods.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
-#include "core/platform/graphics/Color.h"
-#include "core/platform/graphics/FloatSize.h"
-#include "core/platform/graphics/Font.h"
-#include "core/platform/graphics/GraphicsTypes.h"
-#include "core/platform/graphics/ImageBuffer.h"
-#include "core/platform/graphics/Path.h"
-#include "core/platform/graphics/transforms/AffineTransform.h"
+#include "core/svg/SVGMatrix.h"
+#include "platform/fonts/Font.h"
+#include "platform/graphics/Color.h"
+#include "platform/geometry/FloatSize.h"
+#include "platform/graphics/GraphicsTypes.h"
+#include "platform/graphics/ImageBuffer.h"
+#include "platform/graphics/Path.h"
+#include "platform/transforms/AffineTransform.h"
 #include "wtf/HashMap.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebKit { class WebLayer; }
+namespace blink { class WebLayer; }
 
 namespace WebCore {
 
@@ -117,11 +118,18 @@ public:
     void save() { ++m_unrealizedSaveCount; }
     void restore();
 
+    SVGMatrix currentTransform() const
+    {
+        return SVGMatrix(state().m_transform);
+    }
+    void setCurrentTransform(const SVGMatrix&);
+
     void scale(float sx, float sy);
     void rotate(float angleInRadians);
     void translate(float tx, float ty);
     void transform(float m11, float m12, float m21, float m22, float dx, float dy);
     void setTransform(float m11, float m12, float m21, float m22, float dx, float dy);
+    void resetTransform();
 
     void setStrokeColor(const String& color);
     void setStrokeColor(float grayLevel);
@@ -169,7 +177,7 @@ public:
     void drawImage(HTMLImageElement*, float x, float y, float width, float height, ExceptionState&);
     void drawImage(HTMLImageElement*, float sx, float sy, float sw, float sh, float dx, float dy, float dw, float dh, ExceptionState&);
     void drawImage(HTMLImageElement*, const FloatRect& srcRect, const FloatRect& dstRect, ExceptionState&);
-    void drawImage(HTMLImageElement*, const FloatRect& srcRect, const FloatRect& dstRect, const CompositeOperator&, const BlendMode&, ExceptionState&);
+    void drawImage(HTMLImageElement*, const FloatRect& srcRect, const FloatRect& dstRect, const CompositeOperator&, const blink::WebBlendMode&, ExceptionState&);
     void drawImage(HTMLCanvasElement*, float x, float y, ExceptionState&);
     void drawImage(HTMLCanvasElement*, float x, float y, float width, float height, ExceptionState&);
     void drawImage(HTMLCanvasElement*, float sx, float sy, float sw, float sh, float dx, float dy, float dw, float dh, ExceptionState&);
@@ -194,13 +202,14 @@ public:
     PassRefPtr<ImageData> createImageData(PassRefPtr<ImageData>, ExceptionState&) const;
     PassRefPtr<ImageData> createImageData(float width, float height, ExceptionState&) const;
     PassRefPtr<ImageData> getImageData(float sx, float sy, float sw, float sh, ExceptionState&) const;
-    PassRefPtr<ImageData> webkitGetImageDataHD(float sx, float sy, float sw, float sh, ExceptionState&) const;
     void putImageData(ImageData*, float dx, float dy, ExceptionState&);
     void putImageData(ImageData*, float dx, float dy, float dirtyX, float dirtyY, float dirtyWidth, float dirtyHeight, ExceptionState&);
-    void webkitPutImageDataHD(ImageData*, float dx, float dy, ExceptionState&);
-    void webkitPutImageDataHD(ImageData*, float dx, float dy, float dirtyX, float dirtyY, float dirtyWidth, float dirtyHeight, ExceptionState&);
 
-    float webkitBackingStorePixelRatio() const { return canvas()->deviceScaleFactor(); }
+    // Slated for deprecation:
+    void webkitPutImageDataHD(ImageData* image, float dx, float dy, ExceptionState& e) { putImageData(image, dx, dy, e); }
+    void webkitPutImageDataHD(ImageData* image, float dx, float dy, float dirtyX, float dirtyY, float dirtyWidth, float dirtyHeight, ExceptionState& e) { putImageData(image, dx, dy, dirtyX, dirtyY, dirtyWidth, dirtyHeight, e); }
+    PassRefPtr<ImageData> webkitGetImageDataHD(float sx, float sy, float sw, float sh, ExceptionState&) const;
+    float webkitBackingStorePixelRatio() const { return 1; }
 
     void reset();
 
@@ -253,7 +262,7 @@ private:
         RGBA32 m_shadowColor;
         float m_globalAlpha;
         CompositeOperator m_globalComposite;
-        BlendMode m_globalBlend;
+        blink::WebBlendMode m_globalBlend;
         AffineTransform m_transform;
         bool m_invertibleCTM;
         Vector<float> m_lineDash;
@@ -269,14 +278,6 @@ private:
         bool m_realizedFont;
     };
 
-    enum CanvasDidDrawOption {
-        CanvasDidDrawApplyNone = 0,
-        CanvasDidDrawApplyTransform = 1,
-        CanvasDidDrawApplyShadow = 1 << 1,
-        CanvasDidDrawApplyClip = 1 << 2,
-        CanvasDidDrawApplyAll = 0xffffffff
-    };
-
     CanvasRenderingContext2D(HTMLCanvasElement*, const Canvas2DContextAttributes* attrs, bool usesCSSCompatibilityParseMode);
 
     State& modifiableState() { ASSERT(!m_unrealizedSaveCount); return m_stateStack.last(); }
@@ -287,9 +288,10 @@ private:
     void applyShadow();
     bool shouldDrawShadows() const;
 
-    void drawImageInternal(Image*, const FloatRect&, const FloatRect&, const CompositeOperator&, const BlendMode&);
-    void didDraw(const FloatRect&, unsigned options = CanvasDidDrawApplyAll);
-    void didDrawEntireCanvas();
+    void drawImageInternal(Image*, const FloatRect&, const FloatRect&, const CompositeOperator&, const blink::WebBlendMode&);
+    bool computeDirtyRect(const FloatRect& localBounds, FloatRect*);
+    bool computeDirtyRect(const FloatRect& localBounds, const FloatRect& transformedClipBounds, FloatRect*);
+    void didDraw(const FloatRect&);
 
     GraphicsContext* drawingContext() const;
 
@@ -309,21 +311,12 @@ private:
     const Font& accessFont();
 
     void clearCanvas();
-    Path transformAreaToDevice(const Path&) const;
-    Path transformAreaToDevice(const FloatRect&) const;
-    bool rectContainsCanvas(const FloatRect&) const;
-
-    template<class T> IntRect calculateCompositingBufferRect(const T&, IntSize*);
-    PassOwnPtr<ImageBuffer> createCompositingBuffer(const IntRect&);
-    void compositeBuffer(ImageBuffer*, const IntRect&, CompositeOperator);
+    bool rectContainsTransformedRect(const FloatRect&, const FloatRect&) const;
 
     void inflateStrokeRect(FloatRect&) const;
 
     template<class T> void fullCanvasCompositedFill(const T&);
     template<class T> void fullCanvasCompositedDrawImage(T*, const FloatRect&, const FloatRect&, CompositeOperator);
-
-    PassRefPtr<ImageData> getImageData(ImageBuffer::CoordinateSystem, float sx, float sy, float sw, float sh, ExceptionState&) const;
-    void putImageData(ImageData*, ImageBuffer::CoordinateSystem, float dx, float dy, float dirtyX, float dirtyY, float dirtyWidth, float dirtyHeight, ExceptionState&);
 
     bool focusRingCallIsValid(const Path&, Element*);
     void updateFocusRingAccessibility(const Path&, Element*);
@@ -335,7 +328,7 @@ private:
 
     virtual bool isTransformInvertible() const { return state().m_invertibleCTM; }
 
-    virtual WebKit::WebLayer* platformLayer() const OVERRIDE;
+    virtual blink::WebLayer* platformLayer() const OVERRIDE;
 
     Vector<State, 1> m_stateStack;
     unsigned m_unrealizedSaveCount;
@@ -343,6 +336,8 @@ private:
     bool m_hasAlpha;
     MutableStylePropertyMap m_fetchedFonts;
 };
+
+DEFINE_TYPE_CASTS(CanvasRenderingContext2D, CanvasRenderingContext, context, context->is2d(), context.is2d());
 
 } // namespace WebCore
 

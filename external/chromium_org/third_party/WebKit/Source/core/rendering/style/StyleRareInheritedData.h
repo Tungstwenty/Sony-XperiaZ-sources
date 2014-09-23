@@ -25,20 +25,19 @@
 #ifndef StyleRareInheritedData_h
 #define StyleRareInheritedData_h
 
-#include "core/css/StyleColor.h"
-#include "core/platform/Length.h"
+#include "core/rendering/style/DataRef.h"
+#include "core/rendering/style/StyleVariableData.h"
+#include "platform/Length.h"
+#include "platform/graphics/Color.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/text/AtomicString.h"
-
-#include "core/rendering/style/DataRef.h"
-#include "core/rendering/style/StyleVariableData.h"
 
 namespace WebCore {
 
 class CursorList;
 class QuotesData;
-class ShadowData;
+class ShadowList;
 class StyleImage;
 
 // This struct is for rarely used inherited CSS3, CSS2, and WebKit-specific properties.
@@ -59,16 +58,16 @@ public:
 
     RefPtr<StyleImage> listStyleImage;
 
-    StyleColor textStrokeColor;
+    Color textStrokeColor;
     float textStrokeWidth;
-    StyleColor textFillColor;
-    StyleColor textEmphasisColor;
+    Color textFillColor;
+    Color textEmphasisColor;
 
-    StyleColor visitedLinkTextStrokeColor;
-    StyleColor visitedLinkTextFillColor;
-    StyleColor visitedLinkTextEmphasisColor;
+    Color visitedLinkTextStrokeColor;
+    Color visitedLinkTextFillColor;
+    Color visitedLinkTextEmphasisColor;
 
-    OwnPtr<ShadowData> textShadow; // Our text shadow information for shadowed text drawing.
+    RefPtr<ShadowList> textShadow; // Our text shadow information for shadowed text drawing.
     AtomicString highlight; // Apple-specific extension for custom highlight rendering.
 
     RefPtr<CursorList> cursorData;
@@ -94,19 +93,17 @@ public:
     unsigned textEmphasisMark : 3; // TextEmphasisMark
     unsigned textEmphasisPosition : 1; // TextEmphasisPosition
     unsigned m_textAlignLast : 3; // TextAlignLast
+    unsigned m_textJustify : 2; // TextJustify
     unsigned m_textOrientation : 2; // TextOrientation
-#if ENABLE(CSS3_TEXT)
     unsigned m_textIndentLine : 1; // TextIndentEachLine
-#endif
     unsigned m_lineBoxContain: 7; // LineBoxContain
     // CSS Image Values Level 3
     unsigned m_imageRendering : 2; // EImageRendering
     unsigned m_lineSnap : 2; // LineSnap
     unsigned m_lineAlign : 1; // LineAlign
-#if ENABLE(CSS3_TEXT)
-    unsigned m_textUnderlinePosition : 3; // TextUnderlinePosition
-#endif // CSS3_TEXT
+    unsigned m_textUnderlinePosition : 2; // TextUnderlinePosition
     unsigned m_rubyPosition : 1; // RubyPosition
+    unsigned m_touchActionDelay : 1; // TouchActionDelay
 
     AtomicString hyphenationString;
     short hyphenationLimitBefore;
@@ -121,7 +118,7 @@ public:
     AtomicString m_lineGrid;
     unsigned m_tabSize;
 
-    StyleColor tapHighlightColor;
+    Color tapHighlightColor;
 
     DataRef<StyleVariableData> m_variables;
 

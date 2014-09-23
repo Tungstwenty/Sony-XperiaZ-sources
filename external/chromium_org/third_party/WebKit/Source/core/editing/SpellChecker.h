@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Google Inc. All rights reserved.
+ * Copyright (C) 2006, 2007, 2008 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,94 +26,77 @@
 #ifndef SpellChecker_h
 #define SpellChecker_h
 
-#include "core/dom/Element.h"
-#include "core/dom/Range.h"
-#include "core/platform/Timer.h"
-#include "core/platform/text/TextChecking.h"
-#include "wtf/Deque.h"
-#include "wtf/Noncopyable.h"
-#include "wtf/RefPtr.h"
-#include "wtf/Vector.h"
-#include "wtf/text/WTFString.h"
+#include "core/dom/ClipboardAccessPolicy.h"
+#include "core/dom/DocumentMarker.h"
+#include "core/editing/FrameSelection.h"
+#include "core/editing/VisibleSelection.h"
+#include "platform/text/TextChecking.h"
 
 namespace WebCore {
 
 class Frame;
-class Node;
+class SpellCheckerClient;
+class SpellCheckRequest;
+class SpellCheckRequester;
 class TextCheckerClient;
-class SpellChecker;
-
-class SpellCheckRequest : public TextCheckingRequest {
-public:
-    static PassRefPtr<SpellCheckRequest> create(TextCheckingTypeMask, TextCheckingProcessType, PassRefPtr<Range> checkingRange, PassRefPtr<Range> paragraphRange);
-    virtual ~SpellCheckRequest();
-
-    PassRefPtr<Range> checkingRange() const { return m_checkingRange; }
-    PassRefPtr<Range> paragraphRange() const { return m_paragraphRange; }
-    PassRefPtr<Element> rootEditableElement() const { return m_rootEditableElement; }
-
-    void setCheckerAndSequence(SpellChecker*, int sequence);
-    void requesterDestroyed();
-    bool isStarted() const { return m_checker; }
-
-    virtual const TextCheckingRequestData& data() const OVERRIDE;
-    virtual void didSucceed(const Vector<TextCheckingResult>&) OVERRIDE;
-    virtual void didCancel() OVERRIDE;
-
-private:
-    SpellCheckRequest(PassRefPtr<Range> checkingRange, PassRefPtr<Range> paragraphRange, const String&, TextCheckingTypeMask, TextCheckingProcessType, const Vector<uint32_t>& documentMarkersInRange, const Vector<unsigned>& documentMarkerOffsets);
-
-    SpellChecker* m_checker;
-    RefPtr<Range> m_checkingRange;
-    RefPtr<Range> m_paragraphRange;
-    RefPtr<Element> m_rootEditableElement;
-    TextCheckingRequestData m_requestData;
-};
+class TextCheckingParagraph;
+struct TextCheckingResult;
 
 class SpellChecker {
-    WTF_MAKE_NONCOPYABLE(SpellChecker); WTF_MAKE_FAST_ALLOCATED;
+    WTF_MAKE_NONCOPYABLE(SpellChecker);
 public:
-    friend class SpellCheckRequest;
+    static PassOwnPtr<SpellChecker> create(Frame&);
 
-    explicit SpellChecker(Frame*);
     ~SpellChecker();
 
-    bool isAsynchronousEnabled() const;
-    bool isCheckable(Range*) const;
+    SpellCheckerClient& spellCheckerClient() const;
+    TextCheckerClient& textChecker() const;
 
-    void requestCheckingFor(PassRefPtr<SpellCheckRequest>);
+    bool isContinuousSpellCheckingEnabled() const;
+    void toggleContinuousSpellChecking();
+    bool isGrammarCheckingEnabled();
+    void ignoreSpelling();
+    String misspelledWordAtCaretOrRange(Node* clickedNode) const;
+    bool isSpellCheckingEnabledInFocusedNode() const;
+    bool isSpellCheckingEnabledFor(Node*) const;
+    void markMisspellingsAfterTypingToWord(const VisiblePosition &wordStart, const VisibleSelection& selectionAfterTyping);
+    void markMisspellings(const VisibleSelection&, RefPtr<Range>& firstMisspellingRange);
+    void markBadGrammar(const VisibleSelection&);
+    void markMisspellingsAndBadGrammar(const VisibleSelection& spellingSelection, bool markGrammar, const VisibleSelection& grammarSelection);
+    void markAndReplaceFor(PassRefPtr<SpellCheckRequest>, const Vector<TextCheckingResult>&);
+    void markAllMisspellingsAndBadGrammarInRanges(TextCheckingTypeMask, Range* spellingRange, Range* grammarRange);
+    void advanceToNextMisspelling(bool startBeforeSelection = false);
+    void showSpellingGuessPanel();
+    void didBeginEditing(Element*);
+    void clearMisspellingsAndBadGrammar(const VisibleSelection&);
+    void markMisspellingsAndBadGrammar(const VisibleSelection&);
+    void respondToChangedSelection(const VisibleSelection& oldSelection, FrameSelection::SetSelectionOptions);
+    void spellCheckAfterBlur();
+    void spellCheckOldSelection(const VisibleSelection& oldSelection, const VisibleSelection& newAdjacentWords, const VisibleSelection& newSelectedSentence);
+
+    void didEndEditingOnTextField(Element*);
+    bool selectionStartHasMarkerFor(DocumentMarker::MarkerType, int from, int length) const;
+    void updateMarkersForWordsAffectedByEditing(bool onlyHandleWordsContainingSelection);
     void cancelCheck();
+    void chunkAndMarkAllMisspellingsAndBadGrammar(Node*);
+    void requestTextChecking(const Element&);
 
-    int lastRequestSequence() const
-    {
-        return m_lastRequestSequence;
-    }
-
-    int lastProcessedSequence() const
-    {
-        return m_lastProcessedSequence;
-    }
+    // Exposed for testing only
+    SpellCheckRequester& spellCheckRequester() const { return *m_spellCheckRequester; }
 
 private:
-    typedef Deque<RefPtr<SpellCheckRequest> > RequestQueue;
+    Frame& m_frame;
+    const OwnPtr<SpellCheckRequester> m_spellCheckRequester;
 
-    bool canCheckAsynchronously(Range*) const;
-    TextCheckerClient* client() const;
-    void timerFiredToProcessQueuedRequest(Timer<SpellChecker>*);
-    void invokeRequest(PassRefPtr<SpellCheckRequest>);
-    void enqueueRequest(PassRefPtr<SpellCheckRequest>);
-    void didCheckSucceed(int sequence, const Vector<TextCheckingResult>&);
-    void didCheckCancel(int sequence);
-    void didCheck(int sequence, const Vector<TextCheckingResult>&);
+    explicit SpellChecker(Frame&);
 
-    Frame* m_frame;
-    int m_lastRequestSequence;
-    int m_lastProcessedSequence;
+    void markMisspellingsOrBadGrammar(const VisibleSelection&, bool checkSpelling, RefPtr<Range>& firstMisspellingRange);
+    TextCheckingTypeMask resolveTextCheckingTypeMask(TextCheckingTypeMask);
 
-    Timer<SpellChecker> m_timerToProcessQueuedRequest;
+    bool unifiedTextCheckerEnabled() const;
 
-    RefPtr<SpellCheckRequest> m_processingRequest;
-    RequestQueue m_requestQueue;
+    void chunkAndMarkAllMisspellingsAndBadGrammar(TextCheckingTypeMask textCheckingOptions, const TextCheckingParagraph& fullParagraphToCheck, bool asynchronous);
+    void markAllMisspellingsAndBadGrammarInRanges(TextCheckingTypeMask textCheckingOptions, Range* checkingRange, Range* paragraphRange, bool asynchronous, int requestNumber, int* checkingLength = 0);
 };
 
 } // namespace WebCore

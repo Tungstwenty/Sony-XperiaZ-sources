@@ -35,8 +35,7 @@
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/canvas/CanvasGradient.h"
 #include "core/html/canvas/CanvasPattern.h"
-#include "core/platform/graphics/GraphicsContext.h"
-#include "wtf/Assertions.h"
+#include "platform/graphics/GraphicsContext.h"
 #include "wtf/PassRefPtr.h"
 
 namespace WebCore {
@@ -65,7 +64,7 @@ RGBA32 currentColor(HTMLCanvasElement* canvas)
 
 bool parseColorOrCurrentColor(RGBA32& parsedColor, const String& colorString, HTMLCanvasElement* canvas)
 {
-    ColorParseResult parseResult = parseColor(parsedColor, colorString, canvas ? canvas->document() : 0);
+    ColorParseResult parseResult = parseColor(parsedColor, colorString, canvas ? &canvas->document() : 0);
     switch (parseResult) {
     case ParsedRGBA:
     case ParsedSystemColor:

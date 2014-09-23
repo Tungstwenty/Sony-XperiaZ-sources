@@ -28,6 +28,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
+import signal
 import time
 
 from webkitpy.layout_tests.models import test_expectations
@@ -35,6 +36,33 @@ from webkitpy.layout_tests.models import test_failures
 
 
 _log = logging.getLogger(__name__)
+
+OK_EXIT_STATUS = 0
+
+# This matches what the shell does on POSIX.
+INTERRUPTED_EXIT_STATUS = signal.SIGINT + 128
+
+# POSIX limits status codes to 0-255. Normally run-webkit-tests returns the number
+# of tests that failed. These indicate exceptional conditions triggered by the
+# script itself, so we count backwards from 255 (aka -1) to enumerate them.
+SYS_DEPS_EXIT_STATUS = 252
+NO_TESTS_EXIT_STATUS = 253
+NO_DEVICES_EXIT_STATUS = 254
+UNEXPECTED_ERROR_EXIT_STATUS = 255
+
+ERROR_CODES = (
+    INTERRUPTED_EXIT_STATUS,
+    SYS_DEPS_EXIT_STATUS,
+    NO_TESTS_EXIT_STATUS,
+    NO_DEVICES_EXIT_STATUS,
+    UNEXPECTED_ERROR_EXIT_STATUS,
+)
+
+
+class TestRunException(Exception):
+    def __init__(self, code, msg):
+        self.code = code
+        self.msg = msg
 
 
 class TestRunResults(object):
@@ -62,6 +90,7 @@ class TestRunResults(object):
             self.tests_by_timeline[timeline] = expectations.get_tests_with_timeline(timeline)
         self.slow_tests = set()
         self.interrupted = False
+        self.keyboard_interrupted = False
         self.run_time = 0  # The wall clock time spent running the tests (layout_test_runner.run()).
 
     def add(self, test_result, expected, test_is_slow):
@@ -178,14 +207,9 @@ def summarize_results(port_obj, expectations, initial_results, retry_results, en
                 num_flaky += 1
             elif retry_results:
                 retry_result_type = retry_results.unexpected_results_by_name[test_name].type
-                if result_type != retry_result_type:
-                    if enabled_pixel_tests_in_retry and result_type == test_expectations.TEXT and retry_result_type == test_expectations.IMAGE_PLUS_TEXT:
-                        num_regressions += 1
-                    else:
-                        num_flaky += 1
+                num_regressions += 1
+                if not keywords[retry_result_type] in actual:
                     actual.append(keywords[retry_result_type])
-                else:
-                    num_regressions += 1
             else:
                 num_regressions += 1
 

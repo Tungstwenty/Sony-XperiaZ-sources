@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#if ENABLE_NOTIFICATIONS
 #include "NotificationPresenter.h"
 
 #include "public/platform/Platform.h"
@@ -36,12 +35,11 @@
 #include "public/platform/WebURL.h"
 #include "public/testing/WebTestDelegate.h"
 #include "public/web/WebKit.h"
-#include "public/web/WebNotification.h"
 #include "public/web/WebNotificationPermissionCallback.h"
 #include "public/web/WebSecurityOrigin.h"
 #include <url/gurl.h>
 
-using namespace WebKit;
+using namespace blink;
 using namespace std;
 
 namespace WebTestRunner {
@@ -90,6 +88,14 @@ bool NotificationPresenter::simulateClick(const WebString& title)
     return true;
 }
 
+void NotificationPresenter::cancelAllActiveNotifications()
+{
+    while (!m_activeNotifications.empty()) {
+        const WebNotification& notification = m_activeNotifications.begin()->second;
+        cancel(notification);
+    }
+}
+
 // The output from all these methods matches what DumpRenderTree produces.
 bool NotificationPresenter::show(const WebNotification& notification)
 {
@@ -134,7 +140,7 @@ void NotificationPresenter::cancel(const WebNotification& notification)
     m_activeNotifications.erase(id);
 }
 
-void NotificationPresenter::objectDestroyed(const WebKit::WebNotification& notification)
+void NotificationPresenter::objectDestroyed(const blink::WebNotification& notification)
 {
     WebString identifier = identifierForNotification(notification);
     string id(identifier.utf8());
@@ -159,5 +165,3 @@ void NotificationPresenter::requestPermission(
 }
 
 }
-
-#endif // ENABLE_NOTIFICATIONS

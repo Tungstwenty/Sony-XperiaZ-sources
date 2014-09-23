@@ -67,12 +67,12 @@ RenderNamedFlowThread* FlowThreadController::ensureRenderFlowThreadWithName(cons
         }
     }
 
-    NamedFlowCollection* namedFlows = m_view->document()->namedFlows();
+    NamedFlowCollection* namedFlows = m_view->document().namedFlows();
 
     // Sanity check for the absence of a named flow in the "CREATED" state with the same name.
     ASSERT(!namedFlows->flowByName(name));
 
-    RenderNamedFlowThread* flowRenderer = RenderNamedFlowThread::createAnonymous(m_view->document(), namedFlows->ensureFlowWithName(name));
+    RenderNamedFlowThread* flowRenderer = RenderNamedFlowThread::createAnonymous(&m_view->document(), namedFlows->ensureFlowWithName(name));
     flowRenderer->setStyle(RenderFlowThread::createFlowThreadStyle(m_view->style()));
     m_renderNamedFlowThreadList->add(flowRenderer);
 
@@ -117,7 +117,7 @@ void FlowThreadController::unregisterNamedFlowContentNode(Node* contentNode)
 {
     ASSERT(contentNode && contentNode->isElementNode());
     HashMap<const Node*, RenderNamedFlowThread*>::iterator it = m_mapNamedFlowContentNodes.find(contentNode);
-    ASSERT(it != m_mapNamedFlowContentNodes.end());
+    ASSERT_WITH_SECURITY_IMPLICATION(it != m_mapNamedFlowContentNodes.end());
     ASSERT(it->value);
     ASSERT(it->value->hasContentNode(contentNode));
     it->value->unregisterNamedFlowContentNode(contentNode);

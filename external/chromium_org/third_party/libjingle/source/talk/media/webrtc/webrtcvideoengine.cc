@@ -93,6 +93,9 @@ static const int kStartVideoBitrate = 300;
 static const int kMaxVideoBitrate = 2000;
 static const int kDefaultConferenceModeMaxVideoBitrate = 500;
 
+// Controlled by exp, try a super low minimum bitrate for poor connections.
+static const int kLowerMinBitrate = 30;
+
 static const int kVideoMtu = 1200;
 
 static const int kVideoRtpBufferSize = 65536;
@@ -153,6 +156,11 @@ static const int kRtpTimeOffsetExtensionId = 2;
 static const char kRtpAbsoluteSendTimeHeaderExtension[] =
     "http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time";
 static const int kRtpAbsoluteSendTimeExtensionId = 3;
+// Default video dscp value.
+// See http://tools.ietf.org/html/rfc2474 for details
+// See also http://tools.ietf.org/html/draft-jennings-rtcweb-qos-00
+static const talk_base::DiffServCodePoint kVideoDscpValue =
+    talk_base::DSCP_AF41;
 
 static bool IsNackEnabled(const VideoCodec& codec) {
   return codec.HasFeedbackParam(FeedbackParam(kRtcpFbParamNack,
@@ -220,11 +228,8 @@ class WebRtcRenderAdapter : public webrtc::ExternalRenderer {
   }
 
   virtual int DeliverFrame(unsigned char* buffer, int buffer_size,
-                           uint32_t time_stamp, int64_t render_time
-#ifdef USE_WEBRTC_DEV_BRANCH
-                           , void* handle
-#endif
-                          ) {
+                           uint32_t time_stamp, int64_t render_time,
+                           void* handle) {
     talk_base::CritScope cs(&crit_);
     frame_rate_tracker_.Update(1);
     if (renderer_ == NULL) {
@@ -238,17 +243,13 @@ class WebRtcRenderAdapter : public webrtc::ExternalRenderer {
         talk_base::kNumNanosecsPerMillisec;
     // Send the rtp timestamp to renderer as the VideoFrame timestamp.
     // and the render timestamp as the VideoFrame elapsed_time.
-#ifdef USE_WEBRTC_DEV_BRANCH
     if (handle == NULL) {
-#endif
       return DeliverBufferFrame(buffer, buffer_size, render_time_stamp_in_ns,
                                 rtp_time_stamp_in_ns);
-#ifdef USE_WEBRTC_DEV_BRANCH
     } else {
       return DeliverTextureFrame(handle, render_time_stamp_in_ns,
                                  rtp_time_stamp_in_ns);
     }
-#endif
   }
 
   virtual bool IsTextureSupported() { return true; }
@@ -256,8 +257,8 @@ class WebRtcRenderAdapter : public webrtc::ExternalRenderer {
   int DeliverBufferFrame(unsigned char* buffer, int buffer_size,
                          int64 elapsed_time, int64 time_stamp) {
     WebRtcVideoFrame video_frame;
-    video_frame.Attach(buffer, buffer_size, width_, height_,
-                       1, 1, elapsed_time, time_stamp, 0);
+    video_frame.Alias(buffer, buffer_size, width_, height_,
+                      1, 1, elapsed_time, time_stamp, 0);
 
 
     // Sanity check on decoded frame size.
@@ -267,9 +268,6 @@ class WebRtcRenderAdapter : public webrtc::ExternalRenderer {
     }
 
     int ret = renderer_->RenderFrame(&video_frame) ? 0 : -1;
-    uint8* buffer_temp;
-    size_t buffer_size_temp;
-    video_frame.Detach(&buffer_temp, &buffer_size_temp);
     return ret;
   }
 
@@ -315,6 +313,13 @@ class WebRtcDecoderObserver : public webrtc::ViEDecoderObserver {
        : video_channel_(video_channel),
          framerate_(0),
          bitrate_(0),
+         decode_ms_(0),
+         max_decode_ms_(0),
+         current_delay_ms_(0),
+         target_delay_ms_(0),
+         jitter_buffer_ms_(0),
+         min_playout_delay_ms_(0),
+         render_delay_ms_(0),
          firs_requested_(0) {
   }
 
@@ -324,23 +329,61 @@ class WebRtcDecoderObserver : public webrtc::ViEDecoderObserver {
   virtual void IncomingRate(const int videoChannel,
                             const unsigned int framerate,
                             const unsigned int bitrate) {
+    talk_base::CritScope cs(&crit_);
     ASSERT(video_channel_ == videoChannel);
     framerate_ = framerate;
     bitrate_ = bitrate;
   }
+
+  virtual void DecoderTiming(int decode_ms,
+                             int max_decode_ms,
+                             int current_delay_ms,
+                             int target_delay_ms,
+                             int jitter_buffer_ms,
+                             int min_playout_delay_ms,
+                             int render_delay_ms) {
+    talk_base::CritScope cs(&crit_);
+    decode_ms_ = decode_ms;
+    max_decode_ms_ = max_decode_ms;
+    current_delay_ms_ = current_delay_ms;
+    target_delay_ms_ = target_delay_ms;
+    jitter_buffer_ms_ = jitter_buffer_ms;
+    min_playout_delay_ms_ = min_playout_delay_ms;
+    render_delay_ms_ = render_delay_ms;
+  }
+
   virtual void RequestNewKeyFrame(const int videoChannel) {
+    talk_base::CritScope cs(&crit_);
     ASSERT(video_channel_ == videoChannel);
     ++firs_requested_;
   }
 
-  int framerate() const { return framerate_; }
-  int bitrate() const { return bitrate_; }
-  int firs_requested() const { return firs_requested_; }
+  // Populate |rinfo| based on previously-set data in |*this|.
+  void ExportTo(VideoReceiverInfo* rinfo) {
+    talk_base::CritScope cs(&crit_);
+    rinfo->firs_sent = firs_requested_;
+    rinfo->framerate_rcvd = framerate_;
+    rinfo->decode_ms = decode_ms_;
+    rinfo->max_decode_ms = max_decode_ms_;
+    rinfo->current_delay_ms = current_delay_ms_;
+    rinfo->target_delay_ms = target_delay_ms_;
+    rinfo->jitter_buffer_ms = jitter_buffer_ms_;
+    rinfo->min_playout_delay_ms = min_playout_delay_ms_;
+    rinfo->render_delay_ms = render_delay_ms_;
+  }
 
  private:
+  mutable talk_base::CriticalSection crit_;
   int video_channel_;
   int framerate_;
   int bitrate_;
+  int decode_ms_;
+  int max_decode_ms_;
+  int current_delay_ms_;
+  int target_delay_ms_;
+  int jitter_buffer_ms_;
+  int min_playout_delay_ms_;
+  int render_delay_ms_;
   int firs_requested_;
 };
 
@@ -349,25 +392,45 @@ class WebRtcEncoderObserver : public webrtc::ViEEncoderObserver {
   explicit WebRtcEncoderObserver(int video_channel)
       : video_channel_(video_channel),
         framerate_(0),
-        bitrate_(0) {
+        bitrate_(0),
+        suspended_(false) {
   }
 
   // virtual functions from VieEncoderObserver.
   virtual void OutgoingRate(const int videoChannel,
                             const unsigned int framerate,
                             const unsigned int bitrate) {
+    talk_base::CritScope cs(&crit_);
     ASSERT(video_channel_ == videoChannel);
     framerate_ = framerate;
     bitrate_ = bitrate;
   }
 
-  int framerate() const { return framerate_; }
-  int bitrate() const { return bitrate_; }
+  virtual void SuspendChange(int video_channel, bool is_suspended) {
+    talk_base::CritScope cs(&crit_);
+    ASSERT(video_channel_ == video_channel);
+    suspended_ = is_suspended;
+  }
+
+  int framerate() const {
+    talk_base::CritScope cs(&crit_);
+    return framerate_;
+  }
+  int bitrate() const {
+    talk_base::CritScope cs(&crit_);
+    return bitrate_;
+  }
+  bool suspended() const {
+    talk_base::CritScope cs(&crit_);
+    return suspended_;
+  }
 
  private:
+  mutable talk_base::CriticalSection crit_;
   int video_channel_;
   int framerate_;
   int bitrate_;
+  bool suspended_;
 };
 
 class WebRtcLocalStreamInfo {
@@ -465,6 +528,46 @@ class WebRtcVideoChannelRecvInfo  {
   DecoderMap registered_decoders_;
 };
 
+class WebRtcOveruseObserver : public webrtc::CpuOveruseObserver {
+ public:
+  explicit WebRtcOveruseObserver(CoordinatedVideoAdapter* video_adapter)
+      : video_adapter_(video_adapter),
+        enabled_(false) {
+  }
+
+  // TODO(mflodman): Consider sending resolution as part of event, to let
+  // adapter know what resolution the request is based on. Helps eliminate stale
+  // data, race conditions.
+  virtual void OveruseDetected() OVERRIDE {
+    talk_base::CritScope cs(&crit_);
+    if (!enabled_) {
+      return;
+    }
+
+    video_adapter_->OnCpuResolutionRequest(CoordinatedVideoAdapter::DOWNGRADE);
+  }
+
+  virtual void NormalUsage() OVERRIDE {
+    talk_base::CritScope cs(&crit_);
+    if (!enabled_) {
+      return;
+    }
+
+    video_adapter_->OnCpuResolutionRequest(CoordinatedVideoAdapter::UPGRADE);
+  }
+
+  void Enable(bool enable) {
+    talk_base::CritScope cs(&crit_);
+    enabled_ = enable;
+  }
+
+ private:
+  CoordinatedVideoAdapter* video_adapter_;
+  bool enabled_;
+  talk_base::CriticalSection crit_;
+};
+
+
 class WebRtcVideoChannelSendInfo : public sigslot::has_slots<> {
  public:
   typedef std::map<int, webrtc::VideoEncoder*> EncoderMap;  // key: payload type
@@ -480,7 +583,9 @@ class WebRtcVideoChannelSendInfo : public sigslot::has_slots<> {
         external_capture_(external_capture),
         capturer_updated_(false),
         interval_(0),
-        video_adapter_(new CoordinatedVideoAdapter) {
+        video_adapter_(new CoordinatedVideoAdapter),
+        cpu_monitor_(cpu_monitor) {
+    overuse_observer_.reset(new WebRtcOveruseObserver(video_adapter_.get()));
     SignalCpuAdaptationUnable.repeat(video_adapter_->SignalCpuAdaptationUnable);
     if (cpu_monitor) {
       cpu_monitor->SignalUpdate.connect(
@@ -527,12 +632,11 @@ class WebRtcVideoChannelSendInfo : public sigslot::has_slots<> {
     }
   }
 
-  bool AdaptFrame(const VideoFrame* in_frame, const VideoFrame** out_frame) {
-    *out_frame = NULL;
-    return video_adapter_->AdaptFrame(in_frame, out_frame);
-  }
   int CurrentAdaptReason() const {
     return video_adapter_->adapt_reason();
+  }
+  webrtc::CpuOveruseObserver* overuse_observer() {
+    return overuse_observer_.get();
   }
 
   StreamParams* stream_params() { return stream_params_.get(); }
@@ -568,11 +672,20 @@ class WebRtcVideoChannelSendInfo : public sigslot::has_slots<> {
         // video capturer.
         video_adapter_->SetInputFormat(*capture_format);
       }
+      // TODO(thorcarpenter): When the adapter supports "only frame dropping"
+      // mode, also hook it up to screencast capturers.
+      video_capturer->SignalAdaptFrame.connect(
+          this, &WebRtcVideoChannelSendInfo::AdaptFrame);
     }
   }
 
+  void AdaptFrame(VideoCapturer* capturer, const VideoFrame* input,
+                  VideoFrame** adapted) {
+    video_adapter_->AdaptFrame(input, adapted);
+  }
+
   void ApplyCpuOptions(const VideoOptions& options) {
-    bool cpu_adapt, cpu_smoothing;
+    bool cpu_adapt, cpu_smoothing, adapt_third;
     float low, med, high;
     if (options.adapt_input_to_cpu_usage.Get(&cpu_adapt)) {
       video_adapter_->set_cpu_adaptation(cpu_adapt);
@@ -589,7 +702,19 @@ class WebRtcVideoChannelSendInfo : public sigslot::has_slots<> {
     if (options.system_high_adaptation_threshhold.Get(&high)) {
       video_adapter_->set_high_system_threshold(high);
     }
+    if (options.video_adapt_third.Get(&adapt_third)) {
+      video_adapter_->set_scale_third(adapt_third);
+    }
   }
+
+  void SetCpuOveruseDetection(bool enable) {
+    if (cpu_monitor_ && enable) {
+      cpu_monitor_->SignalUpdate.disconnect(video_adapter_.get());
+    }
+    overuse_observer_->Enable(enable);
+    video_adapter_->set_cpu_adaptation(enable);
+  }
+
   void ProcessFrame(const VideoFrame& original_frame, bool mute,
                     VideoFrame** processed_frame) {
     if (!mute) {
@@ -642,13 +767,16 @@ class WebRtcVideoChannelSendInfo : public sigslot::has_slots<> {
   int64 interval_;
 
   talk_base::scoped_ptr<CoordinatedVideoAdapter> video_adapter_;
+  talk_base::CpuMonitor* cpu_monitor_;
+  talk_base::scoped_ptr<WebRtcOveruseObserver> overuse_observer_;
 };
 
 const WebRtcVideoEngine::VideoCodecPref
     WebRtcVideoEngine::kVideoCodecPrefs[] = {
-    {kVp8PayloadName, 100, 0},
-    {kRedPayloadName, 116, 1},
-    {kFecPayloadName, 117, 2},
+    {kVp8PayloadName, 100, -1, 0},
+    {kRedPayloadName, 116, -1, 1},
+    {kFecPayloadName, 117, -1, 2},
+    {kRtxCodecName, 96, 100, 3},
 };
 
 // The formats are sorted by the descending order of width. We use the order to
@@ -852,13 +980,24 @@ int WebRtcVideoEngine::GetCapabilities() {
   return VIDEO_RECV | VIDEO_SEND;
 }
 
-bool WebRtcVideoEngine::SetOptions(int options) {
+bool WebRtcVideoEngine::SetOptions(const VideoOptions &options) {
   return true;
 }
 
 bool WebRtcVideoEngine::SetDefaultEncoderConfig(
     const VideoEncoderConfig& config) {
   return SetDefaultCodec(config.max_codec);
+}
+
+VideoEncoderConfig WebRtcVideoEngine::GetDefaultEncoderConfig() const {
+  ASSERT(!video_codecs_.empty());
+  VideoCodec max_codec(kVideoCodecPrefs[0].payload_type,
+                       kVideoCodecPrefs[0].name,
+                       video_codecs_[0].width,
+                       video_codecs_[0].height,
+                       video_codecs_[0].framerate,
+                       0);
+  return VideoEncoderConfig(max_codec);
 }
 
 // SetDefaultCodec may be called while the capturer is running. For example, a
@@ -871,6 +1010,7 @@ bool WebRtcVideoEngine::SetDefaultCodec(const VideoCodec& codec) {
     return false;
   }
 
+  ASSERT(!video_codecs_.empty());
   default_codec_format_ = VideoFormat(
       video_codecs_[0].width,
       video_codecs_[0].height,
@@ -1175,7 +1315,8 @@ static void AddDefaultFeedbackParams(VideoCodec* codec) {
 }
 
 // Rebuilds the codec list to be only those that are less intensive
-// than the specified codec.
+// than the specified codec. Prefers internal codec over external with
+// higher preference field.
 bool WebRtcVideoEngine::RebuildCodecList(const VideoCodec& in_codec) {
   if (!FindCodec(in_codec))
     return false;
@@ -1183,39 +1324,47 @@ bool WebRtcVideoEngine::RebuildCodecList(const VideoCodec& in_codec) {
   video_codecs_.clear();
 
   bool found = false;
-  std::set<std::string> external_codec_names;
-  if (encoder_factory_) {
-    const std::vector<WebRtcVideoEncoderFactory::VideoCodec>& codecs =
-        encoder_factory_->codecs();
-    for (size_t i = 0; i < codecs.size(); ++i) {
-      if (!found)
-        found = (in_codec.name == codecs[i].name);
-      VideoCodec codec(
-          GetExternalVideoPayloadType(static_cast<int>(i)),
-          codecs[i].name,
-          codecs[i].max_width,
-          codecs[i].max_height,
-          codecs[i].max_fps,
-          static_cast<int>(codecs.size() + ARRAY_SIZE(kVideoCodecPrefs) - i));
-      AddDefaultFeedbackParams(&codec);
-      video_codecs_.push_back(codec);
-      external_codec_names.insert(codecs[i].name);
-    }
-  }
+  std::set<std::string> internal_codec_names;
   for (size_t i = 0; i < ARRAY_SIZE(kVideoCodecPrefs); ++i) {
     const VideoCodecPref& pref(kVideoCodecPrefs[i]);
     if (!found)
       found = (in_codec.name == pref.name);
-    bool is_external_codec = external_codec_names.find(pref.name) !=
-        external_codec_names.end();
-    if (found && !is_external_codec) {
+    if (found) {
       VideoCodec codec(pref.payload_type, pref.name,
                        in_codec.width, in_codec.height, in_codec.framerate,
                        static_cast<int>(ARRAY_SIZE(kVideoCodecPrefs) - i));
       if (_stricmp(kVp8PayloadName, codec.name.c_str()) == 0) {
         AddDefaultFeedbackParams(&codec);
       }
+      if (pref.associated_payload_type != -1) {
+        codec.SetParam(kCodecParamAssociatedPayloadType,
+                       pref.associated_payload_type);
+      }
       video_codecs_.push_back(codec);
+      internal_codec_names.insert(codec.name);
+    }
+  }
+  if (encoder_factory_) {
+    const std::vector<WebRtcVideoEncoderFactory::VideoCodec>& codecs =
+        encoder_factory_->codecs();
+    for (size_t i = 0; i < codecs.size(); ++i) {
+      bool is_internal_codec = internal_codec_names.find(codecs[i].name) !=
+          internal_codec_names.end();
+      if (!is_internal_codec) {
+        if (!found)
+          found = (in_codec.name == codecs[i].name);
+        VideoCodec codec(
+            GetExternalVideoPayloadType(static_cast<int>(i)),
+            codecs[i].name,
+            codecs[i].max_width,
+            codecs[i].max_height,
+            codecs[i].max_fps,
+            // Use negative preference on external codec to ensure the internal
+            // codec is preferred.
+            static_cast<int>(0 - i));
+        AddDefaultFeedbackParams(&codec);
+        video_codecs_.push_back(codec);
+      }
     }
   }
   ASSERT(found);
@@ -1360,6 +1509,7 @@ WebRtcVideoMediaChannel::WebRtcVideoMediaChannel(
       remb_enabled_(false),
       render_started_(false),
       first_receive_ssrc_(0),
+      send_rtx_type_(-1),
       send_red_type_(-1),
       send_fec_type_(-1),
       send_min_bitrate_(kMinVideoBitrate),
@@ -1436,12 +1586,19 @@ bool WebRtcVideoMediaChannel::SetSendCodecs(
   if (sending_) {
     ConvertToCricketVideoCodec(*send_codec_, &current);
   }
+  std::map<int, int> primary_rtx_pt_mapping;
   for (std::vector<VideoCodec>::const_iterator iter = codecs.begin();
       iter != codecs.end(); ++iter) {
     if (_stricmp(iter->name.c_str(), kRedPayloadName) == 0) {
       send_red_type_ = iter->id;
     } else if (_stricmp(iter->name.c_str(), kFecPayloadName) == 0) {
       send_fec_type_ = iter->id;
+    } else if (_stricmp(iter->name.c_str(), kRtxCodecName) == 0) {
+      int rtx_type = iter->id;
+      int rtx_primary_type = -1;
+      if (iter->GetParam(kCodecParamAssociatedPayloadType, &rtx_primary_type)) {
+        primary_rtx_pt_mapping[rtx_primary_type] = rtx_type;
+      }
     } else if (engine()->CanSendCodec(*iter, current, &checked_codec)) {
       webrtc::VideoCodec wcodec;
       if (engine()->ConvertFromCricketVideoCodec(checked_codec, &wcodec)) {
@@ -1496,6 +1653,14 @@ bool WebRtcVideoMediaChannel::SetSendCodecs(
 
   // Select the first matched codec.
   webrtc::VideoCodec& codec(send_codecs[0]);
+
+  // Set RTX payload type if primary now active. This value will be used  in
+  // SetSendCodec.
+  std::map<int, int>::const_iterator rtx_it =
+    primary_rtx_pt_mapping.find(static_cast<int>(codec.plType));
+  if (rtx_it != primary_rtx_pt_mapping.end()) {
+    send_rtx_type_ = rtx_it->second;
+  }
 
   if (!SetSendCodec(
           codec, codec.minBitrate, codec.startBitrate, codec.maxBitrate)) {
@@ -1598,9 +1763,9 @@ bool WebRtcVideoMediaChannel::SetSend(bool send) {
 bool WebRtcVideoMediaChannel::AddSendStream(const StreamParams& sp) {
   LOG(LS_INFO) << "AddSendStream " << sp.ToString();
 
-  if (!IsOneSsrcStream(sp)) {
-      LOG(LS_ERROR) << "AddSendStream: bad local stream parameters";
-      return false;
+  if (!IsOneSsrcStream(sp) && !IsSimulcastStream(sp)) {
+    LOG(LS_ERROR) << "AddSendStream: bad local stream parameters";
+    return false;
   }
 
   uint32 ssrc_key;
@@ -1627,6 +1792,11 @@ bool WebRtcVideoMediaChannel::AddSendStream(const StreamParams& sp) {
   if (engine()->vie()->rtp()->SetLocalSSRC(channel_id,
                                            sp.first_ssrc()) != 0) {
     LOG_RTCERR2(SetLocalSSRC, channel_id, sp.first_ssrc());
+    return false;
+  }
+
+  // Set the corresponding RTX SSRC.
+  if (!SetLocalRtxSsrc(channel_id, sp, sp.first_ssrc(), 0)) {
     return false;
   }
 
@@ -1734,10 +1904,11 @@ bool WebRtcVideoMediaChannel::AddRecvStream(const StreamParams& sp) {
     return false;
   }
 
-  // TODO(perkj): Implement recv media from multiple SSRCs per stream.
-  if (sp.ssrcs.size() != 1) {
-    LOG(LS_ERROR) << "WebRtcVideoMediaChannel supports one receiving SSRC per"
-                  << " stream";
+  // TODO(perkj): Implement recv media from multiple media SSRCs per stream.
+  // NOTE: We have two SSRCs per stream when RTX is enabled.
+  if (!IsOneSsrcStream(sp)) {
+    LOG(LS_ERROR) << "WebRtcVideoMediaChannel supports one primary SSRC per"
+                  << " stream and one FID SSRC per primary SSRC.";
     return false;
   }
 
@@ -1747,6 +1918,16 @@ bool WebRtcVideoMediaChannel::AddRecvStream(const StreamParams& sp) {
   // to our master send channel.
   int channel_id = -1;
   if (!CreateChannel(sp.first_ssrc(), MD_RECV, &channel_id)) {
+    return false;
+  }
+
+  // Set the corresponding RTX SSRC.
+  uint32 rtx_ssrc;
+  bool has_rtx = sp.GetFidSsrc(sp.first_ssrc(), &rtx_ssrc);
+  if (has_rtx && engine()->vie()->rtp()->SetRemoteSSRCType(
+      channel_id, webrtc::kViEStreamTypeRtx, rtx_ssrc) != 0) {
+    LOG_RTCERR3(SetRemoteSSRCType, channel_id, webrtc::kViEStreamTypeRtx,
+                rtx_ssrc);
     return false;
   }
 
@@ -1827,17 +2008,15 @@ bool WebRtcVideoMediaChannel::RemoveRecvStream(uint32 ssrc) {
   LOG(LS_INFO) << "Removing video stream " << ssrc
                << " with VideoEngine channel #"
                << channel_id;
+  bool ret = true;
   if (engine()->vie()->base()->DeleteChannel(channel_id) == -1) {
     LOG_RTCERR1(DeleteChannel, channel_id);
-    // Leak the WebRtcVideoChannelRecvInfo owned by |it| but remove the channel
-    // from recv_channels_.
-    recv_channels_.erase(it);
-    return false;
+    ret = false;
   }
   // Delete the WebRtcVideoChannelRecvInfo pointed to by it->second.
   delete info;
   recv_channels_.erase(it);
-  return true;
+  return ret;
 }
 
 bool WebRtcVideoMediaChannel::StartSend() {
@@ -1902,10 +2081,6 @@ bool WebRtcVideoMediaChannel::SendIntraFrame() {
   return success;
 }
 
-bool WebRtcVideoMediaChannel::IsOneSsrcStream(const StreamParams& sp) {
-  return (sp.ssrcs.size() == 1 && sp.ssrc_groups.size() == 0);
-}
-
 bool WebRtcVideoMediaChannel::HasReadySendChannels() {
   return !send_channels_.empty() &&
       ((send_channels_.size() > 1) ||
@@ -1944,18 +2119,6 @@ bool WebRtcVideoMediaChannel::GetSendChannelKey(uint32 local_ssrc,
 }
 
 WebRtcVideoChannelSendInfo* WebRtcVideoMediaChannel::GetSendChannel(
-    VideoCapturer* video_capturer) {
-  for (SendChannelMap::iterator iter = send_channels_.begin();
-       iter != send_channels_.end(); ++iter) {
-    WebRtcVideoChannelSendInfo* send_channel = iter->second;
-    if (send_channel->video_capturer() == video_capturer) {
-      return send_channel;
-    }
-  }
-  return NULL;
-}
-
-WebRtcVideoChannelSendInfo* WebRtcVideoMediaChannel::GetSendChannel(
     uint32 local_ssrc) {
   uint32 key;
   if (!GetSendChannelKey(local_ssrc, &key)) {
@@ -1984,6 +2147,18 @@ bool WebRtcVideoMediaChannel::CreateSendChannelKey(uint32 local_ssrc,
   return true;
 }
 
+int WebRtcVideoMediaChannel::GetSendChannelNum(VideoCapturer* capturer) {
+  int num = 0;
+  for (SendChannelMap::iterator iter = send_channels_.begin();
+       iter != send_channels_.end(); ++iter) {
+    WebRtcVideoChannelSendInfo* send_channel = iter->second;
+    if (send_channel->video_capturer() == capturer) {
+      ++num;
+    }
+  }
+  return num;
+}
+
 uint32 WebRtcVideoMediaChannel::GetDefaultChannelSsrc() {
   WebRtcVideoChannelSendInfo* send_channel = send_channels_[0];
   const StreamParams* sp = send_channel->stream_params();
@@ -1999,11 +2174,8 @@ bool WebRtcVideoMediaChannel::DeleteSendChannel(uint32 ssrc_key) {
     return false;
   }
   WebRtcVideoChannelSendInfo* send_channel = send_channels_[ssrc_key];
-  VideoCapturer* capturer = send_channel->video_capturer();
-  if (capturer != NULL) {
-    capturer->SignalVideoFrame.disconnect(this);
-    send_channel->set_video_capturer(NULL);
-  }
+  MaybeDisconnectCapturer(send_channel->video_capturer());
+  send_channel->set_video_capturer(NULL);
 
   int channel_id = send_channel->channel_id();
   int capture_id = send_channel->capture_id();
@@ -2042,7 +2214,7 @@ bool WebRtcVideoMediaChannel::RemoveCapturer(uint32 ssrc) {
   if (capturer == NULL) {
     return false;
   }
-  capturer->SignalVideoFrame.disconnect(this);
+  MaybeDisconnectCapturer(capturer);
   send_channel->set_video_capturer(NULL);
   const int64 timestamp = send_channel->local_stream_info()->time_stamp();
   if (send_codec_) {
@@ -2107,7 +2279,9 @@ bool WebRtcVideoMediaChannel::GetStats(VideoMediaInfo* info) {
       WebRtcLocalStreamInfo* channel_stream_info =
           send_channel->local_stream_info();
 
-      sinfo.ssrcs = send_params->ssrcs;
+      for (size_t i = 0; i < send_params->ssrcs.size(); ++i) {
+        sinfo.add_ssrc(send_params->ssrcs[i]);
+      }
       sinfo.codec_name = send_codec_->plName;
       sinfo.bytes_sent = bytes_sent;
       sinfo.packets_sent = packets_sent;
@@ -2124,26 +2298,45 @@ bool WebRtcVideoMediaChannel::GetStats(VideoMediaInfo* info) {
       sinfo.nominal_bitrate = send_channel->encoder_observer()->bitrate();
       sinfo.preferred_bitrate = send_max_bitrate_;
       sinfo.adapt_reason = send_channel->CurrentAdaptReason();
+      sinfo.capture_jitter_ms = -1;
+      sinfo.avg_encode_ms = -1;
+      sinfo.encode_usage_percent = -1;
+      sinfo.capture_queue_delay_ms_per_s = -1;
 
-      // Get received RTCP statistics for the sender, if available.
+#ifdef USE_WEBRTC_DEV_BRANCH
+      int capture_jitter_ms = 0;
+      int avg_encode_time_ms = 0;
+      int encode_usage_percent = 0;
+      int capture_queue_delay_ms_per_s = 0;
+      if (engine()->vie()->base()->CpuOveruseMeasures(
+          channel_id,
+          &capture_jitter_ms,
+          &avg_encode_time_ms,
+          &encode_usage_percent,
+          &capture_queue_delay_ms_per_s) == 0) {
+        sinfo.capture_jitter_ms = capture_jitter_ms;
+        sinfo.avg_encode_ms = avg_encode_time_ms;
+        sinfo.encode_usage_percent = encode_usage_percent;
+        sinfo.capture_queue_delay_ms_per_s = capture_queue_delay_ms_per_s;
+      }
+#endif
+
+      // Get received RTCP statistics for the sender (reported by the remote
+      // client in a RTCP packet), if available.
       // It's not a fatal error if we can't, since RTCP may not have arrived
       // yet.
-      uint16 r_fraction_lost;
-      unsigned int r_cumulative_lost;
-      unsigned int r_extended_max;
-      unsigned int r_jitter;
-      int r_rtt_ms;
+      webrtc::RtcpStatistics outgoing_stream_rtcp_stats;
+      int outgoing_stream_rtt_ms;
 
-      if (engine_->vie()->rtp()->GetSentRTCPStatistics(
-              channel_id,
-              r_fraction_lost,
-              r_cumulative_lost,
-              r_extended_max,
-              r_jitter, r_rtt_ms) == 0) {
+      if (engine_->vie()->rtp()->GetSendChannelRtcpStatistics(
+          channel_id,
+          outgoing_stream_rtcp_stats,
+          outgoing_stream_rtt_ms) == 0) {
         // Convert Q8 to float.
-        sinfo.packets_lost = r_cumulative_lost;
-        sinfo.fraction_lost = static_cast<float>(r_fraction_lost) / (1 << 8);
-        sinfo.rtt_ms = r_rtt_ms;
+        sinfo.packets_lost = outgoing_stream_rtcp_stats.cumulative_lost;
+        sinfo.fraction_lost = static_cast<float>(
+            outgoing_stream_rtcp_stats.fraction_lost) / (1 << 8);
+        sinfo.rtt_ms = outgoing_stream_rtt_ms;
       }
       info->senders.push_back(sinfo);
 
@@ -2193,44 +2386,45 @@ bool WebRtcVideoMediaChannel::GetStats(VideoMediaInfo* info) {
 
     unsigned int ssrc;
     // Get receiver statistics and build VideoReceiverInfo, if we have data.
-    if (engine_->vie()->rtp()->GetRemoteSSRC(channel->channel_id(), ssrc) != 0)
+    // Skip the default channel (ssrc == 0).
+    if (engine_->vie()->rtp()->GetRemoteSSRC(
+            channel->channel_id(), ssrc) != 0 ||
+        ssrc == 0)
       continue;
 
-    unsigned int bytes_sent, packets_sent, bytes_recv, packets_recv;
-    if (engine_->vie()->rtp()->GetRTPStatistics(
-        channel->channel_id(), bytes_sent, packets_sent, bytes_recv,
-        packets_recv) != 0) {
+    webrtc::StreamDataCounters sent;
+    webrtc::StreamDataCounters received;
+    if (engine_->vie()->rtp()->GetRtpStatistics(channel->channel_id(),
+                                                sent, received) != 0) {
       LOG_RTCERR1(GetRTPStatistics, channel->channel_id());
       return false;
     }
     VideoReceiverInfo rinfo;
-    rinfo.ssrcs.push_back(ssrc);
-    rinfo.bytes_rcvd = bytes_recv;
-    rinfo.packets_rcvd = packets_recv;
+    rinfo.add_ssrc(ssrc);
+    rinfo.bytes_rcvd = received.bytes;
+    rinfo.packets_rcvd = received.packets;
     rinfo.packets_lost = -1;
     rinfo.packets_concealed = -1;
     rinfo.fraction_lost = -1;  // from SentRTCP
-    rinfo.firs_sent = channel->decoder_observer()->firs_requested();
     rinfo.nacks_sent = -1;
     rinfo.frame_width = channel->render_adapter()->width();
     rinfo.frame_height = channel->render_adapter()->height();
-    rinfo.framerate_rcvd = channel->decoder_observer()->framerate();
     int fps = channel->render_adapter()->framerate();
     rinfo.framerate_decoded = fps;
     rinfo.framerate_output = fps;
+    channel->decoder_observer()->ExportTo(&rinfo);
 
-    // Get sent RTCP statistics.
-    uint16 s_fraction_lost;
-    unsigned int s_cumulative_lost;
-    unsigned int s_extended_max;
-    unsigned int s_jitter;
-    int s_rtt_ms;
-    if (engine_->vie()->rtp()->GetReceivedRTCPStatistics(channel->channel_id(),
-            s_fraction_lost, s_cumulative_lost, s_extended_max,
-            s_jitter, s_rtt_ms) == 0) {
+    // Get our locally created statistics of the received RTP stream.
+    webrtc::RtcpStatistics incoming_stream_rtcp_stats;
+    int incoming_stream_rtt_ms;
+    if (engine_->vie()->rtp()->GetReceiveChannelRtcpStatistics(
+        channel->channel_id(),
+        incoming_stream_rtcp_stats,
+        incoming_stream_rtt_ms) == 0) {
       // Convert Q8 to float.
-      rinfo.packets_lost = s_cumulative_lost;
-      rinfo.fraction_lost = static_cast<float>(s_fraction_lost) / (1 << 8);
+      rinfo.packets_lost = incoming_stream_rtcp_stats.cumulative_lost;
+      rinfo.fraction_lost = static_cast<float>(
+          incoming_stream_rtcp_stats.fraction_lost) / (1 << 8);
     }
     info->receivers.push_back(rinfo);
 
@@ -2271,14 +2465,10 @@ bool WebRtcVideoMediaChannel::SetCapturer(uint32 ssrc,
     return false;
   }
   VideoCapturer* old_capturer = send_channel->video_capturer();
-  if (old_capturer) {
-    old_capturer->SignalVideoFrame.disconnect(this);
-  }
+  MaybeDisconnectCapturer(old_capturer);
 
   send_channel->set_video_capturer(capturer);
-  capturer->SignalVideoFrame.connect(
-      this,
-      &WebRtcVideoMediaChannel::AdaptAndSendFrame);
+  MaybeConnectCapturer(capturer);
   if (!capturer->IsScreencast() && ratio_w_ != 0 && ratio_h_ != 0) {
     capturer->UpdateAspectRatio(ratio_w_, ratio_h_);
   }
@@ -2295,7 +2485,8 @@ bool WebRtcVideoMediaChannel::RequestIntraFrame() {
   return false;
 }
 
-void WebRtcVideoMediaChannel::OnPacketReceived(talk_base::Buffer* packet) {
+void WebRtcVideoMediaChannel::OnPacketReceived(
+    talk_base::Buffer* packet, const talk_base::PacketTime& packet_time) {
   // Pick which channel to send this packet to. If this packet doesn't match
   // any multiplexed streams, just send it to the default channel. Otherwise,
   // send it to the specific decoder instance for that stream.
@@ -2310,10 +2501,16 @@ void WebRtcVideoMediaChannel::OnPacketReceived(talk_base::Buffer* packet) {
   engine()->vie()->network()->ReceivedRTPPacket(
       which_channel,
       packet->data(),
+#ifdef USE_WEBRTC_DEV_BRANCH
+      static_cast<int>(packet->length()),
+      webrtc::PacketTime(packet_time.timestamp, packet_time.not_before));
+#else
       static_cast<int>(packet->length()));
+#endif
 }
 
-void WebRtcVideoMediaChannel::OnRtcpReceived(talk_base::Buffer* packet) {
+void WebRtcVideoMediaChannel::OnRtcpReceived(
+    talk_base::Buffer* packet, const talk_base::PacketTime& packet_time) {
 // Sending channels need all RTCP packets with feedback information.
 // Even sender reports can contain attached report blocks.
 // Receiving channels need sender reports in order to create
@@ -2443,7 +2640,7 @@ bool WebRtcVideoMediaChannel::SetSendBandwidth(bool autobw, int bps) {
   int max_bitrate;
   if (autobw) {
     // Use the default values for min bitrate.
-    min_bitrate = kMinVideoBitrate;
+    min_bitrate = send_min_bitrate_;
     // Use the default value or the bps for the max
     max_bitrate = (bps <= 0) ? send_max_bitrate_ : (bps / 1000);
     // Maximum start bitrate can be kStartVideoBitrate.
@@ -2481,6 +2678,15 @@ bool WebRtcVideoMediaChannel::SetOptions(const VideoOptions &options) {
   bool buffer_latency_changed = options.buffered_mode_latency.IsSet() &&
       (options_.buffered_mode_latency != options.buffered_mode_latency);
 
+  bool cpu_overuse_detection_changed = options.cpu_overuse_detection.IsSet() &&
+      (options_.cpu_overuse_detection != options.cpu_overuse_detection);
+
+  bool dscp_option_changed = (options_.dscp != options.dscp);
+
+  bool suspend_below_min_bitrate_changed =
+      options.suspend_below_min_bitrate.IsSet() &&
+      (options_.suspend_below_min_bitrate != options.suspend_below_min_bitrate);
+
   bool conference_mode_turned_off = false;
   if (options_.conference_mode.IsSet() && options.conference_mode.IsSet() &&
       options_.conference_mode.GetWithDefaultIfUnset(false) &&
@@ -2503,6 +2709,17 @@ bool WebRtcVideoMediaChannel::SetOptions(const VideoOptions &options) {
   // Adjust send codec bitrate if needed.
   int conf_max_bitrate = kDefaultConferenceModeMaxVideoBitrate;
 
+  // Save altered min_bitrate level and apply if necessary.
+  bool adjusted_min_bitrate = false;
+  if (options.lower_min_bitrate.IsSet()) {
+    bool lower;
+    options.lower_min_bitrate.Get(&lower);
+
+    int new_send_min_bitrate = lower ? kLowerMinBitrate : kMinVideoBitrate;
+    adjusted_min_bitrate = (new_send_min_bitrate != send_min_bitrate_);
+    send_min_bitrate_ = new_send_min_bitrate;
+  }
+
   int expected_bitrate = send_max_bitrate_;
   if (InConferenceMode()) {
     expected_bitrate = conf_max_bitrate;
@@ -2514,7 +2731,8 @@ bool WebRtcVideoMediaChannel::SetOptions(const VideoOptions &options) {
   }
 
   if (send_codec_ &&
-      (send_max_bitrate_ != expected_bitrate || denoiser_changed)) {
+      (send_max_bitrate_ != expected_bitrate || denoiser_changed ||
+       adjusted_min_bitrate)) {
     // On success, SetSendCodec() will reset send_max_bitrate_ to
     // expected_bitrate.
     if (!SetSendCodec(*send_codec_,
@@ -2556,6 +2774,34 @@ bool WebRtcVideoMediaChannel::SetOptions(const VideoOptions &options) {
         LOG_RTCERR2(SetReceiverBufferingMode, it->second->channel_id(),
                     buffer_latency);
       }
+    }
+  }
+  if (cpu_overuse_detection_changed) {
+    bool cpu_overuse_detection =
+        options_.cpu_overuse_detection.GetWithDefaultIfUnset(false);
+    for (SendChannelMap::iterator iter = send_channels_.begin();
+         iter != send_channels_.end(); ++iter) {
+      WebRtcVideoChannelSendInfo* send_channel = iter->second;
+      send_channel->SetCpuOveruseDetection(cpu_overuse_detection);
+    }
+  }
+  if (dscp_option_changed) {
+    talk_base::DiffServCodePoint dscp = talk_base::DSCP_DEFAULT;
+    if (options.dscp.GetWithDefaultIfUnset(false))
+      dscp = kVideoDscpValue;
+    if (MediaChannel::SetDscp(dscp) != 0) {
+      LOG(LS_WARNING) << "Failed to set DSCP settings for video channel";
+    }
+  }
+  if (suspend_below_min_bitrate_changed) {
+    if (options_.suspend_below_min_bitrate.GetWithDefaultIfUnset(false)) {
+      for (SendChannelMap::iterator it = send_channels_.begin();
+           it != send_channels_.end(); ++it) {
+        engine()->vie()->codec()->SuspendBelowMinBitrate(
+            it->second->channel_id());
+      }
+    } else {
+      LOG(LS_WARNING) << "Cannot disable video suspension once it is enabled";
     }
   }
   return true;
@@ -2612,39 +2858,23 @@ bool WebRtcVideoMediaChannel::GetRenderer(uint32 ssrc,
   return true;
 }
 
-void WebRtcVideoMediaChannel::AdaptAndSendFrame(VideoCapturer* capturer,
-                                                const VideoFrame* frame) {
-  if (capturer->IsScreencast()) {
-    // Do not adapt frames that are screencast.
-    SendFrame(capturer, frame);
-    return;
-  }
-  // TODO(thorcarpenter): This is broken. One capturer registered on two ssrc
-  // will not send any video to the second ssrc send channel. We should remove
-  // GetSendChannel(capturer) and pass in an ssrc here.
-  WebRtcVideoChannelSendInfo* send_channel = GetSendChannel(capturer);
-  if (!send_channel) {
-    SendFrame(capturer, frame);
-    return;
-  }
-  const VideoFrame* output_frame = NULL;
-  send_channel->AdaptFrame(frame, &output_frame);
-  if (output_frame) {
-    SendFrame(send_channel, output_frame, capturer->IsScreencast());
-  }
-}
-
-// TODO(zhurunz): Add unittests to test this function.
 void WebRtcVideoMediaChannel::SendFrame(VideoCapturer* capturer,
                                         const VideoFrame* frame) {
-  // If there's send channel registers to the |capturer|, then only send the
-  // frame to that channel and return. Otherwise send the frame to the default
-  // channel, which currently taking frames from the engine.
-  WebRtcVideoChannelSendInfo* send_channel = GetSendChannel(capturer);
-  if (send_channel) {
-    SendFrame(send_channel, frame, capturer->IsScreencast());
+  // If the |capturer| is registered to any send channel, then send the frame
+  // to those send channels.
+  bool capturer_is_channel_owned = false;
+  for (SendChannelMap::iterator iter = send_channels_.begin();
+       iter != send_channels_.end(); ++iter) {
+    WebRtcVideoChannelSendInfo* send_channel = iter->second;
+    if (send_channel->video_capturer() == capturer) {
+      SendFrame(send_channel, frame, capturer->IsScreencast());
+      capturer_is_channel_owned = true;
+    }
+  }
+  if (capturer_is_channel_owned) {
     return;
   }
+
   // TODO(hellner): Remove below for loop once the captured frame no longer
   // come from the engine, i.e. the engine no longer owns a capturer.
   for (SendChannelMap::iterator iter = send_channels_.begin();
@@ -2702,8 +2932,8 @@ bool WebRtcVideoMediaChannel::SendFrame(
   frame_i420.y_pitch = frame_out->GetYPitch();
   frame_i420.u_pitch = frame_out->GetUPitch();
   frame_i420.v_pitch = frame_out->GetVPitch();
-  frame_i420.width = static_cast<unsigned short>(frame_out->GetWidth());
-  frame_i420.height = static_cast<unsigned short>(frame_out->GetHeight());
+  frame_i420.width = static_cast<uint16>(frame_out->GetWidth());
+  frame_i420.height = static_cast<uint16>(frame_out->GetHeight());
 
   int64 timestamp_ntp_ms = 0;
   // TODO(justinlin): Reenable after Windows issues with clock drift are fixed.
@@ -2966,9 +3196,18 @@ bool WebRtcVideoMediaChannel::ConfigureSending(int channel_id,
       new WebRtcVideoChannelSendInfo(channel_id, vie_capture,
                                      external_capture,
                                      engine()->cpu_monitor()));
+  if (engine()->vie()->base()->RegisterCpuOveruseObserver(
+      channel_id, send_channel->overuse_observer())) {
+    LOG_RTCERR1(RegisterCpuOveruseObserver, channel_id);
+    return false;
+  }
   send_channel->ApplyCpuOptions(options_);
   send_channel->SignalCpuAdaptationUnable.connect(this,
       &WebRtcVideoMediaChannel::OnCpuAdaptationUnable);
+
+  if (options_.cpu_overuse_detection.GetWithDefaultIfUnset(false)) {
+    send_channel->SetCpuOveruseDetection(true);
+  }
 
   // Register encoder observer for outgoing framerate and bitrate.
   if (engine()->vie()->codec()->RegisterEncoderObserver(
@@ -3046,7 +3285,8 @@ bool WebRtcVideoMediaChannel::SetNackFec(int channel_id,
       LOG_RTCERR1(SetNACKStatus, channel_id);
       return false;
     }
-    LOG(LS_INFO) << "NACK enabled for channel " << channel_id;
+    std::string enabled = nack_enabled ? "enabled" : "disabled";
+    LOG(LS_INFO) << "NACK " << enabled << " for channel " << channel_id;
   }
   return true;
 }
@@ -3143,6 +3383,15 @@ bool WebRtcVideoMediaChannel::SetSendCodec(
       return false;
     }
 
+    // NOTE: SetRtxSendPayloadType must be called after all simulcast SSRCs
+    // are configured. Otherwise ssrc's configured after this point will use
+    // the primary PT for RTX.
+    if (send_rtx_type_ != -1 &&
+        engine()->vie()->rtp()->SetRtxSendPayloadType(channel_id,
+                                                      send_rtx_type_) != 0) {
+        LOG_RTCERR2(SetRtxSendPayloadType, channel_id, send_rtx_type_);
+        return false;
+    }
   }
   send_channel->set_interval(
       cricket::VideoFormat::FpsToInterval(target_codec.maxFramerate));
@@ -3218,6 +3467,9 @@ void WebRtcVideoMediaChannel::LogSendCodecChange(const std::string& reason) {
                  << vie_codec.codecSpecific.VP8.keyFrameInterval;
   }
 
+  if (send_rtx_type_ != -1) {
+    LOG(LS_INFO) << "RTX payload type: " << send_rtx_type_;
+  }
 }
 
 bool WebRtcVideoMediaChannel::SetReceiveCodecs(
@@ -3482,6 +3734,35 @@ bool WebRtcVideoMediaChannel::SetHeaderExtension(ExtensionSetterFunction setter,
       header_extension_uri);
   return SetHeaderExtension(setter, channel_id, extension);
 }
+
+bool WebRtcVideoMediaChannel::SetLocalRtxSsrc(int channel_id,
+                                              const StreamParams& send_params,
+                                              uint32 primary_ssrc,
+                                              int stream_idx) {
+  uint32 rtx_ssrc = 0;
+  bool has_rtx = send_params.GetFidSsrc(primary_ssrc, &rtx_ssrc);
+  if (has_rtx && engine()->vie()->rtp()->SetLocalSSRC(
+      channel_id, rtx_ssrc, webrtc::kViEStreamTypeRtx, stream_idx) != 0) {
+    LOG_RTCERR4(SetLocalSSRC, channel_id, rtx_ssrc,
+                webrtc::kViEStreamTypeRtx, stream_idx);
+    return false;
+  }
+  return true;
+}
+
+void WebRtcVideoMediaChannel::MaybeConnectCapturer(VideoCapturer* capturer) {
+  if (capturer != NULL && GetSendChannelNum(capturer) == 1) {
+    capturer->SignalVideoFrame.connect(this,
+                                       &WebRtcVideoMediaChannel::SendFrame);
+  }
+}
+
+void WebRtcVideoMediaChannel::MaybeDisconnectCapturer(VideoCapturer* capturer) {
+  if (capturer != NULL && GetSendChannelNum(capturer) == 1) {
+    capturer->SignalVideoFrame.disconnect(this);
+  }
+}
+
 }  // namespace cricket
 
 #endif  // HAVE_WEBRTC_VIDEO

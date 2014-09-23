@@ -251,7 +251,7 @@ const QuotesData* quotesDataForLanguage(const AtomicString& lang)
 static const QuotesData* basicQuotesData()
 {
     // FIXME: The default quotes should be the fancy quotes for "en".
-    static QuotesData* staticBasicQuotes = QuotesData::create('"', '"', '\'', '\'').leakRef();
+    DEFINE_STATIC_REF(QuotesData, staticBasicQuotes, (QuotesData::create('"', '"', '\'', '\'')));
     return staticBasicQuotes;
 }
 
@@ -266,7 +266,7 @@ void RenderQuote::updateText()
     while (RenderObject* child = lastChild())
         child->destroy();
 
-    RenderTextFragment* fragment = new RenderTextFragment(document(), m_text.impl());
+    RenderTextFragment* fragment = new RenderTextFragment(&document(), m_text.impl());
     fragment->setStyle(style());
     addChild(fragment);
 }

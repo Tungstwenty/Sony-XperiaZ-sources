@@ -31,9 +31,10 @@ import copy
 import sys
 import time
 
-from webkitpy.layout_tests.port import Port, Driver, DriverOutput
+from webkitpy.layout_tests.port import DeviceFailure, Driver, DriverOutput, Port
 from webkitpy.layout_tests.port.base import VirtualTestSuite
 from webkitpy.layout_tests.models.test_configuration import TestConfiguration
+from webkitpy.layout_tests.models import test_run_results
 from webkitpy.common.system.filesystem_mock import MockFileSystem
 from webkitpy.common.system.crashlogs import CrashLogs
 
@@ -47,11 +48,11 @@ class TestInstance(object):
         self.crash = False
         self.web_process_crash = False
         self.exception = False
-        self.hang = False
         self.keyboard = False
         self.error = ''
         self.timeout = False
         self.is_reftest = False
+        self.device_failure = False
 
         # The values of each field are treated as raw byte strings. They
         # will be converted to unicode strings where appropriate using
@@ -82,8 +83,8 @@ class TestList(object):
             test.__dict__[key] = value
         self.tests[name] = test
 
-    def add_reftest(self, name, reference_name, same_image):
-        self.add(name, actual_checksum='xxx', actual_image='XXX', is_reftest=True)
+    def add_reftest(self, name, reference_name, same_image, crash=False):
+        self.add(name, actual_checksum='xxx', actual_image='XXX', is_reftest=True, crash=crash)
         if same_image:
             self.add(reference_name, actual_checksum='xxx', actual_image='XXX', is_reftest=True)
         else:
@@ -99,20 +100,20 @@ class TestList(object):
         return self.tests[item]
 
 #
-# These numbers may need to be updated whenever we add or delete tests.
+# These numbers may need to be updated whenever we add or delete tests. This includes virtual tests.
 #
-TOTAL_TESTS = 106
-TOTAL_SKIPS = 27
+TOTAL_TESTS = 110
+TOTAL_SKIPS = 28
 
 UNEXPECTED_PASSES = 1
-UNEXPECTED_FAILURES = 22
+UNEXPECTED_FAILURES = 25
 
 def unit_test_list():
     tests = TestList()
     tests.add('failures/expected/crash.html', crash=True)
     tests.add('failures/expected/exception.html', exception=True)
+    tests.add('failures/expected/device_failure.html', device_failure=True)
     tests.add('failures/expected/timeout.html', timeout=True)
-    tests.add('failures/expected/hang.html', hang=True)
     tests.add('failures/expected/missing_text.html', expected_text=None)
     tests.add('failures/expected/needsrebaseline.html', actual_text='needsrebaseline text')
     tests.add('failures/expected/needsmanualrebaseline.html', actual_text='needsmanualrebaseline text')
@@ -143,6 +144,7 @@ def unit_test_list():
     tests.add('failures/expected/newlines_with_excess_CR.html',
               expected_text="foo\r\r\r\n", actual_text="foo\n")
     tests.add('failures/expected/text.html', actual_text='text_fail-png')
+    tests.add('failures/expected/crash_then_text.html')
     tests.add('failures/expected/skip_text.html', actual_text='text diff')
     tests.add('failures/flaky/text.html')
     tests.add('failures/unexpected/missing_text.html', expected_text=None)
@@ -173,6 +175,7 @@ layer at (0,0) size 800x34
               actual_checksum='text-image-checksum_fail-checksum')
     tests.add('failures/unexpected/skip_pass.html')
     tests.add('failures/unexpected/text.html', actual_text='text_fail-txt')
+    tests.add('failures/unexpected/text_then_crash.html')
     tests.add('failures/unexpected/timeout.html', timeout=True)
     tests.add('http/tests/passes/text.html')
     tests.add('http/tests/passes/image.html')
@@ -201,17 +204,21 @@ layer at (0,0) size 800x34
 
     # For reftests.
     tests.add_reftest('passes/reftest.html', 'passes/reftest-expected.html', same_image=True)
+
+    # This adds a different virtual reference to ensure that that also works.
+    tests.add('virtual/passes/reftest-expected.html', actual_checksum='xxx', actual_image='XXX', is_reftest=True)
+
     tests.add_reftest('passes/mismatch.html', 'passes/mismatch-expected-mismatch.html', same_image=False)
     tests.add_reftest('passes/svgreftest.svg', 'passes/svgreftest-expected.svg', same_image=True)
     tests.add_reftest('passes/xhtreftest.xht', 'passes/xhtreftest-expected.html', same_image=True)
     tests.add_reftest('passes/phpreftest.php', 'passes/phpreftest-expected-mismatch.svg', same_image=False)
     tests.add_reftest('failures/expected/reftest.html', 'failures/expected/reftest-expected.html', same_image=False)
     tests.add_reftest('failures/expected/mismatch.html', 'failures/expected/mismatch-expected-mismatch.html', same_image=True)
+    tests.add_reftest('failures/unexpected/crash-reftest.html', 'failures/unexpected/crash-reftest-expected.html', same_image=True, crash=True)
     tests.add_reftest('failures/unexpected/reftest.html', 'failures/unexpected/reftest-expected.html', same_image=False)
     tests.add_reftest('failures/unexpected/mismatch.html', 'failures/unexpected/mismatch-expected-mismatch.html', same_image=True)
     tests.add('failures/unexpected/reftest-nopixel.html', actual_checksum=None, actual_image=None, is_reftest=True)
     tests.add('failures/unexpected/reftest-nopixel-expected.html', actual_checksum=None, actual_image=None, is_reftest=True)
-    # FIXME: Add a reftest which crashes.
     tests.add('reftests/foo/test.html')
     tests.add('reftests/foo/test-ref.html')
 
@@ -270,10 +277,11 @@ PERF_TEST_DIR = '/test.checkout/PerformanceTests'
 # we don't need a real filesystem to run the tests.
 def add_unit_tests_to_mock_filesystem(filesystem):
     # Add the test_expectations file.
-    filesystem.maybe_make_directory(LAYOUT_TEST_DIR + '/platform/test')
-    if not filesystem.exists(LAYOUT_TEST_DIR + '/platform/test/TestExpectations'):
-        filesystem.write_text_file(LAYOUT_TEST_DIR + '/platform/test/TestExpectations', """
+    filesystem.maybe_make_directory('/mock-checkout/LayoutTests')
+    if not filesystem.exists('/mock-checkout/LayoutTests/TestExpectations'):
+        filesystem.write_text_file('/mock-checkout/LayoutTests/TestExpectations', """
 Bug(test) failures/expected/crash.html [ Crash ]
+Bug(test) failures/expected/crash_then_text.html [ Failure ]
 Bug(test) failures/expected/image.html [ ImageOnlyFailure ]
 Bug(test) failures/expected/needsrebaseline.html [ NeedsRebaseline ]
 Bug(test) failures/expected/needsmanualrebaseline.html [ NeedsManualRebaseline ]
@@ -290,9 +298,9 @@ Bug(test) failures/expected/newlines_with_excess_CR.html [ Failure ]
 Bug(test) failures/expected/reftest.html [ ImageOnlyFailure ]
 Bug(test) failures/expected/text.html [ Failure ]
 Bug(test) failures/expected/timeout.html [ Timeout ]
-Bug(test) failures/expected/hang.html [ WontFix ]
 Bug(test) failures/expected/keyboard.html [ WontFix ]
 Bug(test) failures/expected/exception.html [ WontFix ]
+Bug(test) failures/expected/device_failure.html [ WontFix ]
 Bug(test) failures/unexpected/pass.html [ Failure ]
 Bug(test) passes/skipped/skip.html [ Skip ]
 Bug(test) passes/text.html [ Pass ]
@@ -357,6 +365,14 @@ class TestPort(Port):
         'test-win-win7', 'test-win-xp',
     )
 
+    FALLBACK_PATHS = {
+        'xp':          ['test-win-win7', 'test-win-xp'],
+        'win7':        ['test-win-win7'],
+        'leopard':     ['test-mac-leopard', 'test-mac-snowleopard'],
+        'snowleopard': ['test-mac-snowleopard'],
+        'lucid':       ['test-linux-x86_64', 'test-win-win7'],
+    }
+
     @classmethod
     def determine_full_port_name(cls, host, options, port_name):
         if port_name == 'test':
@@ -367,7 +383,17 @@ class TestPort(Port):
         Port.__init__(self, host, port_name or TestPort.default_port_name, **kwargs)
         self._tests = unit_test_list()
         self._flakes = set()
-        self._generic_expectations_path = LAYOUT_TEST_DIR + '/TestExpectations'
+
+        # FIXME: crbug.com/279494. This needs to be in the "real layout tests
+        # dir" in a mock filesystem, rather than outside of the checkout, so
+        # that tests that want to write to a TestExpectations file can share
+        # this between "test" ports and "real" ports.  This is the result of
+        # rebaseline_unittest.py having tests that refer to "real" port names
+        # and real builders instead of fake builders that point back to the
+        # test ports. rebaseline_unittest.py needs to not mix both "real" ports
+        # and "test" ports
+
+        self._generic_expectations_path = '/mock-checkout/LayoutTests/TestExpectations'
         self._results_directory = None
 
         self._operating_system = 'mac'
@@ -385,6 +411,11 @@ class TestPort(Port):
         }
         self._version = version_map[self._name]
 
+    def repository_paths(self):
+        """Returns a list of (repository_name, repository_path) tuples of its depending code base."""
+        # FIXME: We override this just to keep the perf tests happy.
+        return [('blink', self.layout_tests_dir())]
+
     def buildbot_archives_baselines(self):
         return self._name != 'test-win-xp'
 
@@ -396,27 +427,14 @@ class TestPort(Port):
         # the mock_drt Driver. We return something, but make sure it's useless.
         return 'MOCK _path_to_driver'
 
-    def baseline_search_path(self):
-        search_paths = {
-            'test-mac-snowleopard': ['test-mac-snowleopard'],
-            'test-mac-leopard': ['test-mac-leopard', 'test-mac-snowleopard'],
-            'test-win-win7': ['test-win-win7'],
-            'test-win-xp': ['test-win-xp', 'test-win-win7'],
-            'test-linux-x86_64': ['test-linux-x86_64', 'test-win-win7'],
-        }
-        return [self._webkit_baseline_path(d) for d in search_paths[self.name()]]
-
     def default_child_processes(self):
         return 1
 
-    def worker_startup_delay_secs(self):
-        return 0
-
-    def check_build(self, needs_http):
-        return True
+    def check_build(self, needs_http, printer):
+        return test_run_results.OK_EXIT_STATUS
 
     def check_sys_deps(self, needs_http):
-        return True
+        return test_run_results.OK_EXIT_STATUS
 
     def default_configuration(self):
         return 'Release'
@@ -499,6 +517,9 @@ class TestPort(Port):
     def path_to_generic_test_expectations_file(self):
         return self._generic_expectations_path
 
+    def _port_specific_expectations_files(self):
+        return [self._filesystem.join(self._webkit_baseline_path(d), 'TestExpectations') for d in ['test', 'test-win-xp']]
+
     def all_test_configurations(self):
         """Returns a sequence of the TestConfigurations the port supports."""
         # By default, we assume we want to test every graphics type in
@@ -532,8 +553,8 @@ class TestPort(Port):
 
     def virtual_test_suites(self):
         return [
-            VirtualTestSuite('virtual/passes', 'passes', ['--virtual-arg']),
-            VirtualTestSuite('virtual/skipped', 'failures/expected', ['--virtual-arg2']),
+            VirtualTestSuite('passes', 'passes', ['--virtual-arg'], use_legacy_naming=True),
+            VirtualTestSuite('skipped', 'failures/expected', ['--virtual-arg2'], use_legacy_naming=True),
         ]
 
 
@@ -551,13 +572,6 @@ class TestDriver(Driver):
         return [self._port._path_to_driver()] + [pixel_tests_flag] + self._port.get_option('additional_drt_flag', []) + per_test_args
 
     def run_test(self, driver_input, stop_when_done):
-        base = self._port.lookup_virtual_test_base(driver_input.test_name)
-        if base:
-            virtual_driver_input = copy.copy(driver_input)
-            virtual_driver_input.test_name = base
-            virtual_driver_input.args = self._port.lookup_virtual_test_args(driver_input.test_name)
-            return self.run_test(virtual_driver_input, stop_when_done)
-
         if not self.started:
             self.started = True
             self.pid = TestDriver.next_pid
@@ -571,15 +585,35 @@ class TestDriver(Driver):
             raise KeyboardInterrupt
         if test.exception:
             raise ValueError('exception from ' + test_name)
-        if test.hang:
-            time.sleep((float(driver_input.timeout) * 4) / 1000.0 + 1.0)  # The 1.0 comes from thread_padding_sec in layout_test_runnery.
+        if test.device_failure:
+            raise DeviceFailure('device failure in ' + test_name)
 
         audio = None
         actual_text = test.actual_text
+        crash = test.crash
+        web_process_crash = test.web_process_crash
 
-        if 'flaky' in test_name and not test_name in self._port._flakes:
+        if 'flaky/text.html' in test_name and not test_name in self._port._flakes:
             self._port._flakes.add(test_name)
             actual_text = 'flaky text failure'
+
+        if 'crash_then_text.html' in test_name:
+            if test_name in self._port._flakes:
+                actual_text = 'text failure'
+            else:
+                self._port._flakes.add(test_name)
+                crashed_process_name = self._port.driver_name()
+                crashed_pid = 1
+                crash = True
+
+        if 'text_then_crash.html' in test_name:
+            if test_name in self._port._flakes:
+                crashed_process_name = self._port.driver_name()
+                crashed_pid = 1
+                crash = True
+            else:
+                self._port._flakes.add(test_name)
+                actual_text = 'text failure'
 
         if actual_text and test_args and test_name == 'passes/args.html':
             actual_text = actual_text + ' ' + ' '.join(test_args)
@@ -588,10 +622,10 @@ class TestDriver(Driver):
             audio = base64.b64decode(test.actual_audio)
         crashed_process_name = None
         crashed_pid = None
-        if test.crash:
+        if crash:
             crashed_process_name = self._port.driver_name()
             crashed_pid = 1
-        elif test.web_process_crash:
+        elif web_process_crash:
             crashed_process_name = 'WebProcess'
             crashed_pid = 2
 
@@ -608,7 +642,7 @@ class TestDriver(Driver):
         else:
             image = test.actual_image
         return DriverOutput(actual_text, image, test.actual_checksum, audio,
-            crash=test.crash or test.web_process_crash, crashed_process_name=crashed_process_name,
+            crash=(crash or web_process_crash), crashed_process_name=crashed_process_name,
             crashed_pid=crashed_pid, crash_log=crash_log,
             test_time=time.time() - start_time, timeout=test.timeout, error=test.error, pid=self.pid)
 

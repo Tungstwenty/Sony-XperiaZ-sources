@@ -31,10 +31,10 @@
 #ifndef ScriptController_h
 #define ScriptController_h
 
-#include "bindings/v8/ScriptInstance.h"
 #include "bindings/v8/ScriptValue.h"
+#include "bindings/v8/SharedPersistent.h"
 
-#include "core/loader/CrossOriginAccessControl.h"
+#include "core/fetch/CrossOriginAccessControl.h"
 #include "wtf/Forward.h"
 #include "wtf/HashMap.h"
 #include "wtf/RefCounted.h"
@@ -47,6 +47,7 @@ struct NPObject;
 namespace WebCore {
 
 class DOMWrapperWorld;
+class ExecutionContext;
 class Event;
 class Frame;
 class HTMLDocument;
@@ -65,12 +66,13 @@ enum ReasonForCallingCanExecuteScripts {
     NotAboutToExecuteScript
 };
 
-enum IsolatedWorldConstants {
-    EmbedderWorldIdLimit = (1 << 29)
-};
-
 class ScriptController {
 public:
+    enum ExecuteScriptPolicy {
+        ExecuteScriptWhenScriptsDisabled,
+        DoNotExecuteScriptWhenScriptsDisabled
+    };
+
     ScriptController(Frame*);
     ~ScriptController();
 
@@ -78,11 +80,11 @@ public:
     V8WindowShell* windowShell(DOMWrapperWorld*);
     V8WindowShell* existingWindowShell(DOMWrapperWorld*);
 
-    ScriptValue executeScript(const ScriptSourceCode&);
-    ScriptValue executeScript(const String& script, bool forceUserGesture = false);
-
     // Evaluate JavaScript in the main world.
-    ScriptValue executeScriptInMainWorld(const ScriptSourceCode&, AccessControlStatus = NotSharableCrossOrigin);
+    void executeScriptInMainWorld(const String&, ExecuteScriptPolicy = DoNotExecuteScriptWhenScriptsDisabled);
+    void executeScriptInMainWorld(const ScriptSourceCode&, AccessControlStatus = NotSharableCrossOrigin);
+    ScriptValue executeScriptInMainWorldAndReturnValue(const ScriptSourceCode&);
+    v8::Local<v8::Value> executeScriptAndReturnValue(v8::Handle<v8::Context>, const ScriptSourceCode&, AccessControlStatus = NotSharableCrossOrigin);
 
     // Executes JavaScript in an isolated world. The script gets its own global scope,
     // its own prototypes for intrinsic JavaScript objects (String, Array, and so-on),
@@ -97,11 +99,8 @@ public:
     // Returns true if argument is a JavaScript URL.
     bool executeScriptIfJavaScriptURL(const KURL&);
 
-    v8::Local<v8::Value> compileAndRunScript(const ScriptSourceCode&, AccessControlStatus = NotSharableCrossOrigin);
-
     v8::Local<v8::Value> callFunction(v8::Handle<v8::Function>, v8::Handle<v8::Object>, int argc, v8::Handle<v8::Value> argv[]);
-    ScriptValue callFunctionEvenIfScriptDisabled(v8::Handle<v8::Function>, v8::Handle<v8::Object>, int argc, v8::Handle<v8::Value> argv[]);
-    static v8::Local<v8::Value> callFunctionWithInstrumentation(ScriptExecutionContext*, v8::Handle<v8::Function>, v8::Handle<v8::Object> receiver, int argc, v8::Handle<v8::Value> args[]);
+    static v8::Local<v8::Value> callFunction(ExecutionContext*, v8::Handle<v8::Function>, v8::Handle<v8::Object> receiver, int argc, v8::Handle<v8::Value> info[], v8::Isolate*);
 
     // Returns true if the current world is isolated, and has its own Content
     // Security Policy. In this case, the policy of the main world should be
@@ -111,7 +110,7 @@ public:
     // Creates a property of the global object of a frame.
     void bindToWindowObject(Frame*, const String& key, NPObject*);
 
-    PassScriptInstance createScriptInstanceForWidget(Widget*);
+    PassRefPtr<SharedPersistent<v8::Object> > createPluginWrapper(Widget*);
 
     void enableEval();
     void disableEval(const String& errorMessage);
@@ -130,11 +129,6 @@ public:
     v8::Local<v8::Context> currentWorldContext();
 
     TextPosition eventHandlerPosition() const;
-
-    static bool processingUserGesture();
-
-    void setPaused(bool paused) { m_paused = paused; }
-    bool isPaused() const { return m_paused; }
 
     const String* sourceURL() const { return m_sourceURL; } // 0 if we are not evaluating any script.
 
@@ -163,10 +157,13 @@ public:
     bool setContextDebugId(int);
     static int contextDebugId(v8::Handle<v8::Context>);
 
+    v8::Isolate* isolate() const { return m_isolate; }
+
 private:
     typedef HashMap<int, OwnPtr<V8WindowShell> > IsolatedWorldMap;
     typedef HashMap<Widget*, NPObject*> PluginObjectMap;
 
+    ScriptValue evaluateScriptInMainWorld(const ScriptSourceCode&, AccessControlStatus, ExecuteScriptPolicy);
     void clearForClose(bool destroyGlobal);
 
     Frame* m_frame;
@@ -175,8 +172,6 @@ private:
 
     OwnPtr<V8WindowShell> m_windowShell;
     IsolatedWorldMap m_isolatedWorlds;
-
-    bool m_paused;
 
     // A mapping between Widgets and their corresponding script object.
     // This list is used so that when the plugin dies, we can immediately

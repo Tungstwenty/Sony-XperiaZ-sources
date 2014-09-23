@@ -22,7 +22,6 @@
 
 #include "core/svg/SVGPolyElement.h"
 
-#include "SVGNames.h"
 #include "core/dom/Document.h"
 #include "core/rendering/svg/RenderSVGResource.h"
 #include "core/svg/SVGAnimatedPointList.h"
@@ -46,6 +45,17 @@ const SVGPropertyInfo* SVGPolyElement::pointsPropertyInfo()
     return s_propertyInfo;
 }
 
+SVGPointList& SVGPolyElement::pointsCurrentValue()
+{
+    SVGAnimatedProperty* wrapper = SVGAnimatedProperty::lookupWrapper<SVGPolyElement, SVGAnimatedPointList>(this, pointsPropertyInfo());
+    if (wrapper && wrapper->isAnimating()) {
+        if (SVGListPropertyTearOff<SVGPointList>* ap = animatedPoints())
+            return ap->values();
+    }
+
+    return m_points.value;
+}
+
 // Animated property definitions
 DEFINE_ANIMATED_BOOLEAN(SVGPolyElement, SVGNames::externalResourcesRequiredAttr, ExternalResourcesRequired, externalResourcesRequired)
 
@@ -55,8 +65,8 @@ BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGPolyElement)
     REGISTER_PARENT_ANIMATED_PROPERTIES(SVGGraphicsElement)
 END_REGISTER_ANIMATED_PROPERTIES
 
-SVGPolyElement::SVGPolyElement(const QualifiedName& tagName, Document* document)
-    : SVGGraphicsElement(tagName, document)
+SVGPolyElement::SVGPolyElement(const QualifiedName& tagName, Document& document)
+    : SVGGeometryElement(tagName, document)
 {
     registerAnimatedPropertiesForSVGPolyElement();
 }
@@ -65,7 +75,6 @@ bool SVGPolyElement::isSupportedAttribute(const QualifiedName& attrName)
 {
     DEFINE_STATIC_LOCAL(HashSet<QualifiedName>, supportedAttributes, ());
     if (supportedAttributes.isEmpty()) {
-        SVGLangSpace::addSupportedAttributes(supportedAttributes);
         SVGExternalResourcesRequired::addSupportedAttributes(supportedAttributes);
         supportedAttributes.add(SVGNames::pointsAttr);
     }
@@ -75,14 +84,14 @@ bool SVGPolyElement::isSupportedAttribute(const QualifiedName& attrName)
 void SVGPolyElement::parseAttribute(const QualifiedName& name, const AtomicString& value)
 {
     if (!isSupportedAttribute(name)) {
-        SVGGraphicsElement::parseAttribute(name, value);
+        SVGGeometryElement::parseAttribute(name, value);
         return;
     }
 
     if (name == SVGNames::pointsAttr) {
         SVGPointList newList;
         if (!pointsListFromSVGData(newList, value))
-            document()->accessSVGExtensions()->reportError("Problem parsing points=\"" + value + "\"");
+            document().accessSVGExtensions()->reportError("Problem parsing points=\"" + value + "\"");
 
         if (SVGAnimatedProperty* wrapper = SVGAnimatedProperty::lookupWrapper<SVGPolyElement, SVGAnimatedPointList>(this, pointsPropertyInfo()))
             static_cast<SVGAnimatedPointList*>(wrapper)->detachListWrappers(newList.size());
@@ -91,8 +100,6 @@ void SVGPolyElement::parseAttribute(const QualifiedName& name, const AtomicStrin
         return;
     }
 
-    if (SVGLangSpace::parseAttribute(name, value))
-        return;
     if (SVGExternalResourcesRequired::parseAttribute(name, value))
         return;
 
@@ -102,7 +109,7 @@ void SVGPolyElement::parseAttribute(const QualifiedName& name, const AtomicStrin
 void SVGPolyElement::svgAttributeChanged(const QualifiedName& attrName)
 {
     if (!isSupportedAttribute(attrName)) {
-        SVGGraphicsElement::svgAttributeChanged(attrName);
+        SVGGeometryElement::svgAttributeChanged(attrName);
         return;
     }
 
@@ -118,7 +125,7 @@ void SVGPolyElement::svgAttributeChanged(const QualifiedName& attrName)
         return;
     }
 
-    if (SVGLangSpace::isKnownAttribute(attrName) || SVGExternalResourcesRequired::isKnownAttribute(attrName)) {
+    if (SVGExternalResourcesRequired::isKnownAttribute(attrName)) {
         RenderSVGResource::markForLayoutAndParentResourceInvalidation(renderer);
         return;
     }

@@ -32,7 +32,7 @@
 
 /**
  * @constructor
- * @param {Array.<CSSAgent.CSSPropertyInfo|string>} properties
+ * @param {!Array.<!CSSAgent.CSSPropertyInfo|string>} properties
  */
 WebInspector.CSSMetadata = function(properties)
 {
@@ -106,7 +106,7 @@ WebInspector.CSSMetadata.canonicalPropertyName = function(name)
 {
     if (!name || name.length < 9 || name.charAt(0) !== "-")
         return name.toLowerCase();
-    var match = name.match(/(?:-webkit-|-khtml-|-apple-)(.+)/);
+    var match = name.match(/(?:-webkit-)(.+)/);
     if (!match)
         return name.toLowerCase();
     return match[1].toLowerCase();
@@ -365,7 +365,7 @@ WebInspector.CSSMetadata._propertyDataMap = {
         "none", "inline", "block", "list-item", "run-in", "compact", "inline-block", "table", "inline-table",
         "table-row-group", "table-header-group", "table-footer-group", "table-row", "table-column-group",
         "table-column", "table-cell", "table-caption", "-webkit-box", "-webkit-inline-box",
-        "-webkit-flex", "-webkit-inline-flex", "-webkit-grid", "-webkit-inline-grid", "-wap-marquee"
+        "flex", "inline-flex", "grid", "inline-grid"
     ] },
     "-webkit-text-emphasis-position": { values: [
         "over", "under"
@@ -409,9 +409,6 @@ WebInspector.CSSMetadata._propertyDataMap = {
     ] },
     "page-break-before": { values: [
         "left", "right", "auto", "always", "avoid"
-    ] },
-    "-webkit-hyphens": { values: [
-        "none", "auto", "manual"
     ] },
     "border-image": { values: [
         "repeat", "stretch"
@@ -459,7 +456,7 @@ WebInspector.CSSMetadata._propertyDataMap = {
         "hide", "show"
     ] },
     "pointer-events": { values: [
-        "none", "all", "auto", "visible", "visiblepainted", "visiblefill", "visiblestroke", "painted", "fill", "stroke"
+        "none", "all", "auto", "visible", "visiblepainted", "visiblefill", "visiblestroke", "painted", "fill", "stroke", "bounding-box"
     ] },
     "letter-spacing": { values: [
         "normal"
@@ -535,22 +532,22 @@ WebInspector.CSSMetadata._propertyDataMap = {
     "resize": { values: [
         "none", "both", "horizontal", "vertical"
     ] },
-    "-webkit-align-content": { values: [
+    "align-content": { values: [
         "flex-start", "flex-end", "center", "space-between", "space-around", "stretch"
     ] },
-    "-webkit-align-items": {  values: [
+    "align-items": {  values: [
         "flex-start", "flex-end", "center", "baseline", "stretch"
     ] },
-    "-webkit-align-self": {  values: [
+    "align-self": {  values: [
         "auto", "flex-start", "flex-end", "center", "baseline", "stretch"
     ] },
-    "-webkit-flex-direction": { values: [
+    "flex-direction": { values: [
         "row", "row-reverse", "column", "column-reverse"
     ] },
-    "-webkit-justify-content": { values: [
+    "justify-content": { values: [
         "flex-start", "flex-end", "center", "space-between", "space-around"
     ] },
-    "-webkit-flex-wrap": { values: [
+    "flex-wrap": { values: [
         "nowrap", "wrap", "wrap-reverse"
     ] },
     "-webkit-animation-timing-function": { values: [
@@ -598,7 +595,7 @@ WebInspector.CSSMetadata._propertyDataMap = {
     "-webkit-perspective-origin": { values: [
         "left", "center", "right", "top", "bottom"
     ] },
-    "-webkit-text-align-last": { values: [
+    "text-align-last": { values: [
         "auto", "start", "end", "left", "right", "center", "justify"
     ] },
     "-webkit-text-decoration-line": { values: [
@@ -636,8 +633,6 @@ WebInspector.CSSMetadata._propertyDataMap = {
     "-webkit-column-rule-width": { m: "multicol", a: "crw" },
     "-webkit-column-width": { m: "multicol", a: "cw" },
     "-webkit-columns": { m: "multicol" },
-    "-webkit-grid-columns": { m: "grid" },
-    "-webkit-grid-rows": { m: "grid" },
     "-webkit-order": { m: "flexbox" },
     "-webkit-text-decoration-color": { m: "text-decor" },
     "-webkit-text-emphasis-color": { m: "text-decor" },
@@ -664,6 +659,8 @@ WebInspector.CSSMetadata._propertyDataMap = {
     "color": { m: "color", a: "foreground" },
     "counter-increment": { m: "generate" },
     "counter-reset": { m: "generate" },
+    "grid-definition-columns": { m: "grid" },
+    "grid-definition-rows": { m: "grid" },
     "height": { m: "box" },
     "image-orientation": { m: "images" },
     "left": { m: "visuren" },
@@ -708,7 +705,7 @@ WebInspector.CSSMetadata.keywordsForProperty = function(propertyName)
 
 /**
  * @param {string} propertyName
- * @return {Object}
+ * @return {?Object}
  */
 WebInspector.CSSMetadata.descriptor = function(propertyName)
 {
@@ -876,7 +873,7 @@ WebInspector.CSSMetadata.prototype = {
     },
 
     /**
-     * @param {Array.<string>} properties
+     * @param {!Array.<string>} properties
      * @return {number}
      */
     mostUsedOf: function(properties)

@@ -88,6 +88,7 @@
         'media/base/testutils.cc',
         'media/base/testutils.h',
         'media/devices/fakedevicemanager.h',
+        'media/webrtc/dummyinstantiation.cc',
         'media/webrtc/fakewebrtccommon.h',
         'media/webrtc/fakewebrtcdeviceinfo.h',
         'media/webrtc/fakewebrtcvcmfactory.h',
@@ -375,28 +376,33 @@
       ],
       # TODO(ronghuawu): Reenable below unit tests that require gmock.
       'sources': [
-        'app/webrtc/datachannel_unittest.cc',
+        # 'app/webrtc/datachannel_unittest.cc',
         'app/webrtc/dtmfsender_unittest.cc',
         'app/webrtc/jsepsessiondescription_unittest.cc',
         'app/webrtc/localaudiosource_unittest.cc',
-        'app/webrtc/localvideosource_unittest.cc',
         # 'app/webrtc/mediastream_unittest.cc',
         # 'app/webrtc/mediastreamhandler_unittest.cc',
         'app/webrtc/mediastreamsignaling_unittest.cc',
         'app/webrtc/peerconnection_unittest.cc',
+        'app/webrtc/peerconnectionendtoend_unittest.cc',
         'app/webrtc/peerconnectionfactory_unittest.cc',
         'app/webrtc/peerconnectioninterface_unittest.cc',
         # 'app/webrtc/peerconnectionproxy_unittest.cc',
+        'app/webrtc/remotevideocapturer_unittest.cc',
         'app/webrtc/test/fakeaudiocapturemodule.cc',
         'app/webrtc/test/fakeaudiocapturemodule.h',
         'app/webrtc/test/fakeaudiocapturemodule_unittest.cc',
         'app/webrtc/test/fakeconstraints.h',
+        'app/webrtc/test/fakedatachannelprovider.h',
         'app/webrtc/test/fakedtlsidentityservice.h',
         'app/webrtc/test/fakemediastreamsignaling.h',
         'app/webrtc/test/fakeperiodicvideocapturer.h',
         'app/webrtc/test/fakevideotrackrenderer.h',
         'app/webrtc/test/mockpeerconnectionobservers.h',
+        'app/webrtc/test/peerconnectiontestwrapper.h',
+        'app/webrtc/test/peerconnectiontestwrapper.cc',
         'app/webrtc/test/testsdpstrings.h',
+        'app/webrtc/videosource_unittest.cc',
         'app/webrtc/videotrack_unittest.cc',
         'app/webrtc/webrtcsdp_unittest.cc',
         'app/webrtc/webrtcsession_unittest.cc',
@@ -464,13 +470,16 @@
         },
       ],
     }],
-    ['libjingle_objc == 1', {
+    ['OS=="ios" or (OS=="mac" and target_arch!="ia32" and mac_sdk>="10.7")', {
+      # The >=10.7 above is required to make ARC link cleanly (e.g. as
+      # opposed to _compile_ cleanly, which the library under test
+      # does just fine on 10.6 too).
       'targets': [
         {
+        'target_name': 'libjingle_peerconnection_objc_test',
           'variables': {
             'infoplist_file': './app/webrtc/objctests/Info.plist',
           },
-          'target_name': 'libjingle_peerconnection_objc_test',
           'type': 'executable',
           'mac_bundle': 1,
           'mac_bundle_resources': [
@@ -509,6 +518,80 @@
                 'app/webrtc/objctests/mac/main.mm',
               ],
             }],
+          ],
+        },  # target libjingle_peerconnection_objc_test
+      ],
+    }],
+    ['test_isolation_mode != "noop"', {
+      'targets': [
+        {
+          'target_name': 'libjingle_media_unittest_run',
+          'type': 'none',
+          'dependencies': [
+            'libjingle_media_unittest',
+          ],
+          'includes': [
+            'build/isolate.gypi',
+            'libjingle_media_unittest.isolate',
+          ],
+          'sources': [
+            'libjingle_media_unittest.isolate',
+          ],
+        },
+        {
+          'target_name': 'libjingle_p2p_unittest_run',
+          'type': 'none',
+          'dependencies': [
+            'libjingle_p2p_unittest',
+          ],
+          'includes': [
+            'build/isolate.gypi',
+            'libjingle_p2p_unittest.isolate',
+          ],
+          'sources': [
+            'libjingle_p2p_unittest.isolate',
+          ],
+        },
+        {
+          'target_name': 'libjingle_peerconnection_unittest_run',
+          'type': 'none',
+          'dependencies': [
+            'libjingle_peerconnection_unittest',
+          ],
+          'includes': [
+            'build/isolate.gypi',
+            'libjingle_peerconnection_unittest.isolate',
+          ],
+          'sources': [
+            'libjingle_peerconnection_unittest.isolate',
+          ],
+        },
+        {
+          'target_name': 'libjingle_sound_unittest_run',
+          'type': 'none',
+          'dependencies': [
+            'libjingle_sound_unittest',
+          ],
+          'includes': [
+            'build/isolate.gypi',
+            'libjingle_sound_unittest.isolate',
+          ],
+          'sources': [
+            'libjingle_sound_unittest.isolate',
+          ],
+        },
+        {
+          'target_name': 'libjingle_unittest_run',
+          'type': 'none',
+          'dependencies': [
+            'libjingle_unittest',
+          ],
+          'includes': [
+            'build/isolate.gypi',
+            'libjingle_unittest.isolate',
+          ],
+          'sources': [
+            'libjingle_unittest.isolate',
           ],
         },
       ],

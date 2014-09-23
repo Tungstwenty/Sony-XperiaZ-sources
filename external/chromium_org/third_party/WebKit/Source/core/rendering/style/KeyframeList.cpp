@@ -22,6 +22,7 @@
 #include "config.h"
 #include "core/rendering/style/KeyframeList.h"
 
+#include "core/animation/Animation.h"
 #include "core/css/StylePropertySet.h"
 #include "core/rendering/RenderObject.h"
 
@@ -36,9 +37,16 @@ void KeyframeValue::addProperties(const StylePropertySet* propertySet)
         CSSPropertyID property = propertySet->propertyAt(i).id();
         // Timing-function within keyframes is special, because it is not animated; it just
         // describes the timing function between this keyframe and the next.
-        if (property != CSSPropertyWebkitAnimationTimingFunction)
+        if (property != CSSPropertyWebkitAnimationTimingFunction && property != CSSPropertyAnimationTimingFunction)
             addProperty(property);
     }
+}
+
+TimingFunction* KeyframeValue::timingFunction(const RenderStyle& keyframeStyle)
+{
+    const CSSAnimationDataList* animations = keyframeStyle.animations();
+    ASSERT(animations && !animations->isEmpty());
+    return animations->animation(0)->timingFunction();
 }
 
 KeyframeList::~KeyframeList()
@@ -50,25 +58,6 @@ void KeyframeList::clear()
 {
     m_keyframes.clear();
     m_properties.clear();
-}
-
-bool KeyframeList::operator==(const KeyframeList& o) const
-{
-    if (m_keyframes.size() != o.m_keyframes.size())
-        return false;
-
-    Vector<KeyframeValue>::const_iterator it2 = o.m_keyframes.begin();
-    for (Vector<KeyframeValue>::const_iterator it1 = m_keyframes.begin(); it1 != m_keyframes.end(); ++it1) {
-        if (it1->key() != it2->key())
-            return false;
-        const RenderStyle& style1 = *it1->style();
-        const RenderStyle& style2 = *it2->style();
-        if (style1 != style2)
-            return false;
-        ++it2;
-    }
-
-    return true;
 }
 
 void KeyframeList::insert(const KeyframeValue& keyframe)

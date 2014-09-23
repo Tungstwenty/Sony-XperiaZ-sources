@@ -33,15 +33,16 @@
 
 #include "WebCommon.h"
 
-#if WEBKIT_IMPLEMENTATION
-#include "core/platform/graphics/IntSize.h"
+#if INSIDE_BLINK
+#include "platform/geometry/IntSize.h"
 #else
+#include <algorithm>
 #include <cmath>
 #include <ui/gfx/size.h>
 #include <ui/gfx/vector2d.h>
 #endif
 
-namespace WebKit {
+namespace blink {
 
 struct WebSize {
     int width;
@@ -61,7 +62,7 @@ struct WebSize {
     {
     }
 
-#if WEBKIT_IMPLEMENTATION
+#if INSIDE_BLINK
     WebSize(const WebCore::IntSize& s)
         : width(s.width())
         , height(s.height())
@@ -128,6 +129,6 @@ inline bool operator!=(const WebSize& a, const WebSize& b)
     return !(a == b);
 }
 
-} // namespace WebKit
+} // namespace blink
 
 #endif

@@ -129,12 +129,14 @@ public:
         SpanningRowsHeight()
             : totalRowsHeight(0)
             , spanningCellHeightIgnoringBorderSpacing(0)
+            , rowWithOnlySpanningCells(false)
         {
         }
 
         Vector<int> rowHeight;
         int totalRowsHeight;
         int spanningCellHeightIgnoringBorderSpacing;
+        bool rowWithOnlySpanningCells;
     };
 
     const BorderValue& borderAdjoiningTableStart() const
@@ -241,6 +243,11 @@ private:
 
     void ensureRows(unsigned);
 
+    bool rowHasOnlySpanningCells(unsigned);
+    unsigned calcRowHeightHavingOnlySpanningCells(unsigned);
+    void updateRowsHeightHavingOnlySpanningCells(RenderTableCell*, struct SpanningRowsHeight&);
+    bool isHeightNeededForRowHavingOnlySpanningCells(unsigned);
+
     void populateSpanningRowsHeightFromCell(RenderTableCell*, struct SpanningRowsHeight&);
     void distributeExtraRowSpanHeightToPercentRows(RenderTableCell*, int, int&, Vector<int>&);
     void distributeExtraRowSpanHeightToAutoRows(RenderTableCell*, int, int&, Vector<int>&);
@@ -301,20 +308,7 @@ private:
     HashMap<pair<const RenderTableCell*, int>, CollapsedBorderValue > m_cellsCollapsedBorders;
 };
 
-inline RenderTableSection* toRenderTableSection(RenderObject* object)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!object || object->isTableSection());
-    return static_cast<RenderTableSection*>(object);
-}
-
-inline const RenderTableSection* toRenderTableSection(const RenderObject* object)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!object || object->isTableSection());
-    return static_cast<const RenderTableSection*>(object);
-}
-
-// This will catch anyone doing an unnecessary cast.
-void toRenderTableSection(const RenderTableSection*);
+DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderTableSection, isTableSection());
 
 } // namespace WebCore
 

@@ -50,6 +50,7 @@
 
 // Basic includes
 #include "../include/v8.h"
+#include "../include/v8-platform.h"
 #include "v8globals.h"
 #include "v8checks.h"
 #include "allocation.h"
@@ -82,12 +83,6 @@ class V8 : public AllStatic {
   // empty heap.
   static bool Initialize(Deserializer* des);
   static void TearDown();
-  static bool IsRunning() { return is_running_; }
-  static bool UseCrankshaft() { return use_crankshaft_; }
-  // To be dead you have to have lived
-  // TODO(isolates): move IsDead to Isolate.
-  static bool IsDead() { return has_fatal_error_ || has_been_disposed_; }
-  static void SetFatalError();
 
   // Report process out of memory. Implementation found in api.cc.
   static void FatalProcessOutOfMemory(const char* location,
@@ -101,18 +96,6 @@ class V8 : public AllStatic {
       ReturnAddressLocationResolver resolver);
   // Support for entry hooking JITed code.
   static void SetFunctionEntryHook(FunctionEntryHook entry_hook);
-  // Random number generation support. Not cryptographically safe.
-  static uint32_t Random(Context* context);
-  // We use random numbers internally in memory allocation and in the
-  // compilers for security. In order to prevent information leaks we
-  // use a separate random state for internal random number
-  // generation.
-  static uint32_t RandomPrivate(Isolate* isolate);
-  static Object* FillHeapNumberWithRandom(Object* heap_number,
-                                          Context* context);
-
-  // Idle notification directly from the API.
-  static bool IdleNotification(int hint);
 
   static void AddCallCompletedCallback(CallCompletedCallback callback);
   static void RemoveCallCompletedCallback(CallCompletedCallback callback);
@@ -127,26 +110,20 @@ class V8 : public AllStatic {
     array_buffer_allocator_ = allocator;
   }
 
+  static void InitializePlatform(v8::Platform* platform);
+  static void ShutdownPlatform();
+  static v8::Platform* GetCurrentPlatform();
+
  private:
   static void InitializeOncePerProcessImpl();
   static void InitializeOncePerProcess();
 
-  // True if engine is currently running
-  static bool is_running_;
-  // True if V8 has ever been run
-  static bool has_been_set_up_;
-  // True if error has been signaled for current engine
-  // (reset to false if engine is restarted)
-  static bool has_fatal_error_;
-  // True if engine has been shut down
-  // (reset if engine is restarted)
-  static bool has_been_disposed_;
-  // True if we are using the crankshaft optimizing compiler.
-  static bool use_crankshaft_;
   // List of callbacks when a Call completes.
   static List<CallCompletedCallback>* call_completed_callbacks_;
   // Allocator for external array buffers.
   static v8::ArrayBuffer::Allocator* array_buffer_allocator_;
+  // v8::Platform to use.
+  static v8::Platform* platform_;
 };
 
 

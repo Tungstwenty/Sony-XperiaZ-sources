@@ -31,6 +31,7 @@ ul.actions>li {
 ol.notifications {
     list-style: none;
     padding: 0;
+    margin: 0;
 }
 
 ol.notifications ul {
@@ -66,7 +67,7 @@ ol.notifications div.what {
 
     ol.notifications>li div.what ul.effects>li.builder {
         display: inline;
-        padding-left: 5px;
+        padding-right: 5px;
     }
 
 ol.notifications ul.causes>li, ol.notifications div.problem {

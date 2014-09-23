@@ -39,7 +39,7 @@
 #include <gtest/gtest.h>
 #include "core/page/Page.h"
 #include "core/page/PageSerializer.h"
-#include "core/platform/SerializedResource.h"
+#include "platform/SerializedResource.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebThread.h"
@@ -50,10 +50,10 @@
 #include "wtf/Vector.h"
 
 using namespace WebCore;
-using namespace WebKit;
-using WebKit::FrameTestHelpers::runPendingTasks;
-using WebKit::URLTestHelpers::toKURL;
-using WebKit::URLTestHelpers::registerMockedURLLoad;
+using namespace blink;
+using blink::FrameTestHelpers::runPendingTasks;
+using blink::URLTestHelpers::toKURL;
+using blink::URLTestHelpers::registerMockedURLLoad;
 
 namespace {
 
@@ -74,7 +74,7 @@ protected:
     virtual void SetUp()
     {
         // Create and initialize the WebView.
-        m_webViewImpl = static_cast<WebViewImpl*>(WebView::create(0));
+        m_webViewImpl = toWebViewImpl(WebView::create(0));
 
         // We want the images to load and JavaScript to be on.
         WebSettings* settings = m_webViewImpl->settings();
@@ -82,7 +82,8 @@ protected:
         settings->setLoadsImagesAutomatically(true);
         settings->setJavaScriptEnabled(true);
 
-        m_webViewImpl->initializeMainFrame(&m_webFrameClient);
+        m_mainFrame = WebFrame::create(&m_webFrameClient);
+        m_webViewImpl->setMainFrame(m_mainFrame);
     }
 
     virtual void TearDown()
@@ -90,6 +91,8 @@ protected:
         Platform::current()->unitTestSupport()->unregisterAllMockedURLs();
         m_webViewImpl->close();
         m_webViewImpl = 0;
+        m_mainFrame->close();
+        m_mainFrame = 0;
     }
 
     void setBaseUrl(const char* url)
@@ -143,22 +146,38 @@ protected:
         return m_resources;
     }
 
-    bool isSerialized(const char* url, const char* mimeType)
+
+    const SerializedResource* getResource(const char* url, const char* mimeType)
     {
         KURL kURL = KURL(m_baseUrl, url);
-        WTF::String mime(mimeType);
+        String mime(mimeType);
         for (size_t i = 0; i < m_resources.size(); ++i) {
             const SerializedResource& resource = m_resources[i];
-            if (resource.url == kURL && !resource.data->isEmpty() && equalIgnoringCase(resource.mimeType, mime))
-                return true;
+            if (resource.url == kURL && !resource.data->isEmpty()
+                && (mime.isNull() || equalIgnoringCase(resource.mimeType, mime)))
+                return &resource;
         }
-        return false;
+        return 0;
+    }
+
+    bool isSerialized(const char* url, const char* mimeType = 0)
+    {
+        return getResource(url, mimeType);
+    }
+
+    String getSerializedData(const char* url, const char* mimeType = 0)
+    {
+        const SerializedResource* resource = getResource(url, mimeType);
+        if (resource)
+            return String(resource->data->data(), resource->data->size());
+        return String();
     }
 
     WebViewImpl* m_webViewImpl;
 
 private:
     TestWebFrameClient m_webFrameClient;
+    WebFrame* m_mainFrame;
     WebString m_folder;
     KURL m_baseUrl;
     Vector<SerializedResource> m_resources;
@@ -177,6 +196,40 @@ TEST_F(PageSerializerTest, InputImage)
 
     EXPECT_TRUE(isSerialized("button.png", "image/png"));
     EXPECT_FALSE(isSerialized("non-existing-button.png", "image/png"));
+}
+
+TEST_F(PageSerializerTest, XMLDeclaration)
+{
+    setBaseFolder("pageserializer/xmldecl/");
+
+    registerURL("xmldecl.xml", "text/xml");
+    serialize("xmldecl.xml");
+
+    String expectedStart("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+    EXPECT_TRUE(getSerializedData("xmldecl.xml").startsWith(expectedStart));
+}
+
+TEST_F(PageSerializerTest, DTD)
+{
+    setBaseFolder("pageserializer/dtd/");
+
+    registerURL("dtd.html", "text/html");
+    serialize("dtd.html");
+
+    String expectedStart("<!DOCTYPE html>");
+    EXPECT_TRUE(getSerializedData("dtd.html").startsWith(expectedStart));
+}
+
+TEST_F(PageSerializerTest, Font)
+{
+    setBaseFolder("pageserializer/font/");
+
+    registerURL("font.html", "text/html");
+    registerURL("font.ttf", "application/octet-stream");
+
+    serialize("font.html");
+
+    EXPECT_TRUE(isSerialized("font.ttf", "application/octet-stream"));
 }
 
 }

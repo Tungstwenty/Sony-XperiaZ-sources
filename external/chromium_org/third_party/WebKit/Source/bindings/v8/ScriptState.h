@@ -41,7 +41,7 @@ namespace WebCore {
 class DOMWindow;
 class DOMWrapperWorld;
 class Frame;
-class ScriptExecutionContext;
+class ExecutionContext;
 class WorkerGlobalScope;
 
 class ScriptState {
@@ -66,7 +66,7 @@ public:
     }
 
     DOMWindow* domWindow() const;
-    ScriptExecutionContext* scriptExecutionContext() const;
+    ExecutionContext* executionContext() const;
     bool evalEnabled() const;
     void setEvalEnabled(bool);
 
@@ -85,7 +85,7 @@ private:
     friend ScriptState* mainWorldScriptState(Frame*);
     explicit ScriptState(v8::Handle<v8::Context>);
 
-    static void makeWeakCallback(v8::Isolate*, v8::Persistent<v8::Context>*, ScriptState*);
+    static void setWeakCallback(const v8::WeakCallbackData<v8::Context, ScriptState>&);
 
     ScopedPersistent<v8::Value> m_exception;
     ScopedPersistent<v8::Context> m_context;
@@ -109,7 +109,7 @@ public:
     ScriptStateProtectedPtr(ScriptState* scriptState)
         : m_scriptState(scriptState)
     {
-        v8::HandleScope handleScope;
+        v8::HandleScope handleScope(scriptState->isolate());
         // Keep the context from being GC'ed. ScriptState is guaranteed to be live while the context is live.
         m_context.set(scriptState->isolate(), scriptState->context());
     }

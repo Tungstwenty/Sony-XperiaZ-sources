@@ -24,7 +24,6 @@
 #include "core/svg/SVGImageElement.h"
 
 #include "CSSPropertyNames.h"
-#include "SVGNames.h"
 #include "XLinkNames.h"
 #include "core/rendering/RenderImageResource.h"
 #include "core/rendering/svg/RenderSVGImage.h"
@@ -53,29 +52,39 @@ BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGImageElement)
     REGISTER_PARENT_ANIMATED_PROPERTIES(SVGGraphicsElement)
 END_REGISTER_ANIMATED_PROPERTIES
 
-inline SVGImageElement::SVGImageElement(const QualifiedName& tagName, Document* document)
-    : SVGGraphicsElement(tagName, document)
+inline SVGImageElement::SVGImageElement(Document& document)
+    : SVGGraphicsElement(SVGNames::imageTag, document)
     , m_x(LengthModeWidth)
     , m_y(LengthModeHeight)
     , m_width(LengthModeWidth)
     , m_height(LengthModeHeight)
     , m_imageLoader(this)
 {
-    ASSERT(hasTagName(SVGNames::imageTag));
     ScriptWrappable::init(this);
     registerAnimatedPropertiesForSVGImageElement();
 }
 
-PassRefPtr<SVGImageElement> SVGImageElement::create(const QualifiedName& tagName, Document* document)
+PassRefPtr<SVGImageElement> SVGImageElement::create(Document& document)
 {
-    return adoptRef(new SVGImageElement(tagName, document));
+    return adoptRef(new SVGImageElement(document));
+}
+
+bool SVGImageElement::currentFrameHasSingleSecurityOrigin() const
+{
+    if (RenderSVGImage* renderSVGImage = toRenderSVGImage(renderer())) {
+        if (renderSVGImage->imageResource()->hasImage()) {
+            if (Image* image = renderSVGImage->imageResource()->cachedImage()->image())
+                return image->currentFrameHasSingleSecurityOrigin();
+        }
+    }
+
+    return true;
 }
 
 bool SVGImageElement::isSupportedAttribute(const QualifiedName& attrName)
 {
     DEFINE_STATIC_LOCAL(HashSet<QualifiedName>, supportedAttributes, ());
     if (supportedAttributes.isEmpty()) {
-        SVGLangSpace::addSupportedAttributes(supportedAttributes);
         SVGExternalResourcesRequired::addSupportedAttributes(supportedAttributes);
         SVGURIReference::addSupportedAttributes(supportedAttributes);
         supportedAttributes.add(SVGNames::xAttr);
@@ -122,8 +131,7 @@ void SVGImageElement::parseAttribute(const QualifiedName& name, const AtomicStri
         setWidthBaseValue(SVGLength::construct(LengthModeWidth, value, parseError, ForbidNegativeLengths));
     else if (name == SVGNames::heightAttr)
         setHeightBaseValue(SVGLength::construct(LengthModeHeight, value, parseError, ForbidNegativeLengths));
-    else if (SVGLangSpace::parseAttribute(name, value)
-             || SVGExternalResourcesRequired::parseAttribute(name, value)
+    else if (SVGExternalResourcesRequired::parseAttribute(name, value)
              || SVGURIReference::parseAttribute(name, value)) {
     } else
         ASSERT_NOT_REACHED();
@@ -164,7 +172,6 @@ void SVGImageElement::svgAttributeChanged(const QualifiedName& attrName)
     }
 
     if (attrName == SVGNames::preserveAspectRatioAttr
-        || SVGLangSpace::isKnownAttribute(attrName)
         || SVGExternalResourcesRequired::isKnownAttribute(attrName)) {
         RenderSVGResource::markForLayoutAndParentResourceInvalidation(renderer);
         return;
@@ -214,19 +221,19 @@ Node::InsertionNotificationRequest SVGImageElement::insertedInto(ContainerNode* 
     return InsertionDone;
 }
 
-const AtomicString& SVGImageElement::imageSourceURL() const
+const AtomicString SVGImageElement::imageSourceURL() const
 {
-    return getAttribute(XLinkNames::hrefAttr);
+    return hrefCurrentValue();
 }
 
 void SVGImageElement::addSubresourceAttributeURLs(ListHashSet<KURL>& urls) const
 {
     SVGGraphicsElement::addSubresourceAttributeURLs(urls);
 
-    addSubresourceURL(urls, document()->completeURL(hrefCurrentValue()));
+    addSubresourceURL(urls, document().completeURL(hrefCurrentValue()));
 }
 
-void SVGImageElement::didMoveToNewDocument(Document* oldDocument)
+void SVGImageElement::didMoveToNewDocument(Document& oldDocument)
 {
     m_imageLoader.elementDidMoveToNewDocument();
     SVGGraphicsElement::didMoveToNewDocument(oldDocument);

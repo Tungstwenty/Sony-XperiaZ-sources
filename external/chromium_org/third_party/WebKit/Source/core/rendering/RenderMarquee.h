@@ -44,19 +44,20 @@
 #ifndef RenderMarquee_h
 #define RenderMarquee_h
 
-#include "core/platform/Length.h"
-#include "core/platform/Timer.h"
-#include "core/rendering/RenderBlock.h"
+#include "core/html/HTMLMarqueeElement.h"
+#include "core/rendering/RenderBlockFlow.h"
 #include "core/rendering/style/RenderStyleConstants.h"
+#include "platform/Length.h"
+#include "platform/Timer.h"
 
 namespace WebCore {
 
 class RenderLayer;
 
 // This class handles the auto-scrolling for <marquee>
-class RenderMarquee FINAL : public RenderBlock {
+class RenderMarquee FINAL : public RenderBlockFlow {
 public:
-    explicit RenderMarquee(Element*);
+    explicit RenderMarquee(HTMLMarqueeElement*);
     virtual ~RenderMarquee();
 
     int speed() const { return m_speed; }
@@ -79,6 +80,8 @@ public:
     // However <marquee> tests are very timing dependent so we need to keep the existing timing.
     void updateMarqueePosition();
 
+    void timerFired();
+
 private:
     virtual const char* renderName() const OVERRIDE FINAL;
 
@@ -88,11 +91,11 @@ private:
 
     virtual void layoutBlock(bool relayoutChildren, LayoutUnit pageLogicalHeight = 0) OVERRIDE FINAL;
 
-    void timerFired(Timer<RenderMarquee>*);
+    virtual bool supportsPartialLayout() const OVERRIDE { return false; }
 
     int m_currentLoop;
     int m_totalLoops;
-    Timer<RenderMarquee> m_timer;
+    Timer<HTMLMarqueeElement> m_timer;
     int m_start;
     int m_end;
     int m_speed;
@@ -103,20 +106,7 @@ private:
     EMarqueeDirection m_direction : 4;
 };
 
-inline RenderMarquee* toRenderMarquee(RenderObject* renderer)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!renderer || renderer->isMarquee());
-    return static_cast<RenderMarquee*>(renderer);
-}
-
-inline const RenderMarquee* toRenderMarquee(const RenderObject* renderer)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!renderer || renderer->isMarquee());
-    return static_cast<const RenderMarquee*>(renderer);
-}
-
-// Catch unneeded cast.
-void toRenderMarquee(const RenderMarquee*);
+DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderMarquee, isMarquee());
 
 } // namespace WebCore
 

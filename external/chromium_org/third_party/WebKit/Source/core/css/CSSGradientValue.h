@@ -28,7 +28,6 @@
 
 #include "core/css/CSSImageGeneratorValue.h"
 #include "core/css/CSSPrimitiveValue.h"
-#include "core/css/StyleColor.h"
 #include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
 
@@ -52,7 +51,7 @@ struct CSSGradientColorStop {
     CSSGradientColorStop() : m_colorIsDerivedFromElement(false) { };
     RefPtr<CSSPrimitiveValue> m_position; // percentage or length
     RefPtr<CSSPrimitiveValue> m_color;
-    StyleColor m_resolvedColor;
+    Color m_resolvedColor;
     bool m_colorIsDerivedFromElement;
     bool operator==(const CSSGradientColorStop& other) const
     {
@@ -76,9 +75,6 @@ public:
 
     void sortStopsIfNeeded();
 
-    bool isLinearGradient() const { return classType() == LinearGradientClass; }
-    bool isRadialGradient() const { return classType() == RadialGradientClass; }
-
     bool isRepeating() const { return m_repeating; }
 
     CSSGradientType gradientType() const { return m_gradientType; }
@@ -90,7 +86,7 @@ public:
     bool knownToBeOpaque(const RenderObject*) const;
 
     void loadSubimages(ResourceFetcher*) { }
-    PassRefPtr<CSSGradientValue> gradientWithStylesResolved(const TextLinkColors&);
+    PassRefPtr<CSSGradientValue> gradientWithStylesResolved(const TextLinkColors&, Color currentColor);
 
 protected:
     CSSGradientValue(ClassType classType, CSSGradientRepeat repeat, CSSGradientType gradientType)
@@ -114,10 +110,10 @@ protected:
     {
     }
 
-    void addStops(Gradient*, RenderObject*, RenderStyle* rootStyle, float maxLengthForRepeat = 0);
+    void addStops(Gradient*, const CSSToLengthConversionData&, float maxLengthForRepeat = 0);
 
     // Resolve points/radii to front end values.
-    FloatPoint computeEndPoint(CSSPrimitiveValue*, CSSPrimitiveValue*, RenderStyle*, RenderStyle* rootStyle, const IntSize&);
+    FloatPoint computeEndPoint(CSSPrimitiveValue*, CSSPrimitiveValue*, const CSSToLengthConversionData&, const IntSize&);
 
     bool isCacheable() const;
 
@@ -135,6 +131,7 @@ protected:
     bool m_repeating;
 };
 
+DEFINE_CSS_VALUE_TYPE_CASTS(CSSGradientValue, isGradientValue());
 
 class CSSLinearGradientValue : public CSSGradientValue {
 public:
@@ -146,10 +143,10 @@ public:
 
     void setAngle(PassRefPtr<CSSPrimitiveValue> val) { m_angle = val; }
 
-    String customCssText() const;
+    String customCSSText() const;
 
     // Create the gradient for a given size.
-    PassRefPtr<Gradient> createGradient(RenderObject*, const IntSize&);
+    PassRefPtr<Gradient> createGradient(const CSSToLengthConversionData&, const IntSize&);
 
     PassRefPtr<CSSLinearGradientValue> clone() const
     {
@@ -164,7 +161,7 @@ private:
     {
     }
 
-    CSSLinearGradientValue(const CSSLinearGradientValue& other)
+    explicit CSSLinearGradientValue(const CSSLinearGradientValue& other)
         : CSSGradientValue(other, LinearGradientClass, other.gradientType())
         , m_angle(other.m_angle)
     {
@@ -172,6 +169,8 @@ private:
 
     RefPtr<CSSPrimitiveValue> m_angle; // may be null.
 };
+
+DEFINE_CSS_VALUE_TYPE_CASTS(CSSLinearGradientValue, isLinearGradientValue());
 
 class CSSRadialGradientValue : public CSSGradientValue {
 public:
@@ -185,7 +184,7 @@ public:
         return adoptRef(new CSSRadialGradientValue(*this));
     }
 
-    String customCssText() const;
+    String customCSSText() const;
 
     void setFirstRadius(PassRefPtr<CSSPrimitiveValue> val) { m_firstRadius = val; }
     void setSecondRadius(PassRefPtr<CSSPrimitiveValue> val) { m_secondRadius = val; }
@@ -197,7 +196,7 @@ public:
     void setEndVerticalSize(PassRefPtr<CSSPrimitiveValue> val) { m_endVerticalSize = val; }
 
     // Create the gradient for a given size.
-    PassRefPtr<Gradient> createGradient(RenderObject*, const IntSize&);
+    PassRefPtr<Gradient> createGradient(const CSSToLengthConversionData&, const IntSize&);
 
     bool equals(const CSSRadialGradientValue&) const;
 
@@ -207,7 +206,7 @@ private:
     {
     }
 
-    CSSRadialGradientValue(const CSSRadialGradientValue& other)
+    explicit CSSRadialGradientValue(const CSSRadialGradientValue& other)
         : CSSGradientValue(other, RadialGradientClass, other.gradientType())
         , m_firstRadius(other.m_firstRadius)
         , m_secondRadius(other.m_secondRadius)
@@ -220,7 +219,7 @@ private:
 
 
     // Resolve points/radii to front end values.
-    float resolveRadius(CSSPrimitiveValue*, RenderStyle*, RenderStyle* rootStyle, float* widthOrHeight = 0);
+    float resolveRadius(CSSPrimitiveValue*, const CSSToLengthConversionData&, float* widthOrHeight = 0);
 
     // These may be null for non-deprecated gradients.
     RefPtr<CSSPrimitiveValue> m_firstRadius;
@@ -233,6 +232,8 @@ private:
     RefPtr<CSSPrimitiveValue> m_endHorizontalSize;
     RefPtr<CSSPrimitiveValue> m_endVerticalSize;
 };
+
+DEFINE_CSS_VALUE_TYPE_CASTS(CSSRadialGradientValue, isRadialGradientValue());
 
 } // namespace WebCore
 

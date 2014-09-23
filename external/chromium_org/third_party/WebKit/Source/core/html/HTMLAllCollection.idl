@@ -24,10 +24,9 @@
  */
 
 [
-    CustomLegacyCall,
-    MasqueradesAsUndefined,
-    GenerateIsReachable=ownerNode,
-    DependentLifetime
+    Custom=LegacyCallAsFunction,
+    DependentLifetime,
+    GenerateVisitDOMWrapper=ownerNode,
 ] interface HTMLAllCollection {
     readonly attribute unsigned long length;
     [ImplementedAs=item] getter Node (unsigned long index);
@@ -35,6 +34,6 @@
     [ImplementedAs=anonymousNamedGetter, NotEnumerable] getter (NodeList or Node)(DOMString name);
     [Custom] Node namedItem(DOMString name);
     // FIXME: This should return an HTMLAllCollection.
-    NodeList tags(DOMString name);
+    [MeasureAs=DocumentAllTags] NodeList tags(DOMString name);
 };
 

@@ -33,10 +33,11 @@
 
 #include "bindings/v8/ScriptWrappable.h"
 #include "core/dom/ActiveDOMObject.h"
-#include "core/dom/EventTarget.h"
-#include "core/dom/ScriptExecutionContext.h"
-#include "modules/filesystem/AsyncFileWriterClient.h"
+#include "core/dom/ExecutionContext.h"
+#include "core/events/EventTarget.h"
+#include "core/fileapi/FileError.h"
 #include "modules/filesystem/FileWriterBase.h"
+#include "public/platform/WebFileWriterClient.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
 
@@ -44,11 +45,12 @@ namespace WebCore {
 
 class Blob;
 class ExceptionState;
-class ScriptExecutionContext;
+class ExecutionContext;
 
-class FileWriter : public ScriptWrappable, public FileWriterBase, public ActiveDOMObject, public EventTarget, public AsyncFileWriterClient {
+class FileWriter : public ScriptWrappable, public FileWriterBase, public ActiveDOMObject, public EventTargetWithInlineData, public blink::WebFileWriterClient {
+    DEFINE_EVENT_TARGET_REFCOUNTING(FileWriterBase);
 public:
-    static PassRefPtr<FileWriter> create(ScriptExecutionContext*);
+    static PassRefPtr<FileWriter> create(ExecutionContext*);
 
     enum ReadyState {
         INIT = 0,
@@ -63,21 +65,17 @@ public:
     ReadyState readyState() const { return m_readyState; }
     FileError* error() const { return m_error.get(); }
 
-    // AsyncFileWriterClient
-    void didWrite(long long bytes, bool complete);
-    void didTruncate();
-    void didFail(FileError::ErrorCode);
+    // WebFileWriterClient
+    virtual void didWrite(long long bytes, bool complete) OVERRIDE;
+    virtual void didTruncate() OVERRIDE;
+    virtual void didFail(blink::WebFileError) OVERRIDE;
 
     // ActiveDOMObject
-    virtual bool canSuspend() const;
     virtual void stop();
 
     // EventTarget
-    virtual const AtomicString& interfaceName() const;
-    virtual ScriptExecutionContext* scriptExecutionContext() const { return ActiveDOMObject::scriptExecutionContext(); }
-
-    using RefCounted<FileWriterBase>::ref;
-    using RefCounted<FileWriterBase>::deref;
+    virtual const AtomicString& interfaceName() const OVERRIDE;
+    virtual ExecutionContext* executionContext() const OVERRIDE { return ActiveDOMObject::executionContext(); }
 
     DEFINE_ATTRIBUTE_EVENT_LISTENER(writestart);
     DEFINE_ATTRIBUTE_EVENT_LISTENER(progress);
@@ -94,15 +92,9 @@ private:
         OperationAbort
     };
 
-    FileWriter(ScriptExecutionContext*);
+    FileWriter(ExecutionContext*);
 
     virtual ~FileWriter();
-
-    // EventTarget
-    virtual void refEventTarget() { ref(); }
-    virtual void derefEventTarget() { deref(); }
-    virtual EventTargetData* eventTargetData() { return &m_eventTargetData; }
-    virtual EventTargetData* ensureEventTargetData() { return &m_eventTargetData; }
 
     void completeAbort();
 
@@ -115,7 +107,6 @@ private:
     void setError(FileError::ErrorCode, ExceptionState&);
 
     RefPtr<FileError> m_error;
-    EventTargetData m_eventTargetData;
     ReadyState m_readyState;
     Operation m_operationInProgress;
     Operation m_queuedOperation;

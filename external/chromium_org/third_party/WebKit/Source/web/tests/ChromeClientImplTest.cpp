@@ -30,6 +30,7 @@
 
 #include "config.h"
 
+#include "WebFrame.h"
 #include "WebFrameClient.h"
 #include "WebInputEvent.h"
 #include "WebView.h"
@@ -38,9 +39,9 @@
 #include "core/page/Chrome.h"
 #include <gtest/gtest.h>
 
-using namespace WebKit;
+using namespace blink;
 
-namespace WebKit {
+namespace blink {
 
 void setCurrentInputEventForTest(const WebInputEvent* event)
 {
@@ -86,15 +87,17 @@ public:
 protected:
     virtual void SetUp()
     {
-        m_webView = static_cast<WebViewImpl*>(WebView::create(&m_webViewClient));
-        m_webView->initializeMainFrame(&m_webFrameClient);
-        m_chromeClientImpl = static_cast<ChromeClientImpl*>(m_webView->page()->chrome().client());
+        m_webView = toWebViewImpl(WebView::create(&m_webViewClient));
+        m_mainFrame = WebFrame::create(&m_webFrameClient);
+        m_webView->setMainFrame(m_mainFrame);
+        m_chromeClientImpl = toChromeClientImpl(m_webView->page()->chrome().client());
         m_result = WebNavigationPolicyIgnore;
     }
 
     virtual void TearDown()
     {
         m_webView->close();
+        m_mainFrame->close();
     }
 
     WebNavigationPolicy getNavigationPolicyWithMouseEvent(int modifiers, WebMouseEvent::Button button, bool asPopup)
@@ -120,6 +123,7 @@ protected:
     WebNavigationPolicy m_result;
     TestWebViewClient m_webViewClient;
     WebViewImpl* m_webView;
+    WebFrame* m_mainFrame;
     TestWebFrameClient m_webFrameClient;
     ChromeClientImpl* m_chromeClientImpl;
 };
@@ -162,7 +166,7 @@ TEST_F(GetNavigationPolicyTest, ShiftLeftClickPopup)
 
 TEST_F(GetNavigationPolicyTest, ControlOrMetaLeftClick)
 {
-#if OS(DARWIN)
+#if OS(MACOSX)
     int modifiers = WebInputEvent::MetaKey;
 #else
     int modifiers = WebInputEvent::ControlKey;
@@ -175,7 +179,7 @@ TEST_F(GetNavigationPolicyTest, ControlOrMetaLeftClick)
 
 TEST_F(GetNavigationPolicyTest, ControlOrMetaLeftClickPopup)
 {
-#if OS(DARWIN)
+#if OS(MACOSX)
     int modifiers = WebInputEvent::MetaKey;
 #else
     int modifiers = WebInputEvent::ControlKey;
@@ -188,7 +192,7 @@ TEST_F(GetNavigationPolicyTest, ControlOrMetaLeftClickPopup)
 
 TEST_F(GetNavigationPolicyTest, ControlOrMetaAndShiftLeftClick)
 {
-#if OS(DARWIN)
+#if OS(MACOSX)
     int modifiers = WebInputEvent::MetaKey;
 #else
     int modifiers = WebInputEvent::ControlKey;
@@ -202,7 +206,7 @@ TEST_F(GetNavigationPolicyTest, ControlOrMetaAndShiftLeftClick)
 
 TEST_F(GetNavigationPolicyTest, ControlOrMetaAndShiftLeftClickPopup)
 {
-#if OS(DARWIN)
+#if OS(MACOSX)
     int modifiers = WebInputEvent::MetaKey;
 #else
     int modifiers = WebInputEvent::ControlKey;

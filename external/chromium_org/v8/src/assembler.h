@@ -134,6 +134,18 @@ class CpuFeatureScope BASE_EMBEDDED {
 };
 
 
+// Enable a unsupported feature within a scope for cross-compiling for a
+// different CPU.
+class PlatformFeatureScope BASE_EMBEDDED {
+ public:
+  explicit PlatformFeatureScope(CpuFeature f);
+  ~PlatformFeatureScope();
+
+ private:
+  uint64_t old_cross_compile_;
+};
+
+
 // -----------------------------------------------------------------------------
 // Labels represent pc locations; they are typically jump or call targets.
 // After declaration, a label can be freely used to denote known or (yet)
@@ -196,7 +208,6 @@ class Label BASE_EMBEDDED {
   }
 
   friend class Assembler;
-  friend class RegexpAssembler;
   friend class Displacement;
   friend class RegExpMacroAssemblerIrregexp;
 };
@@ -361,6 +372,9 @@ class RelocInfo BASE_EMBEDDED {
   Mode rmode() const {  return rmode_; }
   intptr_t data() const { return data_; }
   double data64() const { return data64_; }
+  uint64_t raw_data64() {
+    return BitCast<uint64_t>(data64_);
+  }
   Code* host() const { return host_; }
 
   // Apply a relocation by delta bytes
@@ -379,7 +393,6 @@ class RelocInfo BASE_EMBEDDED {
                                  WriteBarrierMode mode = UPDATE_WRITE_BARRIER));
   INLINE(Object* target_object());
   INLINE(Handle<Object> target_object_handle(Assembler* origin));
-  INLINE(Object** target_object_address());
   INLINE(void set_target_object(Object* target,
                                 WriteBarrierMode mode = UPDATE_WRITE_BARRIER));
   INLINE(Address target_runtime_entry(Assembler* origin));
@@ -390,6 +403,7 @@ class RelocInfo BASE_EMBEDDED {
   INLINE(Handle<Cell> target_cell_handle());
   INLINE(void set_target_cell(Cell* cell,
                               WriteBarrierMode mode = UPDATE_WRITE_BARRIER));
+  INLINE(Handle<Object> code_age_stub_handle(Assembler* origin));
   INLINE(Code* code_age_stub());
   INLINE(void set_code_age_stub(Code* stub));
 
@@ -413,7 +427,7 @@ class RelocInfo BASE_EMBEDDED {
 
   // Read/modify the reference in the instruction this relocation
   // applies to; can only be called if rmode_ is external_reference
-  INLINE(Address* target_reference_address());
+  INLINE(Address target_reference());
 
   // Read/modify the address of a call instruction. This is used to relocate
   // the break points where straight-line code is patched with a call
@@ -424,8 +438,12 @@ class RelocInfo BASE_EMBEDDED {
   INLINE(void set_call_object(Object* target));
   INLINE(Object** call_object_address());
 
+  // Wipe out a relocation to a fixed value, used for making snapshots
+  // reproducible.
+  INLINE(void WipeOut());
+
   template<typename StaticVisitor> inline void Visit(Heap* heap);
-  inline void Visit(ObjectVisitor* v);
+  inline void Visit(Isolate* isolate, ObjectVisitor* v);
 
   // Patch the code with some other code.
   void PatchCode(byte* instructions, int instruction_count);
@@ -474,12 +492,6 @@ class RelocInfo BASE_EMBEDDED {
     double data64_;
   };
   Code* host_;
-  // Code and Embedded Object pointers on some platforms are stored split
-  // across two consecutive 32-bit instructions. Heap management
-  // routines expect to access these pointers indirectly. The following
-  // location provides a place for these pointers to exist naturally
-  // when accessed via the Iterator.
-  Object* reconstructed_obj_ptr_;
   // External-reference pointers are also split across instruction-pairs
   // on some platforms, but are accessed via indirect pointers. This location
   // provides a place for that pointer to exist naturally. Its address
@@ -644,38 +656,21 @@ class ExternalReference BASE_EMBEDDED {
     BUILTIN_FP_INT_CALL,
 
     // Direct call to API function callback.
-    // Handle<Value> f(v8::Arguments&)
+    // void f(v8::FunctionCallbackInfo&)
     DIRECT_API_CALL,
 
-    // Call to invocation callback via InvokeInvocationCallback.
-    // Handle<Value> f(v8::Arguments&, v8::InvocationCallback)
+    // Call to function callback via InvokeFunctionCallback.
+    // void f(v8::FunctionCallbackInfo&, v8::FunctionCallback)
     PROFILING_API_CALL,
 
-    // Direct call to API function callback.
-    // void f(v8::Arguments&)
-    DIRECT_API_CALL_NEW,
-
-    // Call to function callback via InvokeFunctionCallback.
-    // void f(v8::Arguments&, v8::FunctionCallback)
-    PROFILING_API_CALL_NEW,
-
     // Direct call to accessor getter callback.
-    // Handle<value> f(Local<String> property, AccessorInfo& info)
+    // void f(Local<String> property, PropertyCallbackInfo& info)
     DIRECT_GETTER_CALL,
 
-    // Call to accessor getter callback via InvokeAccessorGetter.
-    // Handle<value> f(Local<String> property, AccessorInfo& info,
-    //     AccessorGetter getter)
-    PROFILING_GETTER_CALL,
-
-    // Direct call to accessor getter callback.
-    // void f(Local<String> property, AccessorInfo& info)
-    DIRECT_GETTER_CALL_NEW,
-
     // Call to accessor getter callback via InvokeAccessorGetterCallback.
-    // void f(Local<String> property, AccessorInfo& info,
+    // void f(Local<String> property, PropertyCallbackInfo& info,
     //     AccessorGetterCallback callback)
-    PROFILING_GETTER_CALL_NEW
+    PROFILING_GETTER_CALL
   };
 
   static void SetUp();
@@ -708,7 +703,7 @@ class ExternalReference BASE_EMBEDDED {
 
   explicit ExternalReference(const SCTableReference& table_ref);
 
-  // Isolate::Current() as an external reference.
+  // Isolate as an external reference.
   static ExternalReference isolate_address(Isolate* isolate);
 
   // One-of-a-kind references. These references are not part of a general
@@ -723,9 +718,6 @@ class ExternalReference BASE_EMBEDDED {
       Isolate* isolate);
   static ExternalReference flush_icache_function(Isolate* isolate);
   static ExternalReference perform_gc_function(Isolate* isolate);
-  static ExternalReference fill_heap_number_with_random_function(
-      Isolate* isolate);
-  static ExternalReference random_uint32_function(Isolate* isolate);
   static ExternalReference transcendental_cache_array_address(Isolate* isolate);
   static ExternalReference delete_handle_scope_extensions(Isolate* isolate);
 
@@ -733,6 +725,7 @@ class ExternalReference BASE_EMBEDDED {
   static ExternalReference date_cache_stamp(Isolate* isolate);
 
   static ExternalReference get_make_code_young_function(Isolate* isolate);
+  static ExternalReference get_mark_code_as_executed_function(Isolate* isolate);
 
   // Deoptimization support.
   static ExternalReference new_deoptimizer_function(Isolate* isolate);
@@ -816,6 +809,7 @@ class ExternalReference BASE_EMBEDDED {
   static ExternalReference address_of_negative_infinity();
   static ExternalReference address_of_canonical_non_hole_nan();
   static ExternalReference address_of_the_hole_nan();
+  static ExternalReference address_of_uint32_bias();
 
   static ExternalReference math_sin_double_function(Isolate* isolate);
   static ExternalReference math_cos_double_function(Isolate* isolate);

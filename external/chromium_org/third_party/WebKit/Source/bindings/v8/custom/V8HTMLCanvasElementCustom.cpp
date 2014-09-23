@@ -36,6 +36,7 @@
 #include "V8Node.h"
 #include "V8WebGLRenderingContext.h"
 #include "bindings/v8/ExceptionState.h"
+#include "bindings/v8/ScriptState.h"
 #include "bindings/v8/V8Binding.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/canvas/Canvas2DContextAttributes.h"
@@ -47,100 +48,105 @@
 
 namespace WebCore {
 
-void V8HTMLCanvasElement::getContextMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& args)
+void V8HTMLCanvasElement::getContextMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    v8::Handle<v8::Object> holder = args.Holder();
+    v8::Handle<v8::Object> holder = info.Holder();
+    v8::Isolate* isolate = info.GetIsolate();
     HTMLCanvasElement* imp = V8HTMLCanvasElement::toNative(holder);
-    String contextId = toWebCoreString(args[0]);
-    RefPtr<CanvasContextAttributes> attrs;
+    V8TRYCATCH_FOR_V8STRINGRESOURCE_VOID(V8StringResource<>, contextIdResource, info[0]);
+    String contextId = contextIdResource;
+    RefPtr<CanvasContextAttributes> attributes;
     if (contextId == "webgl" || contextId == "experimental-webgl" || contextId == "webkit-3d") {
-        RefPtr<WebGLContextAttributes> webGLAttrs = WebGLContextAttributes::create();
-        if (args.Length() > 1 && args[1]->IsObject()) {
-            v8::Handle<v8::Object> jsAttrs = args[1]->ToObject();
-            v8::Handle<v8::String> alpha = v8::String::NewSymbol("alpha");
-            if (jsAttrs->Has(alpha))
-                webGLAttrs->setAlpha(jsAttrs->Get(alpha)->BooleanValue());
-            v8::Handle<v8::String> depth = v8::String::NewSymbol("depth");
-            if (jsAttrs->Has(depth))
-                webGLAttrs->setDepth(jsAttrs->Get(depth)->BooleanValue());
-            v8::Handle<v8::String> stencil = v8::String::NewSymbol("stencil");
-            if (jsAttrs->Has(stencil))
-                webGLAttrs->setStencil(jsAttrs->Get(stencil)->BooleanValue());
-            v8::Handle<v8::String> antialias = v8::String::NewSymbol("antialias");
-            if (jsAttrs->Has(antialias))
-                webGLAttrs->setAntialias(jsAttrs->Get(antialias)->BooleanValue());
-            v8::Handle<v8::String> premultipliedAlpha = v8::String::NewSymbol("premultipliedAlpha");
-            if (jsAttrs->Has(premultipliedAlpha))
-                webGLAttrs->setPremultipliedAlpha(jsAttrs->Get(premultipliedAlpha)->BooleanValue());
-            v8::Handle<v8::String> preserveDrawingBuffer = v8::String::NewSymbol("preserveDrawingBuffer");
-            if (jsAttrs->Has(preserveDrawingBuffer))
-                webGLAttrs->setPreserveDrawingBuffer(jsAttrs->Get(preserveDrawingBuffer)->BooleanValue());
+        RefPtr<WebGLContextAttributes> webGLAttributes = WebGLContextAttributes::create();
+        if (info.Length() > 1 && info[1]->IsObject()) {
+            v8::Handle<v8::Object> jsAttributes = info[1]->ToObject();
+            v8::Handle<v8::String> alpha = v8AtomicString(isolate, "alpha");
+            if (jsAttributes->Has(alpha))
+                webGLAttributes->setAlpha(jsAttributes->Get(alpha)->BooleanValue());
+            v8::Handle<v8::String> depth = v8AtomicString(isolate, "depth");
+            if (jsAttributes->Has(depth))
+                webGLAttributes->setDepth(jsAttributes->Get(depth)->BooleanValue());
+            v8::Handle<v8::String> stencil = v8AtomicString(isolate, "stencil");
+            if (jsAttributes->Has(stencil))
+                webGLAttributes->setStencil(jsAttributes->Get(stencil)->BooleanValue());
+            v8::Handle<v8::String> antialias = v8AtomicString(isolate, "antialias");
+            if (jsAttributes->Has(antialias))
+                webGLAttributes->setAntialias(jsAttributes->Get(antialias)->BooleanValue());
+            v8::Handle<v8::String> premultipliedAlpha = v8AtomicString(isolate, "premultipliedAlpha");
+            if (jsAttributes->Has(premultipliedAlpha))
+                webGLAttributes->setPremultipliedAlpha(jsAttributes->Get(premultipliedAlpha)->BooleanValue());
+            v8::Handle<v8::String> preserveDrawingBuffer = v8AtomicString(isolate, "preserveDrawingBuffer");
+            if (jsAttributes->Has(preserveDrawingBuffer))
+                webGLAttributes->setPreserveDrawingBuffer(jsAttributes->Get(preserveDrawingBuffer)->BooleanValue());
+            v8::Handle<v8::String> failIfMajorPerformanceCaveat = v8AtomicString(isolate, "failIfMajorPerformanceCaveat");
+            if (jsAttributes->Has(failIfMajorPerformanceCaveat))
+                webGLAttributes->setFailIfMajorPerformanceCaveat(jsAttributes->Get(failIfMajorPerformanceCaveat)->BooleanValue());
         }
-        attrs = webGLAttrs;
+        attributes = webGLAttributes;
     } else {
-        RefPtr<Canvas2DContextAttributes> canvas2DAttrs = Canvas2DContextAttributes::create();
-        if (args.Length() > 1 && args[1]->IsObject()) {
-            v8::Handle<v8::Object> jsAttrs = args[1]->ToObject();
-            v8::Handle<v8::String> alpha = v8::String::NewSymbol("alpha");
-            if (jsAttrs->Has(alpha))
-                canvas2DAttrs->setAlpha(jsAttrs->Get(alpha)->BooleanValue());
+        RefPtr<Canvas2DContextAttributes> canvas2DAttributes = Canvas2DContextAttributes::create();
+        if (info.Length() > 1 && info[1]->IsObject()) {
+            v8::Handle<v8::Object> jsAttributes = info[1]->ToObject();
+            v8::Handle<v8::String> alpha = v8AtomicString(isolate, "alpha");
+            if (jsAttributes->Has(alpha))
+                canvas2DAttributes->setAlpha(jsAttributes->Get(alpha)->BooleanValue());
         }
-        attrs = canvas2DAttrs;
+        attributes = canvas2DAttributes;
     }
-    CanvasRenderingContext* result = imp->getContext(contextId, attrs.get());
+    CanvasRenderingContext* result = imp->getContext(contextId, attributes.get());
     if (!result) {
-        v8SetReturnValueNull(args);
+        v8SetReturnValueNull(info);
         return;
     }
     if (result->is2d()) {
-        v8::Handle<v8::Value> v8Result = toV8Fast(static_cast<CanvasRenderingContext2D*>(result), args, imp);
-        if (InspectorInstrumentation::canvasAgentEnabled(imp->document())) {
-            ScriptState* scriptState = ScriptState::forContext(v8::Context::GetCurrent());
+        v8::Handle<v8::Value> v8Result = toV8(toCanvasRenderingContext2D(result), info.Holder(), info.GetIsolate());
+        if (InspectorInstrumentation::canvasAgentEnabled(&imp->document())) {
+            ScriptState* scriptState = ScriptState::forContext(isolate->GetCurrentContext());
             ScriptObject context(scriptState, v8::Handle<v8::Object>::Cast(v8Result));
-            ScriptObject wrapped = InspectorInstrumentation::wrapCanvas2DRenderingContextForInstrumentation(imp->document(), context);
+            ScriptObject wrapped = InspectorInstrumentation::wrapCanvas2DRenderingContextForInstrumentation(&imp->document(), context);
             if (!wrapped.hasNoValue()) {
-                v8SetReturnValue(args, wrapped.v8Value());
+                v8SetReturnValue(info, wrapped.v8Value());
                 return;
             }
         }
-        v8SetReturnValue(args, v8Result);
+        v8SetReturnValue(info, v8Result);
         return;
     }
     if (result->is3d()) {
-        v8::Handle<v8::Value> v8Result = toV8Fast(static_cast<WebGLRenderingContext*>(result), args, imp);
-        if (InspectorInstrumentation::canvasAgentEnabled(imp->document())) {
-            ScriptState* scriptState = ScriptState::forContext(v8::Context::GetCurrent());
+        v8::Handle<v8::Value> v8Result = toV8(toWebGLRenderingContext(result), info.Holder(), info.GetIsolate());
+        if (InspectorInstrumentation::canvasAgentEnabled(&imp->document())) {
+            ScriptState* scriptState = ScriptState::forContext(isolate->GetCurrentContext());
             ScriptObject glContext(scriptState, v8::Handle<v8::Object>::Cast(v8Result));
-            ScriptObject wrapped = InspectorInstrumentation::wrapWebGLRenderingContextForInstrumentation(imp->document(), glContext);
+            ScriptObject wrapped = InspectorInstrumentation::wrapWebGLRenderingContextForInstrumentation(&imp->document(), glContext);
             if (!wrapped.hasNoValue()) {
-                v8SetReturnValue(args, wrapped.v8Value());
+                v8SetReturnValue(info, wrapped.v8Value());
                 return;
             }
         }
-        v8SetReturnValue(args, v8Result);
+        v8SetReturnValue(info, v8Result);
         return;
     }
     ASSERT_NOT_REACHED();
-    v8SetReturnValueNull(args);
+    v8SetReturnValueNull(info);
 }
 
-void V8HTMLCanvasElement::toDataURLMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& args)
+void V8HTMLCanvasElement::toDataURLMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    v8::Handle<v8::Object> holder = args.Holder();
+    v8::Handle<v8::Object> holder = info.Holder();
     HTMLCanvasElement* canvas = V8HTMLCanvasElement::toNative(holder);
-    ExceptionState es(args.GetIsolate());
+    ExceptionState exceptionState(ExceptionState::ExecutionContext, "toDataURL", "HTMLCanvasElement", info.Holder(), info.GetIsolate());
 
-    String type = toWebCoreString(args[0]);
+    V8TRYCATCH_FOR_V8STRINGRESOURCE_VOID(V8StringResource<>, type, info[0]);
     double quality;
     double* qualityPtr = 0;
-    if (args.Length() > 1 && args[1]->IsNumber()) {
-        quality = args[1]->NumberValue();
+    if (info.Length() > 1 && info[1]->IsNumber()) {
+        quality = info[1]->NumberValue();
         qualityPtr = &quality;
     }
 
-    String result = canvas->toDataURL(type, qualityPtr, es);
-    es.throwIfNeeded();
-    v8SetReturnValueStringOrUndefined(args, result, args.GetIsolate());
+    String result = canvas->toDataURL(type, qualityPtr, exceptionState);
+    exceptionState.throwIfNeeded();
+    v8SetReturnValueStringOrUndefined(info, result, info.GetIsolate());
 }
 
 } // namespace WebCore

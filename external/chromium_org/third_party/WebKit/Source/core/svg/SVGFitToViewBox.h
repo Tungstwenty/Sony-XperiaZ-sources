@@ -23,8 +23,8 @@
 
 #include "SVGNames.h"
 #include "core/dom/QualifiedName.h"
-#include "core/platform/graphics/FloatRect.h"
 #include "core/svg/SVGPreserveAspectRatio.h"
+#include "core/svg/SVGRect.h"
 #include "wtf/HashSet.h"
 
 namespace WebCore {
@@ -43,11 +43,13 @@ public:
     static bool parseAttribute(SVGElementTarget* target, const QualifiedName& name, const AtomicString& value)
     {
         ASSERT(target);
-        ASSERT(target->document());
         if (name == SVGNames::viewBoxAttr) {
             FloatRect viewBox;
-            bool valueIsValid = !value.isNull() && parseViewBox(target->document(), value, viewBox);
-            target->setViewBoxBaseValue(viewBox, valueIsValid);
+            bool valueIsValid = !value.isNull() && parseViewBox(&target->document(), value, viewBox);
+            if (valueIsValid)
+                target->setViewBoxBaseValue(viewBox);
+            else
+                target->setViewBoxBaseValue(SVGRect(SVGRect::InvalidSVGRectTag()));
             return true;
         }
 

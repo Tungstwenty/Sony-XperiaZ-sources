@@ -35,8 +35,8 @@
 #include "WebPrivatePtr.h"
 #include <string>
 
-#if INSIDE_WEBKIT
-#include <wtf/Forward.h>
+#if INSIDE_BLINK
+#include "wtf/Forward.h"
 #else
 #include <base/strings/latin1_string_conversions.h>
 #include <base/strings/nullable_string16.h>
@@ -47,7 +47,7 @@ namespace WTF {
 class StringImpl;
 }
 
-namespace WebKit {
+namespace blink {
 
 class WebCString;
 
@@ -99,6 +99,15 @@ public:
         return fromUTF8(s.data(), s.length());
     }
 
+    BLINK_COMMON_EXPORT std::string latin1() const;
+
+    BLINK_COMMON_EXPORT static WebString fromLatin1(const WebLChar* data, size_t length);
+
+    static WebString fromLatin1(const std::string& s)
+    {
+        return fromLatin1(reinterpret_cast<const WebLChar*>(s.data()), s.length());
+    }
+
     template <int N> WebString(const char (&data)[N])
     {
         assign(fromUTF8(data, N - 1));
@@ -110,7 +119,7 @@ public:
         return *this;
     }
 
-#if INSIDE_WEBKIT
+#if INSIDE_BLINK
     BLINK_COMMON_EXPORT WebString(const WTF::String&);
     BLINK_COMMON_EXPORT WebString& operator=(const WTF::String&);
     BLINK_COMMON_EXPORT operator WTF::String() const;
@@ -178,6 +187,6 @@ inline bool operator!=(const WebString& a, const WebString& b)
     return !(a == b);
 }
 
-} // namespace WebKit
+} // namespace blink
 
 #endif

@@ -36,7 +36,7 @@
 
 /**
  * @constructor
- * @param {WebInspector.NetworkRequest} request
+ * @param {!WebInspector.NetworkRequest} request
  */
 WebInspector.HAREntry = function(request)
 {
@@ -45,18 +45,21 @@ WebInspector.HAREntry = function(request)
 
 WebInspector.HAREntry.prototype = {
     /**
-     * @return {Object}
+     * @return {!Object}
      */
     build: function()
     {
-        var entry =  {
+        var entry = {
             startedDateTime: new Date(this._request.startTime * 1000),
-            time: WebInspector.HAREntry._toMilliseconds(this._request.duration),
+            time: this._request.timing ? WebInspector.HAREntry._toMilliseconds(this._request.duration) : 0,
             request: this._buildRequest(),
             response: this._buildResponse(),
             cache: { }, // Not supported yet.
             timings: this._buildTimings()
         };
+
+        if (this._request.connectionId)
+            entry.connection = String(this._request.connectionId);
         var page = WebInspector.networkLog.pageLoadForRequest(this._request);
         if (page)
             entry.pageref = "page_" + page.id;
@@ -64,18 +67,19 @@ WebInspector.HAREntry.prototype = {
     },
 
     /**
-     * @return {Object}
+     * @return {!Object}
      */
     _buildRequest: function()
     {
+        var headersText = this._request.requestHeadersText();
         var res = {
             method: this._request.requestMethod,
             url: this._buildRequestURL(this._request.url),
-            httpVersion: this._request.requestHttpVersion,
-            headers: this._request.requestHeaders,
+            httpVersion: this._request.requestHttpVersion(),
+            headers: this._request.requestHeaders(),
             queryString: this._buildParameters(this._request.queryParameters || []),
             cookies: this._buildCookies(this._request.requestCookies || []),
-            headersSize: this._request.requestHeadersSize,
+            headersSize: headersText ? headersText.length : -1,
             bodySize: this.requestBodySize
         };
         if (this._request.requestFormData)
@@ -85,7 +89,7 @@ WebInspector.HAREntry.prototype = {
     },
 
     /**
-     * @return {Object}
+     * @return {!Object}
      */
     _buildResponse: function()
     {
@@ -103,7 +107,7 @@ WebInspector.HAREntry.prototype = {
     },
 
     /**
-     * @return {Object}
+     * @return {!Object}
      */
     _buildContent: function()
     {
@@ -119,37 +123,54 @@ WebInspector.HAREntry.prototype = {
     },
 
     /**
-     * @return {Object}
+     * @return {!Object}
      */
     _buildTimings: function()
     {
-        var waitForConnection = this._interval("connectStart", "connectEnd");
-        var blocked = 0;
+        // Order of events: request_start = 0, [proxy], [dns], [connect [ssl]], [send], receive_headers_end
+        // HAR 'blocked' time is time before first network activity.
+
+        var timing = this._request.timing;
+        if (!timing)
+            return {blocked: -1, dns: -1, connect: -1, send: 0, wait: 0, receive: 0, ssl: -1};
+
+        function firstNonNegative(values)
+        {
+            for (var i = 0; i < values.length; ++i) {
+                if (values[i] >= 0)
+                    return values[i];
+            }
+            console.assert(false, "Incomplete requet timing information.");
+        }
+
+        var blocked = firstNonNegative([timing.dnsStart, timing.connectStart, timing.sendStart]);
+
+        var dns = -1;
+        if (timing.dnsStart >= 0)
+            dns = firstNonNegative([timing.connectStart, timing.sendStart]) - timing.dnsStart;
+
         var connect = -1;
+        if (timing.connectStart >= 0)
+            connect = timing.sendStart - timing.connectStart;
 
-        if (this._request.connectionReused)
-            blocked = waitForConnection;
-        else
-            connect = waitForConnection;
+        var send = timing.sendEnd - timing.sendStart;
+        var wait = timing.receiveHeadersEnd - timing.sendEnd;
+        var receive = WebInspector.HAREntry._toMilliseconds(this._request.duration) - timing.receiveHeadersEnd;
 
-        return {
-            blocked: blocked,
-            dns: this._interval("dnsStart", "dnsEnd"),
-            connect: connect,
-            send: this._interval("sendStart", "sendEnd"),
-            wait: this._interval("sendEnd", "receiveHeadersEnd"),
-            receive: WebInspector.HAREntry._toMilliseconds(this._request.receiveDuration),
-            ssl: this._interval("sslStart", "sslEnd")
-        };
+        var ssl = -1;
+        if (timing.sslStart >= 0 && timing.sslEnd >= 0)
+            ssl = timing.sslEnd - timing.sslStart;
+
+        return {blocked: blocked, dns: dns, connect: connect, send: send, wait: wait, receive: receive, ssl: ssl};
     },
 
     /**
-     * @return {Object}
+     * @return {!Object}
      */
     _buildPostData: function()
     {
         var res = {
-            mimeType: this._request.requestHeaderValue("Content-Type"),
+            mimeType: this._request.requestContentType(),
             text: this._request.requestFormData
         };
         if (this._request.formParameters)
@@ -158,8 +179,8 @@ WebInspector.HAREntry.prototype = {
     },
 
     /**
-     * @param {Array.<Object>} parameters
-     * @return {Array.<Object>}
+     * @param {!Array.<!Object>} parameters
+     * @return {!Array.<!Object>}
      */
     _buildParameters: function(parameters)
     {
@@ -176,8 +197,8 @@ WebInspector.HAREntry.prototype = {
     },
 
     /**
-     * @param {Array.<WebInspector.Cookie>} cookies
-     * @return {Array.<Object>}
+     * @param {!Array.<!WebInspector.Cookie>} cookies
+     * @return {!Array.<!Object>}
      */
     _buildCookies: function(cookies)
     {
@@ -185,8 +206,8 @@ WebInspector.HAREntry.prototype = {
     },
 
     /**
-     * @param {WebInspector.Cookie} cookie
-     * @return {Object}
+     * @param {!WebInspector.Cookie} cookie
+     * @return {!Object}
      */
     _buildCookie: function(cookie)
     {
@@ -199,20 +220,6 @@ WebInspector.HAREntry.prototype = {
             httpOnly: cookie.httpOnly(),
             secure: cookie.secure()
         };
-    },
-
-    /**
-     * @param {string} start
-     * @param {string} end
-     * @return {number}
-     */
-    _interval: function(start, end)
-    {
-        var timing = this._request.timing;
-        if (!timing)
-            return -1;
-        var startTime = timing[start];
-        return typeof startTime !== "number" || startTime === -1 ? -1 : Math.round(timing[end] - startTime);
     },
 
     /**
@@ -250,12 +257,12 @@ WebInspector.HAREntry.prototype = {
  */
 WebInspector.HAREntry._toMilliseconds = function(time)
 {
-    return time === -1 ? -1 : Math.round(time * 1000);
+    return time === -1 ? -1 : time * 1000;
 }
 
 /**
  * @constructor
- * @param {Array.<WebInspector.NetworkRequest>} requests
+ * @param {!Array.<!WebInspector.NetworkRequest>} requests
  */
 WebInspector.HARLog = function(requests)
 {
@@ -264,7 +271,7 @@ WebInspector.HARLog = function(requests)
 
 WebInspector.HARLog.prototype = {
     /**
-     * @return {Object}
+     * @return {!Object}
      */
     build: function()
     {
@@ -287,7 +294,7 @@ WebInspector.HARLog.prototype = {
     },
 
     /**
-     * @return {Array}
+     * @return {!Array.<!Object>}
      */
     _buildPages: function()
     {
@@ -304,8 +311,8 @@ WebInspector.HARLog.prototype = {
     },
 
     /**
-     * @param {WebInspector.PageLoad} page
-     * @return {Object}
+     * @param {!WebInspector.PageLoad} page
+     * @return {!Object}
      */
     _convertPage: function(page)
     {
@@ -321,8 +328,8 @@ WebInspector.HARLog.prototype = {
     },
 
     /**
-     * @param {WebInspector.NetworkRequest} request
-     * @return {Object}
+     * @param {!WebInspector.NetworkRequest} request
+     * @return {!Object}
      */
     _convertResource: function(request)
     {
@@ -330,7 +337,7 @@ WebInspector.HARLog.prototype = {
     },
 
     /**
-     * @param {WebInspector.PageLoad} page
+     * @param {!WebInspector.PageLoad} page
      * @param {number} time
      * @return {number}
      */
@@ -352,9 +359,9 @@ WebInspector.HARWriter = function()
 
 WebInspector.HARWriter.prototype = {
     /**
-     * @param {WebInspector.OutputStream} stream
-     * @param {Array.<WebInspector.NetworkRequest>} requests
-     * @param {WebInspector.Progress} progress
+     * @param {!WebInspector.OutputStream} stream
+     * @param {!Array.<!WebInspector.NetworkRequest>} requests
+     * @param {!WebInspector.Progress} progress
      */
     write: function(stream, requests, progress)
     {
@@ -381,12 +388,10 @@ WebInspector.HARWriter.prototype = {
     },
 
     /**
-     * @param {Object} entry
-     * @param {string|null} content
-     * @param {boolean} contentEncoded
-     * @param {string=} mimeType
+     * @param {!Object} entry
+     * @param {?string} content
      */
-    _onContentAvailable: function(entry, content, contentEncoded, mimeType)
+    _onContentAvailable: function(entry, content)
     {
         if (content !== null)
             entry.response.content.text = content;
@@ -409,7 +414,7 @@ WebInspector.HARWriter.prototype = {
     },
 
     /**
-     * @param {WebInspector.OutputStream} stream
+     * @param {!WebInspector.OutputStream} stream
      * @param {string=} error
      */
     _writeNextChunk: function(stream, error)

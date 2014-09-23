@@ -54,6 +54,10 @@ struct sctp_assoc_change;
 struct socket;
 
 namespace cricket {
+// The highest stream ID (Sid) that SCTP allows, and the number of streams we
+// tell SCTP we're going to use.
+const uint32 kMaxSctpSid = 1023;
+
 // A DataEngine that interacts with usrsctp.
 //
 // From channel calls, data flows like this:
@@ -108,12 +112,14 @@ class SctpDataMediaChannel : public DataMediaChannel,
   // on top of SCTP.
   enum PayloadProtocolIdentifier {
     PPID_NONE = 0,  // No protocol is specified.
-    // Specified by Mozilla. Not clear that this is actually part of the
-    // standard. Use with caution!
-    // http://mxr.mozilla.org/mozilla-central/source/netwerk/sctp/datachannel/DataChannelProtocol.h#22
+    // Matches the PPIDs in mozilla source and
+    // https://datatracker.ietf.org/doc/draft-ietf-rtcweb-data-protocol Sec. 9
+    // They're not yet assigned by IANA.
     PPID_CONTROL = 50,
-    PPID_TEXT = 51,
-    PPID_BINARY = 52,
+    PPID_BINARY_PARTIAL = 52,
+    PPID_BINARY_LAST = 53,
+    PPID_TEXT_PARTIAL = 54,
+    PPID_TEXT_LAST = 51
   };
 
   // Given a thread which will be used to post messages (received data) to this
@@ -143,7 +149,8 @@ class SctpDataMediaChannel : public DataMediaChannel,
                         const talk_base::Buffer& payload,
                         SendDataResult* result = NULL);
   // A packet is received from the network interface. Posted to OnMessage.
-  virtual void OnPacketReceived(talk_base::Buffer* packet);
+  virtual void OnPacketReceived(talk_base::Buffer* packet,
+                                const talk_base::PacketTime& packet_time);
 
   // Exposed to allow Post call from c-callbacks.
   talk_base::Thread* worker_thread() const { return worker_thread_; }
@@ -162,13 +169,10 @@ class SctpDataMediaChannel : public DataMediaChannel,
       const std::vector<RtpHeaderExtension>& extensions) { return true; }
   virtual bool SetSendRtpHeaderExtensions(
       const std::vector<RtpHeaderExtension>& extensions) { return true; }
-  virtual bool SetSendCodecs(const std::vector<DataCodec>& codecs) {
-    return true;
-  }
-  virtual bool SetRecvCodecs(const std::vector<DataCodec>& codecs) {
-    return true;
-  }
-  virtual void OnRtcpReceived(talk_base::Buffer* packet) {}
+  virtual bool SetSendCodecs(const std::vector<DataCodec>& codecs);
+  virtual bool SetRecvCodecs(const std::vector<DataCodec>& codecs);
+  virtual void OnRtcpReceived(talk_base::Buffer* packet,
+                              const talk_base::PacketTime& packet_time) {}
   virtual void OnReadyToSend(bool ready) {}
 
   // Helper for debugging.
@@ -205,14 +209,11 @@ class SctpDataMediaChannel : public DataMediaChannel,
   talk_base::Thread* worker_thread_;
   // The local and remote SCTP port to use. These are passed along the wire
   // and the listener and connector must be using the same port. It is not
-  // related to the ports at the IP level.
+  // related to the ports at the IP level.  If set to -1, we default to
+  // kSctpDefaultPort.
   int local_port_;
   int remote_port_;
-  // TODO(ldixon): investigate why removing 'struct' makes the compiler
-  // complain.
-  //
-  // The socket created by usrsctp_socket(...).
-  struct socket* sock_;
+  struct socket* sock_;  // The socket created by usrsctp_socket(...).
 
   // sending_ is true iff there is a connected socket.
   bool sending_;

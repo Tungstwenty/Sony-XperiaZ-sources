@@ -30,10 +30,61 @@
 
 #include "RuntimeEnabledFeatures.h"
 #include "core/dom/Document.h"
+#include "core/dom/custom/CustomElementRegistrationContext.h"
+#include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/HTMLImportsController.h"
-#include "core/page/Frame.h"
+#include "core/frame/Frame.h"
 
 namespace WebCore {
+
+static Document* parentDocument(Frame* frame)
+{
+    if (!frame)
+        return 0;
+    Element* ownerElement = frame->ownerElement();
+    if (!ownerElement)
+        return 0;
+    return &ownerElement->document();
+}
+
+
+static Document* ownerDocument(Frame* frame)
+{
+    if (!frame)
+        return 0;
+
+    Frame* ownerFrame = frame->tree().parent();
+    if (!ownerFrame)
+        ownerFrame = frame->loader().opener();
+    if (!ownerFrame)
+        return 0;
+    return ownerFrame->document();
+}
+
+DocumentInit::DocumentInit(const KURL& url, Frame* frame, WeakPtr<Document> contextDocument, HTMLImport* import)
+    : m_url(url)
+    , m_frame(frame)
+    , m_parent(parentDocument(frame))
+    , m_owner(ownerDocument(frame))
+    , m_contextDocument(contextDocument)
+    , m_import(import)
+{
+}
+
+DocumentInit::DocumentInit(const DocumentInit& other)
+    : m_url(other.m_url)
+    , m_frame(other.m_frame)
+    , m_parent(other.m_parent)
+    , m_owner(other.m_owner)
+    , m_contextDocument(other.m_contextDocument)
+    , m_import(other.m_import)
+    , m_registrationContext(other.m_registrationContext)
+{
+}
+
+DocumentInit::~DocumentInit()
+{
+}
 
 bool DocumentInit::shouldSetURL() const
 {
@@ -43,8 +94,20 @@ bool DocumentInit::shouldSetURL() const
 
 bool DocumentInit::shouldTreatURLAsSrcdocDocument() const
 {
-    ASSERT(m_frame);
-    return m_frame->loader()->shouldTreatURLAsSrcdocDocument(m_url);
+    return m_parent && m_frame->loader().shouldTreatURLAsSrcdocDocument(m_url);
+}
+
+bool DocumentInit::isSeamlessAllowedFor(Document* child) const
+{
+    if (!m_parent)
+        return false;
+    if (m_parent->isSandboxed(SandboxSeamlessIframes))
+        return false;
+    if (child->isSrcdocDocument())
+        return true;
+    if (m_parent->securityOrigin()->canAccess(child->securityOrigin()))
+        return true;
+    return m_parent->securityOrigin()->canRequest(child->url());
 }
 
 Frame* DocumentInit::frameForSecurityContext() const
@@ -59,7 +122,7 @@ Frame* DocumentInit::frameForSecurityContext() const
 SandboxFlags DocumentInit::sandboxFlags() const
 {
     ASSERT(frameForSecurityContext());
-    return frameForSecurityContext()->loader()->effectiveSandboxFlags();
+    return frameForSecurityContext()->loader().effectiveSandboxFlags();
 }
 
 Settings* DocumentInit::settings() const
@@ -68,15 +131,9 @@ Settings* DocumentInit::settings() const
     return frameForSecurityContext()->settings();
 }
 
-Frame* DocumentInit::ownerFrame() const
+KURL DocumentInit::parentBaseURL() const
 {
-    if (!m_frame)
-        return 0;
-
-    Frame* ownerFrame = m_frame->tree()->parent();
-    if (!ownerFrame)
-        ownerFrame = m_frame->loader()->opener();
-    return ownerFrame;
+    return m_parent->baseURL();
 }
 
 DocumentInit& DocumentInit::withRegistrationContext(CustomElementRegistrationContext* registrationContext)
@@ -88,7 +145,7 @@ DocumentInit& DocumentInit::withRegistrationContext(CustomElementRegistrationCon
 
 PassRefPtr<CustomElementRegistrationContext> DocumentInit::registrationContext(Document* document) const
 {
-    if (!RuntimeEnabledFeatures::customDOMElementsEnabled() && !RuntimeEnabledFeatures::embedderCustomElementsEnabled())
+    if (!RuntimeEnabledFeatures::customElementsEnabled() && !RuntimeEnabledFeatures::embedderCustomElementsEnabled())
         return 0;
 
     if (!document->isHTMLDocument() && !document->isXHTMLDocument())
@@ -98,6 +155,16 @@ PassRefPtr<CustomElementRegistrationContext> DocumentInit::registrationContext(D
         return m_registrationContext.get();
 
     return CustomElementRegistrationContext::create();
+}
+
+WeakPtr<Document> DocumentInit::contextDocument() const
+{
+    return m_contextDocument;
+}
+
+DocumentInit DocumentInit::fromContext(WeakPtr<Document> contextDocument, const KURL& url)
+{
+    return DocumentInit(url, 0, contextDocument, 0);
 }
 
 } // namespace WebCore

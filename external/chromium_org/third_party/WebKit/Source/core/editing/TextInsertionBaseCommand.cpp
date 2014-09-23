@@ -27,15 +27,15 @@
 #include "core/editing/TextInsertionBaseCommand.h"
 
 #include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "core/dom/BeforeTextInsertedEvent.h"
+#include "core/events/BeforeTextInsertedEvent.h"
 #include "core/dom/Element.h"
 #include "core/dom/Node.h"
 #include "core/editing/FrameSelection.h"
-#include "core/page/Frame.h"
+#include "core/frame/Frame.h"
 
 namespace WebCore {
 
-TextInsertionBaseCommand::TextInsertionBaseCommand(Document* document)
+TextInsertionBaseCommand::TextInsertionBaseCommand(Document& document)
     : CompositeEditCommand(document)
 {
 }
@@ -47,10 +47,10 @@ void TextInsertionBaseCommand::applyTextInsertionCommand(Frame* frame, PassRefPt
         command->setStartingSelection(selectionForInsertion);
         command->setEndingSelection(selectionForInsertion);
     }
-    applyCommand(command);
+    command->apply();
     if (changeSelection) {
         command->setEndingSelection(endingSelection);
-        frame->selection()->setSelection(endingSelection);
+        frame->selection().setSelection(endingSelection);
     }
 }
 

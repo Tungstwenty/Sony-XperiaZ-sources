@@ -172,7 +172,7 @@ class TestPort : public Port {
   }
   virtual int SendTo(
       const void* data, size_t size, const talk_base::SocketAddress& addr,
-      bool payload) {
+      talk_base::DiffServCodePoint dscp, bool payload) {
     if (!payload) {
       IceMessage* msg = new IceMessage;
       ByteBuffer* buf = new ByteBuffer(static_cast<const char*>(data), size);
@@ -215,7 +215,7 @@ class TestChannel : public sigslot::has_slots<> {
  public:
   TestChannel(Port* p1, Port* p2)
       : ice_mode_(ICEMODE_FULL), src_(p1), dst_(p2), complete_count_(0),
-	conn_(NULL), remote_request_(NULL), nominated_(false) {
+	conn_(NULL), remote_request_(), nominated_(false) {
     src_->SignalPortComplete.connect(
         this, &TestChannel::OnPortComplete);
     src_->SignalUnknownAddress.connect(this, &TestChannel::OnUnknownAddress);
@@ -766,6 +766,9 @@ class FakePacketSocketFactory : public talk_base::PacketSocketFactory {
   void set_next_client_tcp_socket(AsyncPacketSocket* next_client_tcp_socket) {
     next_client_tcp_socket_ = next_client_tcp_socket;
   }
+  talk_base::AsyncResolverInterface* CreateAsyncResolver() {
+    return NULL;
+  }
 
  private:
   AsyncPacketSocket* next_udp_socket_;
@@ -787,10 +790,12 @@ class FakeAsyncPacketSocket : public AsyncPacketSocket {
   }
 
   // Send a packet.
-  virtual int Send(const void *pv, size_t cb) {
+  virtual int Send(const void *pv, size_t cb,
+                   talk_base::DiffServCodePoint dscp) {
     return static_cast<int>(cb);
   }
-  virtual int SendTo(const void *pv, size_t cb, const SocketAddress& addr) {
+  virtual int SendTo(const void *pv, size_t cb, const SocketAddress& addr,
+                     talk_base::DiffServCodePoint dscp) {
     return static_cast<int>(cb);
   }
   virtual int Close() {
@@ -1044,7 +1049,8 @@ TEST_F(PortTest, TestLoopbackCallAsIce) {
   IceMessage* msg = lport->last_stun_msg();
   EXPECT_EQ(STUN_BINDING_REQUEST, msg->type());
   conn->OnReadPacket(lport->last_stun_buf()->Data(),
-                     lport->last_stun_buf()->Length());
+                     lport->last_stun_buf()->Length(),
+                     talk_base::PacketTime());
   ASSERT_TRUE_WAIT(lport->last_stun_msg() != NULL, 1000);
   msg = lport->last_stun_msg();
   EXPECT_EQ(STUN_BINDING_RESPONSE, msg->type());
@@ -1077,7 +1083,7 @@ TEST_F(PortTest, TestLoopbackCallAsIce) {
   lport->Reset();
   talk_base::scoped_ptr<ByteBuffer> buf(new ByteBuffer());
   WriteStunMessage(modified_req.get(), buf.get());
-  conn1->OnReadPacket(buf->Data(), buf->Length());
+  conn1->OnReadPacket(buf->Data(), buf->Length(), talk_base::PacketTime());
   ASSERT_TRUE_WAIT(lport->last_stun_msg() != NULL, 1000);
   msg = lport->last_stun_msg();
   EXPECT_EQ(STUN_BINDING_ERROR_RESPONSE, msg->type());
@@ -1115,7 +1121,8 @@ TEST_F(PortTest, TestIceRoleConflict) {
   EXPECT_EQ(STUN_BINDING_REQUEST, msg->type());
   // Send rport binding request to lport.
   lconn->OnReadPacket(rport->last_stun_buf()->Data(),
-                      rport->last_stun_buf()->Length());
+                      rport->last_stun_buf()->Length(),
+                      talk_base::PacketTime());
 
   ASSERT_TRUE_WAIT(lport->last_stun_msg() != NULL, 1000);
   EXPECT_EQ(STUN_BINDING_RESPONSE, lport->last_stun_msg()->type());
@@ -1222,6 +1229,26 @@ TEST_F(PortTest, TestSkipCrossFamilyTcp) {
 
 TEST_F(PortTest, TestSkipCrossFamilyUdp) {
   TestCrossFamilyPorts(SOCK_DGRAM);
+}
+
+// This test verifies DSCP value set through SetOption interface can be
+// get through DefaultDscpValue.
+TEST_F(PortTest, TestDefaultDscpValue) {
+  talk_base::scoped_ptr<UDPPort> udpport(CreateUdpPort(kLocalAddr1));
+  udpport->SetOption(talk_base::Socket::OPT_DSCP, talk_base::DSCP_CS6);
+  EXPECT_EQ(talk_base::DSCP_CS6, udpport->DefaultDscpValue());
+  talk_base::scoped_ptr<TCPPort> tcpport(CreateTcpPort(kLocalAddr1));
+  tcpport->SetOption(talk_base::Socket::OPT_DSCP, talk_base::DSCP_AF31);
+  EXPECT_EQ(talk_base::DSCP_AF31, tcpport->DefaultDscpValue());
+  talk_base::scoped_ptr<StunPort> stunport(
+      CreateStunPort(kLocalAddr1, nat_socket_factory1()));
+  stunport->SetOption(talk_base::Socket::OPT_DSCP, talk_base::DSCP_AF41);
+  EXPECT_EQ(talk_base::DSCP_AF41, stunport->DefaultDscpValue());
+  talk_base::scoped_ptr<TurnPort> turnport(CreateTurnPort(
+      kLocalAddr1, nat_socket_factory1(), PROTO_UDP, PROTO_UDP));
+  turnport->SetOption(talk_base::Socket::OPT_DSCP, talk_base::DSCP_CS7);
+  EXPECT_EQ(talk_base::DSCP_CS7, turnport->DefaultDscpValue());
+  // TODO(mallinath) - Test DSCP through GetOption.
 }
 
 // Test sending STUN messages in GICE format.
@@ -1877,7 +1904,8 @@ TEST_F(PortTest, TestHandleStunBindingIndication) {
   EXPECT_EQ(STUN_BINDING_REQUEST, msg->type());
   // Send rport binding request to lport.
   lconn->OnReadPacket(rport->last_stun_buf()->Data(),
-                      rport->last_stun_buf()->Length());
+                      rport->last_stun_buf()->Length(),
+                      talk_base::PacketTime());
   ASSERT_TRUE_WAIT(lport->last_stun_msg() != NULL, 1000);
   EXPECT_EQ(STUN_BINDING_RESPONSE, lport->last_stun_msg()->type());
   uint32 last_ping_received1 = lconn->last_ping_received();
@@ -1885,7 +1913,7 @@ TEST_F(PortTest, TestHandleStunBindingIndication) {
   // Adding a delay of 100ms.
   talk_base::Thread::Current()->ProcessMessages(100);
   // Pinging lconn using stun indication message.
-  lconn->OnReadPacket(buf->Data(), buf->Length());
+  lconn->OnReadPacket(buf->Data(), buf->Length(), talk_base::PacketTime());
   uint32 last_ping_received2 = lconn->last_ping_received();
   EXPECT_GT(last_ping_received2, last_ping_received1);
 }
@@ -2127,14 +2155,16 @@ TEST_F(PortTest, TestWritableState) {
   // Data should be unsendable until the connection is accepted.
   char data[] = "abcd";
   int data_size = ARRAY_SIZE(data);
-  EXPECT_EQ(SOCKET_ERROR, ch1.conn()->Send(data, data_size));
+  EXPECT_EQ(SOCKET_ERROR,
+            ch1.conn()->Send(data, data_size, talk_base::DSCP_NO_CHANGE));
 
   // Accept the connection to return the binding response, transition to
   // writable, and allow data to be sent.
   ch2.AcceptConnection();
   EXPECT_EQ_WAIT(Connection::STATE_WRITABLE, ch1.conn()->write_state(),
                  kTimeout);
-  EXPECT_EQ(data_size, ch1.conn()->Send(data, data_size));
+  EXPECT_EQ(data_size,
+            ch1.conn()->Send(data, data_size, talk_base::DSCP_NO_CHANGE));
 
   // Ask the connection to update state as if enough time has passed to lose
   // full writability and 5 pings went unresponded to. We'll accomplish the
@@ -2147,7 +2177,8 @@ TEST_F(PortTest, TestWritableState) {
   EXPECT_EQ(Connection::STATE_WRITE_UNRELIABLE, ch1.conn()->write_state());
 
   // Data should be able to be sent in this state.
-  EXPECT_EQ(data_size, ch1.conn()->Send(data, data_size));
+  EXPECT_EQ(data_size,
+            ch1.conn()->Send(data, data_size, talk_base::DSCP_NO_CHANGE));
 
   // And now allow the other side to process the pings and send binding
   // responses.
@@ -2164,7 +2195,8 @@ TEST_F(PortTest, TestWritableState) {
   EXPECT_EQ(Connection::STATE_WRITE_TIMEOUT, ch1.conn()->write_state());
 
   // Now that the connection has completely timed out, data send should fail.
-  EXPECT_EQ(SOCKET_ERROR, ch1.conn()->Send(data, data_size));
+  EXPECT_EQ(SOCKET_ERROR,
+            ch1.conn()->Send(data, data_size, talk_base::DSCP_NO_CHANGE));
 
   ch1.Stop();
   ch2.Stop();
@@ -2243,7 +2275,8 @@ TEST_F(PortTest, TestIceLiteConnectivity) {
 
   // Feeding the respone message from litemode to the full mode connection.
   ch1.conn()->OnReadPacket(ice_lite_port->last_stun_buf()->Data(),
-                           ice_lite_port->last_stun_buf()->Length());
+                           ice_lite_port->last_stun_buf()->Length(),
+                           talk_base::PacketTime());
   // Verifying full mode connection becomes writable from the response.
   EXPECT_EQ_WAIT(Connection::STATE_WRITABLE, ch1.conn()->write_state(),
                  kTimeout);

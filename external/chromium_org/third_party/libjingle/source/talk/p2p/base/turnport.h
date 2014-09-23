@@ -32,11 +32,11 @@
 #include <string>
 #include <list>
 
+#include "talk/base/asyncpacketsocket.h"
 #include "talk/p2p/base/port.h"
 #include "talk/p2p/client/basicportallocator.h"
 
 namespace talk_base {
-class AsyncPacketSocket;
 class AsyncResolver;
 class SignalThread;
 }
@@ -74,13 +74,15 @@ class TurnPort : public Port {
       const Candidate& c, PortInterface::CandidateOrigin origin);
   virtual int SendTo(const void* data, size_t size,
                      const talk_base::SocketAddress& addr,
+                     talk_base::DiffServCodePoint dscp,
                      bool payload);
   virtual int SetOption(talk_base::Socket::Option opt, int value);
   virtual int GetOption(talk_base::Socket::Option opt, int* value);
   virtual int GetError();
-  virtual void OnReadPacket(talk_base::AsyncPacketSocket* socket,
-                            const char* data, size_t size,
-                            const talk_base::SocketAddress& remote_addr);
+  virtual void OnReadPacket(
+      talk_base::AsyncPacketSocket* socket, const char* data, size_t size,
+      const talk_base::SocketAddress& remote_addr,
+      const talk_base::PacketTime& packet_time);
   virtual void OnReadyToSend(talk_base::AsyncPacketSocket* socket);
 
   void OnSocketConnect(talk_base::AsyncPacketSocket* socket);
@@ -106,6 +108,8 @@ class TurnPort : public Port {
            const RelayCredentials& credentials);
 
  private:
+  enum { MSG_ERROR = MSG_FIRST_AVAILABLE };
+
   typedef std::list<TurnEntry*> EntryList;
   typedef std::map<talk_base::Socket::Option, int> SocketOptionsMap;
 
@@ -120,7 +124,7 @@ class TurnPort : public Port {
   }
 
   void ResolveTurnAddress(const talk_base::SocketAddress& address);
-  void OnResolveResult(talk_base::SignalThread* signal_thread);
+  void OnResolveResult(talk_base::AsyncResolverInterface* resolver);
 
   void AddRequestAuthInfo(StunMessage* msg);
   void OnSendStunPacket(const void* data, size_t size, StunRequest* request);
@@ -131,14 +135,17 @@ class TurnPort : public Port {
   void OnAllocateError();
   void OnAllocateRequestTimeout();
 
-  void HandleDataIndication(const char* data, size_t size);
-  void HandleChannelData(int channel_id, const char* data, size_t size);
+  void HandleDataIndication(const char* data, size_t size,
+                            const talk_base::PacketTime& packet_time);
+  void HandleChannelData(int channel_id, const char* data, size_t size,
+                         const talk_base::PacketTime& packet_time);
   void DispatchPacket(const char* data, size_t size,
-      const talk_base::SocketAddress& remote_addr, ProtocolType proto);
+      const talk_base::SocketAddress& remote_addr,
+      ProtocolType proto, const talk_base::PacketTime& packet_time);
 
   bool ScheduleRefresh(int lifetime);
   void SendRequest(StunRequest* request, int delay);
-  int Send(const void* data, size_t size);
+  int Send(const void* data, size_t size, talk_base::DiffServCodePoint dscp);
   void UpdateHash();
   bool UpdateNonce(StunMessage* response);
 
@@ -154,7 +161,7 @@ class TurnPort : public Port {
 
   talk_base::scoped_ptr<talk_base::AsyncPacketSocket> socket_;
   SocketOptionsMap socket_options_;
-  talk_base::AsyncResolver* resolver_;
+  talk_base::AsyncResolverInterface* resolver_;
   int error_;
 
   StunRequestManager request_manager_;

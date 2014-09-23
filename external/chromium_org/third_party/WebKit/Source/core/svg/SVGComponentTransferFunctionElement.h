@@ -21,10 +21,10 @@
 #ifndef SVGComponentTransferFunctionElement_h
 #define SVGComponentTransferFunctionElement_h
 
-#include "core/platform/graphics/filters/FEComponentTransfer.h"
 #include "core/svg/SVGAnimatedEnumeration.h"
 #include "core/svg/SVGAnimatedNumber.h"
 #include "core/svg/SVGAnimatedNumberList.h"
+#include "platform/graphics/filters/FEComponentTransfer.h"
 
 namespace WebCore {
 
@@ -74,13 +74,13 @@ public:
     ComponentTransferFunction transferFunction() const;
 
 protected:
-    SVGComponentTransferFunctionElement(const QualifiedName&, Document*);
+    SVGComponentTransferFunctionElement(const QualifiedName&, Document&);
 
     bool isSupportedAttribute(const QualifiedName&);
     virtual void parseAttribute(const QualifiedName&, const AtomicString&) OVERRIDE;
     virtual void svgAttributeChanged(const QualifiedName&);
 
-    virtual bool rendererIsNeeded(const NodeRenderingContext&) OVERRIDE { return false; }
+    virtual bool rendererIsNeeded(const RenderStyle&) OVERRIDE { return false; }
 
 private:
     BEGIN_DECLARE_ANIMATED_PROPERTIES(SVGComponentTransferFunctionElement)

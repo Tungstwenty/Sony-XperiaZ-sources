@@ -23,9 +23,7 @@
  */
 
 #include "config.h"
-
 #if ENABLE(WEB_AUDIO)
-
 #include "V8BiquadFilterNode.h"
 
 #include "bindings/v8/V8Binding.h"
@@ -33,7 +31,7 @@
 
 namespace WebCore {
 
-void V8BiquadFilterNode::typeAttrSetterCustom(v8::Local<v8::String> name, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void>& info)
+void V8BiquadFilterNode::typeAttributeSetterCustom(v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void>& info)
 {
     BiquadFilterNode* imp = V8BiquadFilterNode::toNative(info.Holder());
 
@@ -47,7 +45,7 @@ void V8BiquadFilterNode::typeAttrSetterCustom(v8::Local<v8::String> name, v8::Lo
     }
 
     if (value->IsString()) {
-        String type = toWebCoreString(value);
+        String type = toCoreString(value.As<v8::String>());
         if (type == "lowpass" || type == "highpass" || type == "bandpass" || type == "lowshelf" || type == "highshelf" || type == "peaking" || type == "notch" || type == "allpass") {
             imp->setType(type);
             return;

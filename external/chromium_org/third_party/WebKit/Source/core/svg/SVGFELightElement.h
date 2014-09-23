@@ -22,9 +22,9 @@
 #ifndef SVGFELightElement_h
 #define SVGFELightElement_h
 
-#include "core/platform/graphics/filters/LightSource.h"
 #include "core/svg/SVGAnimatedNumber.h"
 #include "core/svg/SVGElement.h"
+#include "platform/graphics/filters/LightSource.h"
 
 namespace WebCore {
 
@@ -35,7 +35,7 @@ public:
     static PassRefPtr<LightSource> findLightSource(const SVGElement*);
 
 protected:
-    SVGFELightElement(const QualifiedName&, Document*);
+    SVGFELightElement(const QualifiedName&, Document&);
 
 private:
     bool isSupportedAttribute(const QualifiedName&);
@@ -43,7 +43,7 @@ private:
     virtual void svgAttributeChanged(const QualifiedName&);
     virtual void childrenChanged(bool changedByParser = false, Node* beforeChange = 0, Node* afterChange = 0, int childCountDelta = 0);
 
-    virtual bool rendererIsNeeded(const NodeRenderingContext&) OVERRIDE { return false; }
+    virtual bool rendererIsNeeded(const RenderStyle&) OVERRIDE { return false; }
 
     BEGIN_DECLARE_ANIMATED_PROPERTIES(SVGFELightElement)
         DECLARE_ANIMATED_NUMBER(Azimuth, azimuth)

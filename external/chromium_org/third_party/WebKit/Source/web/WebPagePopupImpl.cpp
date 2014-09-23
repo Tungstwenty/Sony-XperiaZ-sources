@@ -31,10 +31,7 @@
 #include "config.h"
 #include "WebPagePopupImpl.h"
 
-#include "PageWidgetDelegate.h"
-#include "WebCursorInfo.h"
 #include "WebInputEventConversion.h"
-#include "WebPagePopup.h"
 #include "WebSettingsImpl.h"
 #include "WebViewClient.h"
 #include "WebViewImpl.h"
@@ -46,15 +43,17 @@
 #include "core/page/DOMWindowPagePopup.h"
 #include "core/page/EventHandler.h"
 #include "core/page/FocusController.h"
-#include "core/page/FrameView.h"
+#include "core/frame/Frame.h"
+#include "core/frame/FrameView.h"
 #include "core/page/Page.h"
 #include "core/page/PagePopupClient.h"
-#include "core/page/Settings.h"
+#include "core/frame/Settings.h"
+#include "public/platform/WebCursorInfo.h"
 
 using namespace WebCore;
 using namespace std;
 
-namespace WebKit {
+namespace blink {
 
 class PagePopupChromeClient : public EmptyChromeClient {
     WTF_MAKE_NONCOPYABLE(PagePopupChromeClient);
@@ -84,13 +83,10 @@ private:
         m_popup->widgetClient()->setWindowRect(m_popup->m_windowRectInScreen);
     }
 
-    virtual void addMessageToConsole(MessageSource, MessageLevel, const String& message, unsigned lineNumber, const String&) OVERRIDE
+    virtual void addMessageToConsole(MessageSource, MessageLevel, const String& message, unsigned lineNumber, const String&, const String&) OVERRIDE
     {
 #ifndef NDEBUG
         fprintf(stderr, "CONSOLE MESSSAGE:%u: %s\n", lineNumber, message.utf8().data());
-#else
-        UNUSED_PARAM(message);
-        UNUSED_PARAM(lineNumber);
 #endif
     }
 
@@ -195,18 +191,15 @@ bool WebPagePopupImpl::initializePage()
     pageClients.chromeClient = m_chromeClient.get();
 
     m_page = adoptPtr(new Page(pageClients));
-    m_page->settings()->setScriptEnabled(true);
-    m_page->settings()->setAllowScriptsToCloseWindows(true);
+    m_page->settings().setScriptEnabled(true);
+    m_page->settings().setAllowScriptsToCloseWindows(true);
     m_page->setDeviceScaleFactor(m_webView->deviceScaleFactor());
-    m_page->settings()->setDeviceSupportsTouch(m_webView->page()->settings()->deviceSupportsTouch());
-
-    unsigned layoutMilestones = DidFirstLayout | DidFirstVisuallyNonEmptyLayout;
-    m_page->addLayoutMilestones(static_cast<LayoutMilestones>(layoutMilestones));
+    m_page->settings().setDeviceSupportsTouch(m_webView->page()->settings().deviceSupportsTouch());
 
     static ContextFeaturesClient* pagePopupFeaturesClient =  new PagePopupFeaturesClient();
     provideContextFeaturesTo(m_page.get(), pagePopupFeaturesClient);
     static FrameLoaderClient* emptyFrameLoaderClient =  new EmptyFrameLoaderClient();
-    RefPtr<Frame> frame = Frame::create(m_page.get(), 0, emptyFrameLoaderClient);
+    RefPtr<Frame> frame = Frame::create(FrameInit::create(0, m_page.get(), emptyFrameLoaderClient));
     frame->setView(FrameView::create(frame.get()));
     frame->init();
     frame->view()->resize(m_popupClient->contentSize());
@@ -214,9 +207,9 @@ bool WebPagePopupImpl::initializePage()
 
     DOMWindowPagePopup::install(frame->domWindow(), m_popupClient);
 
-    DocumentWriter* writer = frame->loader()->activeDocumentLoader()->beginWriting("text/html", "UTF-8");
+    DocumentWriter* writer = frame->loader().activeDocumentLoader()->beginWriting("text/html", "UTF-8");
     m_popupClient->writeDocument(*writer);
-    frame->loader()->activeDocumentLoader()->endWriting(writer);
+    frame->loader().activeDocumentLoader()->endWriting(writer);
     return true;
 }
 
@@ -226,7 +219,7 @@ void WebPagePopupImpl::destroyPage()
         return;
 
     if (m_page->mainFrame())
-        m_page->mainFrame()->loader()->frameDetached();
+        m_page->mainFrame()->loader().frameDetached();
 
     m_page.clear();
 }
@@ -281,7 +274,7 @@ bool WebPagePopupImpl::handleGestureEvent(const WebGestureEvent& event)
     if (m_closing || !m_page || !m_page->mainFrame() || !m_page->mainFrame()->view())
         return false;
     Frame& frame = *m_page->mainFrame();
-    return frame.eventHandler()->handleGestureEvent(PlatformGestureEventBuilder(frame.view(), event));
+    return frame.eventHandler().handleGestureEvent(PlatformGestureEventBuilder(frame.view(), event));
 }
 
 bool WebPagePopupImpl::handleInputEvent(const WebInputEvent& event)
@@ -295,7 +288,7 @@ bool WebPagePopupImpl::handleKeyEvent(const PlatformKeyboardEvent& event)
 {
     if (m_closing || !m_page->mainFrame() || !m_page->mainFrame()->view())
         return false;
-    return m_page->mainFrame()->eventHandler()->keyEvent(event);
+    return m_page->mainFrame()->eventHandler().keyEvent(event);
 }
 
 void WebPagePopupImpl::setFocus(bool enable)
@@ -319,8 +312,7 @@ void WebPagePopupImpl::closePopup()
 {
     if (m_page) {
         m_page->clearPageGroup();
-        m_page->mainFrame()->loader()->stopAllLoaders();
-        m_page->mainFrame()->loader()->stopLoading(UnloadEventPolicyNone);
+        m_page->mainFrame()->loader().stopAllLoaders();
         DOMWindowPagePopup::uninstall(m_page->mainFrame()->domWindow());
     }
     m_closing = true;
@@ -351,4 +343,4 @@ WebPagePopup* WebPagePopup::create(WebWidgetClient* client)
     return adoptRef(new WebPagePopupImpl(client)).leakRef();
 }
 
-} // namespace WebKit
+} // namespace blink

@@ -31,9 +31,9 @@
 /**
  * @constructor
  * @extends {WebInspector.PopoverHelper}
- * @param {Element} panelElement
- * @param {function(Element, Event):Element|undefined} getAnchor
- * @param {function(Element, function(WebInspector.RemoteObject, boolean, Element=):undefined, string):undefined} queryObject
+ * @param {!Element} panelElement
+ * @param {function(!Element, !Event):!Element|undefined} getAnchor
+ * @param {function(!Element, function(!WebInspector.RemoteObject, boolean, !Element=):undefined, string):undefined} queryObject
  * @param {function()=} onHide
  * @param {boolean=} disableOnClick
  */
@@ -48,15 +48,55 @@ WebInspector.ObjectPopoverHelper = function(panelElement, getAnchor, queryObject
 
 WebInspector.ObjectPopoverHelper.prototype = {
     /**
-     * @param {Element} element
-     * @param {WebInspector.Popover} popover
+     * @param {function(!WebInspector.RemoteObject):string} formatter
+     */
+    setRemoteObjectFormatter: function(formatter)
+    {
+        this._remoteObjectFormatter = formatter;
+    },
+
+    /**
+     * @param {!Element} element
+     * @param {!WebInspector.Popover} popover
      */
     _showObjectPopover: function(element, popover)
     {
         /**
-         * @param {WebInspector.RemoteObject} result
+         * @param {!Element} anchorElement
+         * @param {!Element} popoverContentElement
+         * @param {?Protocol.Error} error
+         * @param {!DebuggerAgent.FunctionDetails} response
+         * @this {WebInspector.ObjectPopoverHelper}
+         */
+        function didGetDetails(anchorElement, popoverContentElement, error, response)
+        {
+            if (error) {
+                console.error(error);
+                return;
+            }
+            var container = document.createElement("div");
+            container.className = "inline-block";
+
+            var title = container.createChild("div", "function-popover-title source-code");
+            var functionName = title.createChild("span", "function-name");
+            functionName.textContent = response.functionName || WebInspector.UIString("(anonymous function)");
+
+            this._linkifier = new WebInspector.Linkifier();
+            var rawLocation = /** @type {!WebInspector.DebuggerModel.Location} */ (response.location);
+            var link = this._linkifier.linkifyRawLocation(rawLocation, "function-location-link");
+            if (link)
+                title.appendChild(link);
+
+            container.appendChild(popoverContentElement);
+
+            popover.show(container, anchorElement);
+        }
+
+        /**
+         * @param {!WebInspector.RemoteObject} result
          * @param {boolean} wasThrown
-         * @param {Element=} anchorOverride
+         * @param {!Element=} anchorOverride
+         * @this {WebInspector.ObjectPopoverHelper}
          */
         function showObjectPopover(result, wasThrown, anchorOverride)
         {
@@ -68,38 +108,16 @@ WebInspector.ObjectPopoverHelper.prototype = {
             }
 
             var anchorElement = anchorOverride || element;
+            var description = (this._remoteObjectFormatter && this._remoteObjectFormatter(result)) || result.description;
 
             var popoverContentElement = null;
             if (result.type !== "object") {
                 popoverContentElement = document.createElement("span");
                 popoverContentElement.className = "monospace console-formatted-" + result.type;
                 popoverContentElement.style.whiteSpace = "pre";
-                popoverContentElement.textContent = result.description;
+                popoverContentElement.textContent = description;
                 if (result.type === "function") {
-                    function didGetDetails(error, response)
-                    {
-                        if (error) {
-                            console.error(error);
-                            return;
-                        }
-                        var container = document.createElement("div");
-                        container.className = "inline-block";
-
-                        var title = container.createChild("div", "function-popover-title source-code");
-                        var functionName = title.createChild("span", "function-name");
-                        functionName.textContent = response.name || response.inferredName || response.displayName || WebInspector.UIString("(anonymous function)");
-
-                        this._linkifier = new WebInspector.Linkifier();
-                        var rawLocation = /** @type {WebInspector.DebuggerModel.Location} */ (response.location);
-                        var link = this._linkifier.linkifyRawLocation(rawLocation, "function-location-link");
-                        if (link)
-                            title.appendChild(link);
-
-                        container.appendChild(popoverContentElement);
-
-                        popover.show(container, anchorElement);
-                    }
-                    DebuggerAgent.getFunctionDetails(result.objectId, didGetDetails.bind(this));
+                    DebuggerAgent.getFunctionDetails(result.objectId, didGetDetails.bind(this, anchorElement, popoverContentElement));
                     return;
                 }
                 if (result.type === "string")
@@ -111,18 +129,18 @@ WebInspector.ObjectPopoverHelper.prototype = {
                 popoverContentElement = document.createElement("div");
                 this._titleElement = document.createElement("div");
                 this._titleElement.className = "source-frame-popover-title monospace";
-                this._titleElement.textContent = result.description;
+                this._titleElement.textContent = description;
                 popoverContentElement.appendChild(this._titleElement);
 
                 var section = new WebInspector.ObjectPropertiesSection(result);
                 // For HTML DOM wrappers, append "#id" to title, if not empty.
-                if (result.description.substr(0, 4) === "HTML") {
+                if (description.substr(0, 4) === "HTML") {
                     this._sectionUpdateProperties = section.updateProperties.bind(section);
                     section.updateProperties = this._updateHTMLId.bind(this);
                 }
                 section.expanded = true;
-                section.element.addStyleClass("source-frame-popover-tree");
-                section.headerElement.addStyleClass("hidden");
+                section.element.classList.add("source-frame-popover-tree");
+                section.headerElement.classList.add("hidden");
                 popoverContentElement.appendChild(section.element);
 
                 const popoverWidth = 300;

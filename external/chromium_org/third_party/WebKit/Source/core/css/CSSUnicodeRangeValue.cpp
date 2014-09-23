@@ -30,11 +30,11 @@
 
 namespace WebCore {
 
-String CSSUnicodeRangeValue::customCssText() const
+String CSSUnicodeRangeValue::customCSSText() const
 {
-    String result;
-    // FIXME: Implement.
-    return result;
+    if (m_from == m_to)
+        return String::format("U+%X", m_from);
+    return String::format("U+%X-%X", m_from, m_to);
 }
 
 bool CSSUnicodeRangeValue::equals(const CSSUnicodeRangeValue& other) const

@@ -31,12 +31,12 @@
 #include "WebPluginContainerImpl.h"
 #include "WebPluginScrollbarClient.h"
 #include "WebViewImpl.h"
-#include "core/platform/ScrollAnimator.h"
-#include "core/platform/ScrollTypes.h"
-#include "core/platform/Scrollbar.h"
-#include "core/platform/ScrollbarTheme.h"
-#include "core/platform/chromium/KeyboardCodes.h"
-#include "core/platform/graphics/GraphicsContext.h"
+#include "platform/KeyboardCodes.h"
+#include "platform/scroll/ScrollAnimator.h"
+#include "platform/scroll/Scrollbar.h"
+#include "platform/scroll/ScrollbarTheme.h"
+#include "platform/graphics/GraphicsContext.h"
+#include "platform/scroll/ScrollTypes.h"
 #include "public/platform/WebCanvas.h"
 #include "public/platform/WebRect.h"
 #include "public/platform/WebVector.h"
@@ -44,13 +44,13 @@
 using namespace std;
 using namespace WebCore;
 
-namespace WebKit {
+namespace blink {
 
 WebPluginScrollbar* WebPluginScrollbar::createForPlugin(Orientation orientation,
                                                         WebPluginContainer* pluginContainer,
                                                         WebPluginScrollbarClient* client)
 {
-    WebPluginContainerImpl* plugin = static_cast<WebPluginContainerImpl*>(pluginContainer);
+    WebPluginContainerImpl* plugin = toPluginContainerImpl(pluginContainer);
     return new WebPluginScrollbarImpl(orientation, plugin->scrollbarGroup(), client);
 }
 
@@ -66,7 +66,7 @@ WebPluginScrollbarImpl::WebPluginScrollbarImpl(Orientation orientation,
     , m_client(client)
     , m_scrollOffset(0)
 {
-    m_scrollbar = Scrollbar::createNativeScrollbar(
+    m_scrollbar = Scrollbar::create(
         static_cast<ScrollableArea*>(m_group),
         static_cast<WebCore::ScrollbarOrientation>(orientation),
         WebCore::RegularScrollbar);
@@ -187,6 +187,11 @@ WebScrollbar::Orientation WebPluginScrollbarImpl::orientation() const
     if (m_scrollbar->orientation() == WebCore::HorizontalScrollbar)
         return WebScrollbar::Horizontal;
     return WebScrollbar::Vertical;
+}
+
+bool WebPluginScrollbarImpl::isLeftSideVerticalScrollbar() const
+{
+    return false;
 }
 
 bool WebPluginScrollbarImpl::isCustomScrollbar() const
@@ -366,4 +371,4 @@ bool WebPluginScrollbarImpl::onKeyDown(const WebInputEvent& event)
     return false;
 }
 
-} // namespace WebKit
+} // namespace blink

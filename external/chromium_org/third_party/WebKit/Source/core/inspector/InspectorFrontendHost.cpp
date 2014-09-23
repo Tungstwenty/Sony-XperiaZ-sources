@@ -31,23 +31,27 @@
 #include "core/inspector/InspectorFrontendHost.h"
 
 #include "bindings/v8/ScriptFunctionCall.h"
-#include "core/dom/UserGestureIndicator.h"
+#include "bindings/v8/ScriptState.h"
+#include "core/fetch/ResourceFetcher.h"
+#include "core/fetch/TextResourceDecoder.h"
+#include "core/frame/Frame.h"
 #include "core/inspector/InspectorController.h"
 #include "core/inspector/InspectorFrontendClient.h"
 #include "core/loader/FrameLoader.h"
-#include "core/loader/TextResourceDecoder.h"
 #include "core/page/ContextMenuController.h"
 #include "core/page/ContextMenuProvider.h"
-#include "core/page/Frame.h"
 #include "core/page/Page.h"
-#include "core/platform/ContextMenu.h"
-#include "core/platform/ContextMenuItem.h"
 #include "core/platform/Pasteboard.h"
-#include "core/platform/network/ResourceError.h"
-#include "core/platform/network/ResourceRequest.h"
-#include "core/platform/network/ResourceResponse.h"
 #include "core/rendering/RenderTheme.h"
 #include "modules/filesystem/DOMFileSystem.h"
+#include "platform/ContextMenu.h"
+#include "platform/ContextMenuItem.h"
+#include "platform/JSONValues.h"
+#include "platform/SharedBuffer.h"
+#include "platform/UserGestureIndicator.h"
+#include "platform/network/ResourceError.h"
+#include "platform/network/ResourceRequest.h"
+#include "platform/network/ResourceResponse.h"
 
 namespace WebCore {
 
@@ -132,36 +136,6 @@ void InspectorFrontendHost::disconnectClient()
     m_frontendPage = 0;
 }
 
-void InspectorFrontendHost::loaded()
-{
-}
-
-void InspectorFrontendHost::requestSetDockSide(const String& side)
-{
-    if (!m_client)
-        return;
-    if (side == "undocked")
-        m_client->requestSetDockSide(InspectorFrontendClient::Undocked);
-    else if (side == "right")
-        m_client->requestSetDockSide(InspectorFrontendClient::DockedToRight);
-    else if (side == "bottom")
-        m_client->requestSetDockSide(InspectorFrontendClient::DockedToBottom);
-}
-
-void InspectorFrontendHost::closeWindow()
-{
-    if (m_client) {
-        m_client->closeWindow();
-        disconnectClient(); // Disconnect from client.
-    }
-}
-
-void InspectorFrontendHost::bringToFront()
-{
-    if (m_client)
-        m_client->bringToFront();
-}
-
 void InspectorFrontendHost::setZoomFactor(float zoom)
 {
     m_frontendPage->mainFrame()->setPageAndTextZoomFactors(zoom, 1);
@@ -173,27 +147,9 @@ void InspectorFrontendHost::inspectedURLChanged(const String& newURL)
         m_client->inspectedURLChanged(newURL);
 }
 
-void InspectorFrontendHost::setAttachedWindowHeight(unsigned height)
-{
-    if (m_client)
-        m_client->changeAttachedWindowHeight(height);
-}
-
-void InspectorFrontendHost::moveWindowBy(float x, float y) const
-{
-    if (m_client)
-        m_client->moveWindowBy(x, y);
-}
-
 void InspectorFrontendHost::setInjectedScriptForOrigin(const String& origin, const String& script)
 {
-    ASSERT(m_frontendPage->inspectorController());
-    m_frontendPage->inspectorController()->setInjectedScriptForOrigin(origin, script);
-}
-
-String InspectorFrontendHost::localizedStringsURL()
-{
-    return "";
+    m_frontendPage->inspectorController().setInjectedScriptForOrigin(origin, script);
 }
 
 void InspectorFrontendHost::copyText(const String& text)
@@ -201,37 +157,16 @@ void InspectorFrontendHost::copyText(const String& text)
     Pasteboard::generalPasteboard()->writePlainText(text, Pasteboard::CannotSmartReplace);
 }
 
-void InspectorFrontendHost::openInNewTab(const String& url)
-{
-    if (m_client)
-        m_client->openInNewTab(url);
-}
-
-bool InspectorFrontendHost::canSave()
-{
-    return true;
-}
-
-void InspectorFrontendHost::save(const String& url, const String& content, bool forceSaveAs)
-{
-    if (m_client)
-        m_client->save(url, content, forceSaveAs);
-}
-
-void InspectorFrontendHost::append(const String& url, const String& content)
-{
-    if (m_client)
-        m_client->append(url, content);
-}
-
-void InspectorFrontendHost::close(const String&)
-{
-}
-
 void InspectorFrontendHost::sendMessageToBackend(const String& message)
 {
     if (m_client)
         m_client->sendMessageToBackend(message);
+}
+
+void InspectorFrontendHost::sendMessageToEmbedder(const String& message)
+{
+    if (m_client)
+        m_client->sendMessageToEmbedder(message);
 }
 
 void InspectorFrontendHost::showContextMenu(Event* event, const Vector<ContextMenuItem>& items)
@@ -247,107 +182,44 @@ void InspectorFrontendHost::showContextMenu(Event* event, const Vector<ContextMe
         return;
     }
     RefPtr<FrontendMenuProvider> menuProvider = FrontendMenuProvider::create(this, frontendApiObject, items);
-    ContextMenuController* menuController = m_frontendPage->contextMenuController();
-    menuController->showContextMenu(event, menuProvider);
+    m_frontendPage->contextMenuController().showContextMenu(event, menuProvider);
     m_menuProvider = menuProvider.get();
-}
-
-String InspectorFrontendHost::loadResourceSynchronously(const String& url)
-{
-    ResourceRequest request(url);
-    request.setHTTPMethod("GET");
-
-    Vector<char> data;
-    ResourceError error;
-    ResourceResponse response;
-    m_frontendPage->mainFrame()->loader()->loadResourceSynchronously(request, DoNotAllowStoredCredentials, error, response, data);
-    WTF::TextEncoding textEncoding(response.textEncodingName());
-    bool useDetector = false;
-    if (!textEncoding.isValid()) {
-        textEncoding = UTF8Encoding();
-        useDetector = true;
-    }
-    RefPtr<TextResourceDecoder> decoder = TextResourceDecoder::create("text/plain", textEncoding, useDetector);
-    return decoder->decode(data.data(), data.size()) + decoder->flush();
 }
 
 String InspectorFrontendHost::getSelectionBackgroundColor()
 {
-    Color color = m_frontendPage->theme()->activeSelectionBackgroundColor();
-    return color != Color::transparent ? color.serialized() : "";
+    Color color = RenderTheme::theme().activeSelectionBackgroundColor();
+    return color.isValid() ? color.serialized() : "";
 }
 
 String InspectorFrontendHost::getSelectionForegroundColor()
 {
-    Color color = m_frontendPage->theme()->activeSelectionForegroundColor();
-    return color != Color::transparent ? color.serialized() : "";
-}
-
-bool InspectorFrontendHost::supportsFileSystems()
-{
-    return true;
-}
-
-void InspectorFrontendHost::requestFileSystems()
-{
-    if (m_client)
-        m_client->requestFileSystems();
-}
-
-void InspectorFrontendHost::addFileSystem()
-{
-    if (m_client)
-        m_client->addFileSystem();
-}
-
-void InspectorFrontendHost::removeFileSystem(const String& fileSystemPath)
-{
-    if (m_client)
-        m_client->removeFileSystem(fileSystemPath);
+    Color color = RenderTheme::theme().activeSelectionForegroundColor();
+    return color.isValid() ? color.serialized() : "";
 }
 
 PassRefPtr<DOMFileSystem> InspectorFrontendHost::isolatedFileSystem(const String& fileSystemName, const String& rootURL)
 {
-    ScriptExecutionContext* context = m_frontendPage->mainFrame()->document();
-    return DOMFileSystem::create(context, fileSystemName, FileSystemTypeIsolated, KURL(ParsedURLString, rootURL), AsyncFileSystem::create());
+    ExecutionContext* context = m_frontendPage->mainFrame()->document();
+    return DOMFileSystem::create(context, fileSystemName, FileSystemTypeIsolated, KURL(ParsedURLString, rootURL));
 }
 
-void InspectorFrontendHost::indexPath(int requestId, const String& fileSystemPath)
+void InspectorFrontendHost::upgradeDraggedFileSystemPermissions(DOMFileSystem* domFileSystem)
 {
-    if (m_client)
-        m_client->indexPath(requestId, fileSystemPath);
-}
-
-void InspectorFrontendHost::stopIndexing(int requestId)
-{
-    if (m_client)
-        m_client->stopIndexing(requestId);
-}
-
-void InspectorFrontendHost::searchInPath(int requestId, const String& fileSystemPath, const String& query)
-{
-    if (m_client)
-        m_client->searchInPath(requestId, fileSystemPath, query);
+    if (!m_client)
+        return;
+    RefPtr<JSONObject> message = JSONObject::create();
+    message->setNumber("id", 0);
+    message->setString("method", "upgradeDraggedFileSystemPermissions");
+    RefPtr<JSONArray> params = JSONArray::create();
+    message->setArray("params", params);
+    params->pushString(domFileSystem->rootURL().string());
+    sendMessageToEmbedder(message->toJSONString());
 }
 
 bool InspectorFrontendHost::isUnderTest()
 {
     return m_client && m_client->isUnderTest();
-}
-
-bool InspectorFrontendHost::canSaveAs()
-{
-    return false;
-}
-
-bool InspectorFrontendHost::canInspectWorkers()
-{
-    return false;
-}
-
-String InspectorFrontendHost::hiddenPanels()
-{
-    return "";
 }
 
 } // namespace WebCore

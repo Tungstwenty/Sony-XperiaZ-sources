@@ -33,14 +33,10 @@
 
 #include "WebViewClient.h"
 #include "WebViewImpl.h"
-#include "core/history/HistoryItem.h"
-#include "wtf/text/StringConcatenate.h"
 
 using namespace WebCore;
 
-namespace WebKit {
-
-const char backForwardNavigationScheme[] = "chrome-back-forward";
+namespace blink {
 
 BackForwardClientImpl::BackForwardClientImpl(WebViewImpl* webView)
     : m_webView(webView)
@@ -49,51 +45,6 @@ BackForwardClientImpl::BackForwardClientImpl(WebViewImpl* webView)
 
 BackForwardClientImpl::~BackForwardClientImpl()
 {
-}
-
-void BackForwardClientImpl::addItem(PassRefPtr<HistoryItem> item)
-{
-    m_currentItem = item;
-
-    // If WebCore adds a new HistoryItem, it means this is a new navigation (ie,
-    // not a reload or back/forward).
-    m_webView->observeNewNavigation();
-
-    if (m_webView->client())
-        m_webView->client()->didAddHistoryItem();
-}
-
-void BackForwardClientImpl::goToItem(HistoryItem* item)
-{
-    m_currentItem = item;
-
-    if (m_pendingHistoryItem == item)
-        m_pendingHistoryItem = 0;
-}
-
-HistoryItem* BackForwardClientImpl::itemAtIndex(int index)
-{
-    if (!m_webView->client())
-        return 0;
-
-    if (!index)
-        return m_currentItem.get();
-
-    if (index > forwardListCount() || -index > backListCount())
-        return 0;
-
-    // Since we don't keep the entire back/forward list, we have no way to
-    // properly implement this method.  We return a dummy entry instead that we
-    // intercept in our FrameLoaderClient implementation in case WebCore asks
-    // to navigate to this HistoryItem.
-
-    // FIXME: We should change WebCore to handle history.{back,forward,go}
-    // differently.  It should perhaps just ask the FrameLoaderClient to
-    // perform those navigations.
-
-    String urlString = String(backForwardNavigationScheme) + "://go/" + String::number(index);
-    m_pendingHistoryItem = HistoryItem::create(urlString);
-    return m_pendingHistoryItem.get();
 }
 
 int BackForwardClientImpl::backListCount()
@@ -112,15 +63,12 @@ int BackForwardClientImpl::forwardListCount()
     return m_webView->client()->historyForwardListCount();
 }
 
-bool BackForwardClientImpl::isActive()
+int BackForwardClientImpl::backForwardListCount()
 {
-    return m_webView->client();
+    if (!m_webView->client())
+        return 0;
+    return backListCount() + 1 + forwardListCount();
 }
 
-void BackForwardClientImpl::close()
-{
-    m_currentItem = 0;
-    m_pendingHistoryItem = 0;
-}
 
-} // namespace WebKit
+} // namespace blink

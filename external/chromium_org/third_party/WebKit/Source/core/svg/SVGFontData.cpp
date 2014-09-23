@@ -24,15 +24,16 @@
 
 #include "SVGNames.h"
 #include "XMLNames.h"
-#include "core/platform/graphics/SVGGlyph.h"
-#include "core/platform/graphics/TextRun.h"
-#include "core/platform/graphics/WidthIterator.h"
 #include "core/rendering/RenderObject.h"
 #include "core/rendering/svg/SVGTextRunRenderingContext.h"
 #include "core/svg/SVGAltGlyphElement.h"
 #include "core/svg/SVGFontElement.h"
 #include "core/svg/SVGFontFaceElement.h"
 #include "core/svg/SVGGlyphElement.h"
+#include "platform/fonts/SVGGlyph.h"
+#include "platform/fonts/SimpleFontData.h"
+#include "platform/fonts/WidthIterator.h"
+#include "platform/text/TextRun.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/unicode/CharacterNames.h"
 #include "wtf/unicode/Unicode.h"
@@ -43,7 +44,8 @@ using namespace Unicode;
 namespace WebCore {
 
 SVGFontData::SVGFontData(SVGFontFaceElement* fontFaceElement)
-    : m_svgFontFaceElement(fontFaceElement)
+    : CustomFontData(false)
+    , m_svgFontFaceElement(fontFaceElement)
     , m_horizontalOriginX(fontFaceElement->horizontalOriginX())
     , m_horizontalOriginY(fontFaceElement->horizontalOriginY())
     , m_horizontalAdvanceX(fontFaceElement->horizontalAdvanceX())
@@ -82,7 +84,7 @@ void SVGFontData::initializeFontData(SimpleFontData* fontData, float fontSize)
 
     if (!xHeight && glyphPageZero) {
         // Fallback if x_heightAttr is not specified for the font element.
-        Glyph letterXGlyph = glyphPageZero->glyphDataForCharacter('x').glyph;
+        Glyph letterXGlyph = glyphPageZero->glyphForCharacter('x');
         xHeight = letterXGlyph ? fontData->widthForGlyph(letterXGlyph) : 2 * ascent / 3;
     }
 
@@ -103,16 +105,16 @@ void SVGFontData::initializeFontData(SimpleFontData* fontData, float fontSize)
     }
 
     // Calculate space width.
-    Glyph spaceGlyph = glyphPageZero->glyphDataForCharacter(' ').glyph;
+    Glyph spaceGlyph = glyphPageZero->glyphForCharacter(' ');
     fontData->setSpaceGlyph(spaceGlyph);
     fontData->setSpaceWidth(fontData->widthForGlyph(spaceGlyph));
 
     // Estimate average character width.
-    Glyph numeralZeroGlyph = glyphPageZero->glyphDataForCharacter('0').glyph;
+    Glyph numeralZeroGlyph = glyphPageZero->glyphForCharacter('0');
     fontData->setAvgCharWidth(numeralZeroGlyph ? fontData->widthForGlyph(numeralZeroGlyph) : fontData->spaceWidth());
 
     // Estimate maximum character width.
-    Glyph letterWGlyph = glyphPageZero->glyphDataForCharacter('W').glyph;
+    Glyph letterWGlyph = glyphPageZero->glyphForCharacter('W');
     fontData->setMaxCharWidth(letterWGlyph ? fontData->widthForGlyph(letterWGlyph) : ascent);
 }
 

@@ -23,8 +23,9 @@
 #define SVGGlyphElement_h
 
 #if ENABLE(SVG_FONTS)
-#include "core/platform/graphics/SVGGlyph.h"
+#include "SVGNames.h"
 #include "core/svg/SVGElement.h"
+#include "platform/fonts/SVGGlyph.h"
 
 namespace WebCore {
 
@@ -32,7 +33,7 @@ class SVGFontData;
 
 class SVGGlyphElement FINAL : public SVGElement {
 public:
-    static PassRefPtr<SVGGlyphElement> create(const QualifiedName&, Document*);
+    static PassRefPtr<SVGGlyphElement> create(Document&);
 
     SVGGlyph buildGlyphIdentifier() const;
 
@@ -44,7 +45,7 @@ public:
     static SVGGlyph buildGenericGlyphIdentifier(const SVGElement*);
 
 private:
-    SVGGlyphElement(const QualifiedName&, Document*);
+    explicit SVGGlyphElement(Document&);
 
     // FIXME: svgAttributeChanged missing.
     virtual void parseAttribute(const QualifiedName&, const AtomicString&) OVERRIDE;
@@ -52,10 +53,12 @@ private:
     virtual InsertionNotificationRequest insertedInto(ContainerNode*) OVERRIDE;
     virtual void removedFrom(ContainerNode*) OVERRIDE;
 
-    virtual bool rendererIsNeeded(const NodeRenderingContext&) { return false; }
+    virtual bool rendererIsNeeded(const RenderStyle&) { return false; }
 
     void invalidateGlyphCache();
 };
+
+DEFINE_NODE_TYPE_CASTS(SVGGlyphElement, hasTagName(SVGNames::glyphTag));
 
 } // namespace WebCore
 

@@ -27,10 +27,10 @@
 #define XMLHttpRequestUpload_h
 
 #include "bindings/v8/ScriptWrappable.h"
-#include "core/dom/EventListener.h"
-#include "core/dom/EventNames.h"
-#include "core/dom/EventTarget.h"
+#include "core/events/EventListener.h"
+#include "core/events/ThreadLocalEventNames.h"
 #include "core/xml/XMLHttpRequest.h"
+#include "core/xml/XMLHttpRequestEventTarget.h"
 #include "wtf/Forward.h"
 #include "wtf/HashMap.h"
 #include "wtf/PassOwnPtr.h"
@@ -41,10 +41,10 @@
 
 namespace WebCore {
 
-class ScriptExecutionContext;
+class ExecutionContext;
 class XMLHttpRequest;
 
-class XMLHttpRequestUpload : public ScriptWrappable, public EventTarget {
+class XMLHttpRequestUpload : public ScriptWrappable, public XMLHttpRequestEventTarget {
 public:
     static PassOwnPtr<XMLHttpRequestUpload> create(XMLHttpRequest* xmlHttpRequest)
     {
@@ -55,28 +55,27 @@ public:
     void deref() { m_xmlHttpRequest->deref(); }
     XMLHttpRequest* xmlHttpRequest() const { return m_xmlHttpRequest; }
 
-    virtual const AtomicString& interfaceName() const;
-    ScriptExecutionContext* scriptExecutionContext() const;
+    virtual const AtomicString& interfaceName() const OVERRIDE;
+    virtual ExecutionContext* executionContext() const OVERRIDE;
 
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(abort);
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(error);
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(load);
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(loadend);
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(loadstart);
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(progress);
+    void dispatchEventAndLoadEnd(const AtomicString&, bool, unsigned long long, unsigned long long);
+    void dispatchProgressEvent(unsigned long long, unsigned long long);
 
-    void dispatchEventAndLoadEnd(PassRefPtr<Event>);
+    void handleRequestError(const AtomicString&);
 
 private:
     explicit XMLHttpRequestUpload(XMLHttpRequest*);
 
-    virtual void refEventTarget() { ref(); }
-    virtual void derefEventTarget() { deref(); }
-    virtual EventTargetData* eventTargetData();
-    virtual EventTargetData* ensureEventTargetData();
+    virtual void refEventTarget() OVERRIDE { ref(); }
+    virtual void derefEventTarget() OVERRIDE { deref(); }
 
     XMLHttpRequest* m_xmlHttpRequest;
     EventTargetData m_eventTargetData;
+
+    // Last progress event values; used when issuing the
+    // required 'progress' event on a request error or abort.
+    unsigned long long m_lastBytesSent;
+    unsigned long long m_lastTotalBytesToBeSent;
 };
 
 } // namespace WebCore

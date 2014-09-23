@@ -38,7 +38,7 @@ namespace WebCore {
 OrderIterator::OrderIterator(const RenderBox* containerBox)
     : m_containerBox(containerBox)
     , m_currentChild(0)
-    , m_orderValuesIterator(0)
+    , m_isReset(false)
 {
 }
 
@@ -54,17 +54,18 @@ RenderBox* OrderIterator::next()
         if (!m_currentChild) {
             if (m_orderValuesIterator == m_orderValues.end())
                 return 0;
-            if (m_orderValuesIterator) {
+
+            if (!m_isReset) {
                 ++m_orderValuesIterator;
                 if (m_orderValuesIterator == m_orderValues.end())
                     return 0;
             } else {
-                m_orderValuesIterator = m_orderValues.begin();
+                m_isReset = false;
             }
 
-            m_currentChild = m_containerBox->firstChildBox();
+            m_currentChild = firstChildBox();
         } else {
-            m_currentChild = m_currentChild->nextSiblingBox();
+            m_currentChild = nextSiblingBox();
         }
     } while (!m_currentChild || m_currentChild->style()->order() != *m_orderValuesIterator);
 
@@ -74,49 +75,45 @@ RenderBox* OrderIterator::next()
 void OrderIterator::reset()
 {
     m_currentChild = 0;
-    m_orderValuesIterator = 0;
+    m_orderValuesIterator = m_orderValues.begin();
+    m_isReset = true;
+}
+
+RenderBox* OrderIterator::firstChildBox()
+{
+    if (m_children.isEmpty())
+        return m_containerBox->firstChildBox();
+
+    m_childIndex = 0;
+    return m_children[0];
+}
+
+RenderBox* OrderIterator::nextSiblingBox()
+{
+    if (m_children.isEmpty())
+        return m_currentChild->nextSiblingBox();
+
+    if (m_childIndex >= m_children.size() - 1)
+        return 0;
+
+    return m_children[++m_childIndex];
 }
 
 OrderIteratorPopulator::~OrderIteratorPopulator()
 {
     m_iterator.reset();
-
-    if (m_anyChildHasDefaultOrderValue)
-        m_iterator.m_orderValues.append(0);
-
-    if (m_iterator.m_orderValues.size() > 1)
-        removeDuplicatedOrderValues();
-
-    // Ensure that we release any extra memory we hold onto.
-    m_iterator.m_orderValues.shrinkToFit();
 }
 
-void OrderIteratorPopulator::removeDuplicatedOrderValues()
+void OrderIteratorPopulator::storeChild(RenderBox* child)
 {
-    OrderIterator::OrderValues& orderValues = m_iterator.m_orderValues;
+    m_iterator.m_children.append(child);
 
-    std::sort(orderValues.begin(), orderValues.end());
-
-    int previous = orderValues[0];
-    size_t uniqueItemIndex = 0;
-    for (size_t i = 1; i < orderValues.size(); ++i) {
-        int current = orderValues[i];
-        if (current == previous)
-            continue;
-        ++uniqueItemIndex;
-        std::swap(orderValues[i], orderValues[uniqueItemIndex]);
-        previous = current;
-    }
-    orderValues.shrink(uniqueItemIndex + 1);
+    collectChild(child);
 }
 
 void OrderIteratorPopulator::collectChild(const RenderBox* child)
 {
-    // Avoid growing the vector for the common-case default value of 0.
-    if (int order = child->style()->order())
-        m_iterator.m_orderValues.append(order);
-    else
-        m_anyChildHasDefaultOrderValue = true;
+    m_iterator.m_orderValues.insert(child->style()->order());
 }
 
 } // namespace WebCore

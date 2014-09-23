@@ -42,8 +42,8 @@ const SETTER = 1;
 # These definitions must match the index of the properties in objects.h.
 const kApiTagOffset                 = 0;
 const kApiPropertyListOffset        = 1;
-const kApiSerialNumberOffset        = 2;
-const kApiConstructorOffset         = 2;
+const kApiSerialNumberOffset        = 3;
+const kApiConstructorOffset         = 3;
 const kApiPrototypeTemplateOffset   = 5;
 const kApiParentTemplateOffset      = 6;
 const kApiFlagOffset                = 14;
@@ -67,7 +67,9 @@ const msPerMonth       = 2592000000;
 
 # For apinatives.js
 const kUninitialized = -1;
-const kReadOnlyPrototypeBit = 3;  # For FunctionTemplateInfo, matches objects.h
+const kReadOnlyPrototypeBit = 3;
+const kRemovePrototypeBit = 4;  # For FunctionTemplateInfo, matches objects.h
+const kDoNotCacheBit = 5;  # For FunctionTemplateInfo, matches objects.h
 
 # Note: kDayZeroInJulianDay = ToJulianDay(1970, 0, 1).
 const kInvalidDate        = 'Invalid Date';
@@ -154,6 +156,18 @@ macro TO_STRING_INLINE(arg) = (IS_STRING(%IS_VAR(arg)) ? arg : NonStringToString
 macro TO_NUMBER_INLINE(arg) = (IS_NUMBER(%IS_VAR(arg)) ? arg : NonNumberToNumber(arg));
 macro TO_OBJECT_INLINE(arg) = (IS_SPEC_OBJECT(%IS_VAR(arg)) ? arg : ToObject(arg));
 macro JSON_NUMBER_TO_STRING(arg) = ((%_IsSmi(%IS_VAR(arg)) || arg - arg == 0) ? %_NumberToString(arg) : "null");
+
+# Private names.
+macro NEW_PRIVATE(name) = (%CreatePrivateSymbol(name));
+macro HAS_PRIVATE(obj, sym) = (sym in obj);
+macro GET_PRIVATE(obj, sym) = (obj[sym]);
+macro SET_PRIVATE(obj, sym, val) = (obj[sym] = val);
+macro DELETE_PRIVATE(obj, sym) = (delete obj[sym]);
+
+# Constants.  The compiler constant folds them.
+const NAN = $NaN;
+const INFINITY = (1/0);
+const UNDEFINED = (void 0);
 
 # Macros implemented in Python.
 python macro CHAR_CODE(str) = ord(str[1]);

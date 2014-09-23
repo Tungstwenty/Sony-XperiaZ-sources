@@ -53,9 +53,8 @@ public:
     virtual bool supportsPlaceholder() const = 0;
     String strippedPlaceholder() const;
     bool placeholderShouldBeVisible() const;
-    virtual HTMLElement* placeholderElement() const = 0;
+    HTMLElement* placeholderElement() const;
     void updatePlaceholderVisibility(bool);
-    static void fixPlaceholderRenderer(HTMLElement* placeholder, HTMLElement* siblingElement);
 
     VisiblePosition visiblePositionForIndex(int) const;
     int indexForVisiblePosition(const VisiblePosition&) const;
@@ -78,7 +77,7 @@ public:
     virtual int maxLength() const = 0;
     virtual String value() const = 0;
 
-    virtual HTMLElement* innerTextElement() const = 0;
+    HTMLElement* innerTextElement() const;
 
     void selectionChanged(bool userTriggered);
     bool lastChangeWasUserEdit() const;
@@ -90,7 +89,7 @@ public:
     void setTextAsOfLastFormControlChangeEvent(const String& text) { m_textAsOfLastFormControlChangeEvent = text; }
 
 protected:
-    HTMLTextFormControlElement(const QualifiedName&, Document*, HTMLFormElement*);
+    HTMLTextFormControlElement(const QualifiedName&, Document&, HTMLFormElement*);
     bool isPlaceholderEmpty() const;
     virtual void updatePlaceholderText() = 0;
 
@@ -118,10 +117,6 @@ private:
     int computeSelectionEnd() const;
     TextFieldSelectionDirection computeSelectionDirection() const;
 
-    // FIXME: Author shadows should be allowed
-    // https://bugs.webkit.org/show_bug.cgi?id=92608
-    virtual bool areAuthorShadowsAllowed() const OVERRIDE { return false; }
-
     virtual void dispatchFocusEvent(Element* oldFocusedElement, FocusDirection) OVERRIDE;
     virtual void dispatchBlurEvent(Element* newFocusedElement) OVERRIDE;
 
@@ -147,11 +142,12 @@ inline bool isHTMLTextFormControlElement(const Node* node)
     return node->isElementNode() && toElement(node)->isTextFormControl();
 }
 
-inline HTMLTextFormControlElement* toHTMLTextFormControlElement(Node* node)
+inline bool isHTMLTextFormControlElement(const Node& node)
 {
-    ASSERT_WITH_SECURITY_IMPLICATION(!node || isHTMLTextFormControlElement(node));
-    return static_cast<HTMLTextFormControlElement*>(node);
+    return node.isElementNode() && toElement(node).isTextFormControl();
 }
+
+DEFINE_NODE_TYPE_CASTS_WITH_FUNCTION(HTMLTextFormControlElement);
 
 HTMLTextFormControlElement* enclosingTextFormControl(const Position&);
 

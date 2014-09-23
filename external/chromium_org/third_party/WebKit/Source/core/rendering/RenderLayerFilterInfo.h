@@ -31,10 +31,10 @@
 #define RenderLayerFilterInfo_h
 
 #include "core/dom/Element.h"
-#include "core/loader/cache/DocumentResource.h"
-#include "core/platform/graphics/LayoutRect.h"
-#include "core/platform/graphics/filters/FilterOperation.h"
-#include "core/platform/graphics/filters/custom/CustomFilterProgramClient.h"
+#include "core/fetch/DocumentResource.h"
+#include "platform/geometry/LayoutRect.h"
+#include "platform/graphics/filters/FilterOperation.h"
+#include "platform/graphics/filters/custom/CustomFilterProgramClient.h"
 #include "wtf/HashMap.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"

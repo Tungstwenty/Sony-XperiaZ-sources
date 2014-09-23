@@ -52,13 +52,12 @@ namespace v8 {
 namespace internal {
 
 class Bootstrapper;
-class CallbackTable;
 class CodeGenerator;
 class CodeRange;
 struct CodeStubInterfaceDescriptor;
+class CodeTracer;
 class CompilationCache;
 class ContextSlotCache;
-class ContextSwitcher;
 class Counters;
 class CpuFeatures;
 class CpuProfiler;
@@ -76,8 +75,7 @@ class HTracer;
 class InlineRuntimeFunctionsTable;
 class NoAllocationStringAllocator;
 class InnerPointerToCodeCache;
-class MarkingThread;
-class PreallocatedMemoryThread;
+class RandomNumberGenerator;
 class RegExpStack;
 class SaveContext;
 class UnicodeCache;
@@ -274,10 +272,8 @@ class ThreadLocalTop BASE_EMBEDDED {
   Address handler_;   // try-blocks are chained through the stack
 
 #ifdef USE_SIMULATOR
-#if V8_TARGET_ARCH_ARM || V8_TARGET_ARCH_MIPS
   Simulator* simulator_;
 #endif
-#endif  // USE_SIMULATOR
 
   Address js_entry_sp_;  // the stack pointer of the bottom JS entry frame
   // the external callback we're currently in
@@ -303,25 +299,9 @@ class ThreadLocalTop BASE_EMBEDDED {
 };
 
 
-class SystemThreadManager {
- public:
-  enum ParallelSystemComponent {
-    PARALLEL_SWEEPING,
-    CONCURRENT_SWEEPING,
-    PARALLEL_MARKING,
-    PARALLEL_RECOMPILATION
-  };
-
-  static int NumberOfParallelSystemThreads(ParallelSystemComponent type);
-
-  static const int kMaxThreads = 4;
-};
-
-
 #ifdef ENABLE_DEBUGGER_SUPPORT
 
 #define ISOLATE_DEBUGGER_INIT_LIST(V)                                          \
-  V(v8::Debug::EventCallback, debug_event_callback, NULL)                      \
   V(DebuggerAgent*, debugger_agent_instance, NULL)
 #else
 
@@ -349,7 +329,7 @@ class SystemThreadManager {
   V(uint32_t, private_random_seed, 2)                                          \
   ISOLATE_INIT_DEBUG_ARRAY_LIST(V)
 
-typedef List<HeapObject*, PreallocatedStorageAllocationPolicy> DebugObjectCache;
+typedef List<HeapObject*> DebugObjectCache;
 
 #define ISOLATE_INIT_LIST(V)                                                   \
   /* SerializerDeserializer state. */                                          \
@@ -361,7 +341,6 @@ typedef List<HeapObject*, PreallocatedStorageAllocationPolicy> DebugObjectCache;
   V(byte*, assembler_spare_buffer, NULL)                                       \
   V(FatalErrorCallback, exception_behavior, NULL)                              \
   V(AllowCodeGenerationFromStringsCallback, allow_code_gen_callback, NULL)     \
-  V(v8::Debug::MessageHandler, message_handler, NULL)                          \
   /* To distinguish the function templates, so that we can find them in the */ \
   /* function cache of the native context. */                                  \
   V(int, next_serial_number, 0)                                                \
@@ -380,9 +359,10 @@ typedef List<HeapObject*, PreallocatedStorageAllocationPolicy> DebugObjectCache;
   /* AstNode state. */                                                         \
   V(int, ast_node_id, 0)                                                       \
   V(unsigned, ast_node_count, 0)                                               \
-  V(bool, observer_delivery_pending, false)                                    \
+  V(bool, microtask_pending, false)                                           \
   V(HStatistics*, hstatistics, NULL)                                           \
   V(HTracer*, htracer, NULL)                                                   \
+  V(CodeTracer*, code_tracer, NULL)                                            \
   ISOLATE_DEBUGGER_INIT_LIST(V)
 
 class Isolate {
@@ -499,6 +479,7 @@ class Isolate {
 
   bool IsDefaultIsolate() const { return this == default_isolate_; }
 
+  static void SetCrashIfDefaultIsolateInitialized();
   // Ensures that process-wide resources and the default isolate have been
   // allocated. It is only necessary to call this method in rare cases, for
   // example if you are using V8 from within the body of a static initializer.
@@ -544,10 +525,10 @@ class Isolate {
   static void EnterDefaultIsolate();
 
   // Mutex for serializing access to break control structures.
-  Mutex* break_access() { return break_access_; }
+  RecursiveMutex* break_access() { return &break_access_; }
 
   // Mutex for serializing access to debugger.
-  Mutex* debugger_access() { return debugger_access_; }
+  RecursiveMutex* debugger_access() { return &debugger_access_; }
 
   Address get_address_from_id(AddressId id);
 
@@ -734,10 +715,8 @@ class Isolate {
   }
 
   void PrintCurrentStackTrace(FILE* out);
-  void PrintStackTrace(FILE* out, char* thread_data);
   void PrintStack(StringStream* accumulator);
   void PrintStack(FILE* out);
-  void PrintStack();
   Handle<String> StackTraceString();
   NO_INLINE(void PushStackTraceAndDie(unsigned int magic,
                                       Object* object,
@@ -755,6 +734,19 @@ class Isolate {
   // Returns if the top context may access the given global object. If
   // the result is false, the pending exception is guaranteed to be
   // set.
+
+  // TODO(yangguo): temporary wrappers
+  bool MayNamedAccessWrapper(Handle<JSObject> receiver,
+                             Handle<Object> key,
+                             v8::AccessType type) {
+    return MayNamedAccess(*receiver, *key, type);
+  }
+  bool MayIndexedAccessWrapper(Handle<JSObject> receiver,
+                               uint32_t index,
+                               v8::AccessType type) {
+    return MayIndexedAccess(*receiver, index, type);
+  }
+
   bool MayNamedAccess(JSObject* receiver,
                       Object* key,
                       v8::AccessType type);
@@ -792,9 +784,6 @@ class Isolate {
   // Attempts to compute the current source location, storing the
   // result in the target out parameter.
   void ComputeLocation(MessageLocation* target);
-
-  // Override command line flag.
-  void TraceException(bool flag);
 
   // Out of resource exception helpers.
   Failure* StackOverflow();
@@ -926,12 +915,6 @@ class Isolate {
 
   ThreadManager* thread_manager() { return thread_manager_; }
 
-  ContextSwitcher* context_switcher() { return context_switcher_; }
-
-  void set_context_switcher(ContextSwitcher* switcher) {
-    context_switcher_ = switcher;
-  }
-
   StringTracker* string_tracker() { return string_tracker_; }
 
   unibrow::Mapping<unibrow::Ecma262UnCanonicalize>* jsregexp_uncanonicalize() {
@@ -982,9 +965,7 @@ class Isolate {
     return &interp_canonicalize_mapping_;
   }
 
-  void* PreallocatedStorageNew(size_t size);
-  void PreallocatedStorageDelete(void* p);
-  void PreallocatedStorageInit(size_t size);
+  inline bool IsCodePreAgingActive();
 
 #ifdef ENABLE_DEBUGGER_SUPPORT
   Debugger* debugger() {
@@ -1052,8 +1033,14 @@ class Isolate {
     thread_local_top_.current_vm_state_ = state;
   }
 
-  void SetData(void* data) { embedder_data_ = data; }
-  void* GetData() { return embedder_data_; }
+  void SetData(uint32_t slot, void* data) {
+    ASSERT(slot < Internals::kNumIsolateDataSlots);
+    embedder_data_[slot] = data;
+  }
+  void* GetData(uint32_t slot) {
+    ASSERT(slot < Internals::kNumIsolateDataSlots);
+    return embedder_data_[slot];
+  }
 
   LookupResult* top_lookup_result() {
     return thread_local_top_.top_lookup_result_;
@@ -1061,6 +1048,11 @@ class Isolate {
   void SetTopLookupResult(LookupResult* top) {
     thread_local_top_.top_lookup_result_ = top;
   }
+
+  bool IsDead() { return has_fatal_error_; }
+  void SignalFatalError() { has_fatal_error_ = true; }
+
+  bool use_crankshaft() const { return use_crankshaft_; }
 
   bool initialized_from_snapshot() { return initialized_from_snapshot_; }
 
@@ -1094,8 +1086,34 @@ class Isolate {
   bool IsDeferredHandle(Object** location);
 #endif  // DEBUG
 
+  void set_max_available_threads(int value) {
+    max_available_threads_ = value;
+  }
+
+  bool concurrent_recompilation_enabled() {
+    // Thread is only available with flag enabled.
+    ASSERT(optimizing_compiler_thread_ == NULL ||
+           FLAG_concurrent_recompilation);
+    return optimizing_compiler_thread_ != NULL;
+  }
+
+  bool concurrent_osr_enabled() const {
+    // Thread is only available with flag enabled.
+    ASSERT(optimizing_compiler_thread_ == NULL ||
+           FLAG_concurrent_recompilation);
+    return optimizing_compiler_thread_ != NULL && FLAG_concurrent_osr;
+  }
+
   OptimizingCompilerThread* optimizing_compiler_thread() {
-    return &optimizing_compiler_thread_;
+    return optimizing_compiler_thread_;
+  }
+
+  int num_sweeper_threads() const {
+    return num_sweeper_threads_;
+  }
+
+  SweeperThread** sweeper_threads() {
+    return sweeper_thread_;
   }
 
   // PreInits and returns a default isolate. Needed when a new thread tries
@@ -1103,25 +1121,11 @@ class Isolate {
   // TODO(svenpanne) This method is on death row...
   static v8::Isolate* GetDefaultIsolateForLocking();
 
-  MarkingThread** marking_threads() {
-    return marking_thread_;
-  }
-
-  SweeperThread** sweeper_threads() {
-    return sweeper_thread_;
-  }
-
-  CallbackTable* callback_table() {
-    return callback_table_;
-  }
-  void set_callback_table(CallbackTable* callback_table) {
-    callback_table_ = callback_table;
-  }
-
   int id() const { return static_cast<int>(id_); }
 
   HStatistics* GetHStatistics();
   HTracer* GetHTracer();
+  CodeTracer* GetCodeTracer();
 
   FunctionEntryHook function_entry_hook() { return function_entry_hook_; }
   void set_function_entry_hook(FunctionEntryHook function_entry_hook) {
@@ -1129,6 +1133,8 @@ class Isolate {
   }
 
   void* stress_deopt_count_address() { return &stress_deopt_count_; }
+
+  inline RandomNumberGenerator* random_number_generator();
 
   // Given an address occupied by a live code object, return that object.
   Object* FindCodeObject(Address a);
@@ -1147,9 +1153,9 @@ class Isolate {
   // These fields are accessed through the API, offsets must be kept in sync
   // with v8::internal::Internals (in include/v8.h) constants. This is also
   // verified in Isolate::Init() using runtime checks.
-  State state_;  // Will be padded to kApiPointerSize.
-  void* embedder_data_;
+  void* embedder_data_[Internals::kNumIsolateDataSlots];
   Heap heap_;
+  State state_;  // Will be padded to kApiPointerSize.
 
   // The per-process lock should be acquired before the ThreadDataTable is
   // modified.
@@ -1160,7 +1166,6 @@ class Isolate {
 
     PerIsolateThreadData* Lookup(Isolate* isolate, ThreadId thread_id);
     void Insert(PerIsolateThreadData* data);
-    void Remove(Isolate* isolate, ThreadId thread_id);
     void Remove(PerIsolateThreadData* data);
     void RemoveAllThreads(Isolate* isolate);
 
@@ -1195,7 +1200,7 @@ class Isolate {
 
   // This mutex protects highest_thread_id_, thread_data_table_ and
   // default_isolate_.
-  static Mutex* process_wide_mutex_;
+  static Mutex process_wide_mutex_;
 
   static Thread::LocalStorageKey per_isolate_thread_data_key_;
   static Thread::LocalStorageKey isolate_key_;
@@ -1210,10 +1215,6 @@ class Isolate {
 
   static void SetIsolateThreadLocals(Isolate* isolate,
                                      PerIsolateThreadData* data);
-
-  // Allocate and insert PerIsolateThreadData into the ThreadDataTable
-  // (regardless of whether such data already exists).
-  PerIsolateThreadData* AllocatePerIsolateThreadData(ThreadId thread_id);
 
   // Find the PerThread for this particular (isolate, thread) combination.
   // If one does not yet exist, allocate a new one.
@@ -1230,11 +1231,8 @@ class Isolate {
   // at the same time, this should be prevented using external locking.
   void Exit();
 
-  void PreallocatedMemoryThreadStart();
-  void PreallocatedMemoryThreadStop();
   void InitializeThreadLocal();
 
-  void PrintStackTrace(FILE* out, ThreadLocalTop* thread);
   void MarkCompactPrologue(bool is_compacting,
                            ThreadLocalTop* archived_thread_data);
   void MarkCompactEpilogue(bool is_compacting,
@@ -1254,18 +1252,15 @@ class Isolate {
   EntryStackItem* entry_stack_;
   int stack_trace_nesting_level_;
   StringStream* incomplete_message_;
-  // The preallocated memory thread singleton.
-  PreallocatedMemoryThread* preallocated_memory_thread_;
   Address isolate_addresses_[kIsolateAddressCount + 1];  // NOLINT
-  NoAllocationStringAllocator* preallocated_message_space_;
   Bootstrapper* bootstrapper_;
   RuntimeProfiler* runtime_profiler_;
   CompilationCache* compilation_cache_;
   Counters* counters_;
   CodeRange* code_range_;
-  Mutex* break_access_;
+  RecursiveMutex break_access_;
   Atomic32 debugger_initialized_;
-  Mutex* debugger_access_;
+  RecursiveMutex debugger_access_;
   Logger* logger_;
   StackGuard stack_guard_;
   StatsTable* stats_table_;
@@ -1284,14 +1279,10 @@ class Isolate {
   HandleScopeImplementer* handle_scope_implementer_;
   UnicodeCache* unicode_cache_;
   Zone runtime_zone_;
-  PreallocatedStorage in_use_list_;
-  PreallocatedStorage free_list_;
-  bool preallocated_storage_preallocated_;
   InnerPointerToCodeCache* inner_pointer_to_code_cache_;
   ConsStringIteratorOp* write_iterator_;
   GlobalHandles* global_handles_;
   EternalHandles* eternal_handles_;
-  ContextSwitcher* context_switcher_;
   ThreadManager* thread_manager_;
   RuntimeState runtime_state_;
   bool fp_stubs_generated_;
@@ -1309,6 +1300,13 @@ class Isolate {
   DateCache* date_cache_;
   unibrow::Mapping<unibrow::Ecma262Canonicalize> interp_canonicalize_mapping_;
   CodeStubInterfaceDescriptor* code_stub_interface_descriptors_;
+  RandomNumberGenerator* random_number_generator_;
+
+  // True if fatal error has been signaled for this isolate.
+  bool has_fatal_error_;
+
+  // True if we are using the Crankshaft optimizing compiler.
+  bool use_crankshaft_;
 
   // True if this isolate was initialized from a snapshot.
   bool initialized_from_snapshot_;
@@ -1360,10 +1358,13 @@ class Isolate {
 #endif
 
   DeferredHandles* deferred_handles_head_;
-  OptimizingCompilerThread optimizing_compiler_thread_;
-  MarkingThread** marking_thread_;
+  OptimizingCompilerThread* optimizing_compiler_thread_;
   SweeperThread** sweeper_thread_;
-  CallbackTable* callback_table_;
+  int num_sweeper_threads_;
+
+  // TODO(yangguo): This will become obsolete once ResourceConstraints
+  // becomes an argument to Isolate constructor.
+  int max_available_threads_;
 
   // Counts deopt points if deopt_every_n_times is enabled.
   unsigned int stress_deopt_count_;
@@ -1371,7 +1372,6 @@ class Isolate {
   friend class ExecutionAccess;
   friend class HandleScopeImplementer;
   friend class IsolateInitializer;
-  friend class MarkingThread;
   friend class OptimizingCompilerThread;
   friend class SweeperThread;
   friend class ThreadManager;
@@ -1396,15 +1396,8 @@ class SaveContext BASE_EMBEDDED {
   inline explicit SaveContext(Isolate* isolate);
 
   ~SaveContext() {
-    if (context_.is_null()) {
-      Isolate* isolate = Isolate::Current();
-      isolate->set_context(NULL);
-      isolate->set_save_context(prev_);
-    } else {
-      Isolate* isolate = context_->GetIsolate();
-      isolate->set_context(*context_);
-      isolate->set_save_context(prev_);
-    }
+    isolate_->set_context(context_.is_null() ? NULL : *context_);
+    isolate_->set_save_context(prev_);
   }
 
   Handle<Context> context() { return context_; }
@@ -1416,10 +1409,8 @@ class SaveContext BASE_EMBEDDED {
   }
 
  private:
+  Isolate* isolate_;
   Handle<Context> context_;
-#if __GNUC_VERSION__ >= 40100 && __GNUC_VERSION__ < 40300
-  Handle<Context> dummy_;
-#endif
   SaveContext* prev_;
   Address c_entry_fp_;
 };
@@ -1428,21 +1419,19 @@ class SaveContext BASE_EMBEDDED {
 class AssertNoContextChange BASE_EMBEDDED {
 #ifdef DEBUG
  public:
-  AssertNoContextChange() :
-      scope_(Isolate::Current()),
-      context_(Isolate::Current()->context(), Isolate::Current()) {
-  }
-
+  explicit AssertNoContextChange(Isolate* isolate)
+    : isolate_(isolate),
+      context_(isolate->context(), isolate) { }
   ~AssertNoContextChange() {
-    ASSERT(Isolate::Current()->context() == *context_);
+    ASSERT(isolate_->context() == *context_);
   }
 
  private:
-  HandleScope scope_;
+  Isolate* isolate_;
   Handle<Context> context_;
 #else
  public:
-  AssertNoContextChange() { }
+  explicit AssertNoContextChange(Isolate* isolate) { }
 #endif
 };
 
@@ -1454,11 +1443,11 @@ class ExecutionAccess BASE_EMBEDDED {
   }
   ~ExecutionAccess() { Unlock(isolate_); }
 
-  static void Lock(Isolate* isolate) { isolate->break_access_->Lock(); }
-  static void Unlock(Isolate* isolate) { isolate->break_access_->Unlock(); }
+  static void Lock(Isolate* isolate) { isolate->break_access()->Lock(); }
+  static void Unlock(Isolate* isolate) { isolate->break_access()->Unlock(); }
 
   static bool TryLock(Isolate* isolate) {
-    return isolate->break_access_->TryLock();
+    return isolate->break_access()->TryLock();
   }
 
  private:
@@ -1502,12 +1491,6 @@ class PostponeInterruptsScope BASE_EMBEDDED {
 };
 
 
-// Temporary macros for accessing current isolate and its subobjects.
-// They provide better readability, especially when used a lot in the code.
-#define HEAP (v8::internal::Isolate::Current()->heap())
-#define ISOLATE (v8::internal::Isolate::Current())
-
-
 // Tells whether the native context is marked with out of memory.
 inline bool Context::has_out_of_memory() {
   return native_context()->out_of_memory()->IsTrue();
@@ -1516,9 +1499,76 @@ inline bool Context::has_out_of_memory() {
 
 // Mark the native context with out of memory.
 inline void Context::mark_out_of_memory() {
-  native_context()->set_out_of_memory(HEAP->true_value());
+  native_context()->set_out_of_memory(GetIsolate()->heap()->true_value());
 }
 
+class CodeTracer V8_FINAL : public Malloced {
+ public:
+  explicit CodeTracer(int isolate_id)
+      : file_(NULL),
+        scope_depth_(0) {
+    if (!ShouldRedirect()) {
+      file_ = stdout;
+      return;
+    }
+
+    if (FLAG_redirect_code_traces_to == NULL) {
+      OS::SNPrintF(filename_,
+                   "code-%d-%d.asm",
+                   OS::GetCurrentProcessId(),
+                   isolate_id);
+    } else {
+      OS::StrNCpy(filename_, FLAG_redirect_code_traces_to, filename_.length());
+    }
+
+    WriteChars(filename_.start(), "", 0, false);
+  }
+
+  class Scope {
+   public:
+    explicit Scope(CodeTracer* tracer) : tracer_(tracer) { tracer->OpenFile(); }
+    ~Scope() { tracer_->CloseFile();  }
+
+    FILE* file() const { return tracer_->file(); }
+
+   private:
+    CodeTracer* tracer_;
+  };
+
+  void OpenFile() {
+    if (!ShouldRedirect()) {
+      return;
+    }
+
+    if (file_ == NULL) {
+      file_ = OS::FOpen(filename_.start(), "a");
+    }
+
+    scope_depth_++;
+  }
+
+  void CloseFile() {
+    if (!ShouldRedirect()) {
+      return;
+    }
+
+    if (--scope_depth_ == 0) {
+      fclose(file_);
+      file_ = NULL;
+    }
+  }
+
+  FILE* file() const { return file_; }
+
+ private:
+  static bool ShouldRedirect() {
+    return FLAG_redirect_code_traces;
+  }
+
+  EmbeddedVector<char, 128> filename_;
+  FILE* file_;
+  int scope_depth_;
+};
 
 } }  // namespace v8::internal
 

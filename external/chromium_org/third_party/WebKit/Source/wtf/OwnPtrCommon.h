@@ -2,6 +2,7 @@
  * Copyright (C) 2009 Apple Inc. All rights reserved.
  * Copyright (C) 2009 Torch Mobile, Inc.
  * Copyright (C) 2010 Company 100 Inc.
+ * Copyright (C) 2013 Intel Corporation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,34 +29,44 @@
 #ifndef WTF_OwnPtrCommon_h
 #define WTF_OwnPtrCommon_h
 
-#if OS(WINDOWS)
-typedef struct HBITMAP__* HBITMAP;
-typedef struct HBRUSH__* HBRUSH;
-typedef struct HDC__* HDC;
-typedef struct HFONT__* HFONT;
-typedef struct HPALETTE__* HPALETTE;
-typedef struct HPEN__* HPEN;
-typedef struct HRGN__* HRGN;
-#endif
+#include "wtf/Assertions.h"
+#include "wtf/TypeTraits.h"
 
 namespace WTF {
 
-    template <typename T> inline void deleteOwnedPtr(T* ptr)
-    {
-        typedef char known[sizeof(T) ? 1 : -1];
-        if (sizeof(known))
-            delete ptr;
-    }
+class RefCountedBase;
+class ThreadSafeRefCountedBase;
 
-#if OS(WINDOWS)
-    void deleteOwnedPtr(HBITMAP);
-    void deleteOwnedPtr(HBRUSH);
-    void deleteOwnedPtr(HDC);
-    void deleteOwnedPtr(HFONT);
-    void deleteOwnedPtr(HPALETTE);
-    void deleteOwnedPtr(HPEN);
-    void deleteOwnedPtr(HRGN);
-#endif
+template<typename T>
+struct IsRefCounted {
+    static const bool value = IsSubclass<T, RefCountedBase>::value
+        || IsSubclass<T, ThreadSafeRefCountedBase>::value;
+};
+
+template <typename T>
+struct OwnedPtrDeleter {
+    static void deletePtr(T* ptr)
+    {
+        COMPILE_ASSERT(!IsRefCounted<T>::value, UseRefPtrForRefCountedObjects);
+        COMPILE_ASSERT(sizeof(T) > 0, TypeMustBeComplete);
+        delete ptr;
+    }
+};
+
+template <typename T>
+struct OwnedPtrDeleter<T[]> {
+    static void deletePtr(T* ptr)
+    {
+        COMPILE_ASSERT(!IsRefCounted<T>::value, UseRefPtrForRefCountedObjects);
+        COMPILE_ASSERT(sizeof(T) > 0, TypeMustBeComplete);
+        delete[] ptr;
+    }
+};
+
+template <class T, int n>
+struct OwnedPtrDeleter<T[n]> {
+    COMPILE_ASSERT(sizeof(T) < 0, DoNotUseArrayWithSizeAsType);
+};
 
 } // namespace WTF
 

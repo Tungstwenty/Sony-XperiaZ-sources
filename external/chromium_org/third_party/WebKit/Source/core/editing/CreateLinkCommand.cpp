@@ -31,7 +31,7 @@
 
 namespace WebCore {
 
-CreateLinkCommand::CreateLinkCommand(Document* document, const String& url)
+CreateLinkCommand::CreateLinkCommand(Document& document, const String& url)
     : CompositeEditCommand(document)
 {
     m_url = url;
@@ -43,7 +43,7 @@ void CreateLinkCommand::doApply()
         return;
 
     RefPtr<HTMLAnchorElement> anchorElement = HTMLAnchorElement::create(document());
-    anchorElement->setHref(m_url);
+    anchorElement->setHref(AtomicString(m_url));
 
     if (endingSelection().isRange())
         applyStyledElement(anchorElement.get());

@@ -30,25 +30,28 @@
  */
 
 /**
- * @param {Element} element
- * @param {?function(Event): boolean} elementDragStart
- * @param {function(Event)} elementDrag
- * @param {?function(Event)} elementDragEnd
- * @param {string} cursor
+ * @param {!Element} element
+ * @param {?function(!MouseEvent): boolean} elementDragStart
+ * @param {function(!MouseEvent)} elementDrag
+ * @param {?function(!MouseEvent)} elementDragEnd
+ * @param {!string} cursor
+ * @param {?string=} hoverCursor
  */
-WebInspector.installDragHandle = function(element, elementDragStart, elementDrag, elementDragEnd, cursor)
+WebInspector.installDragHandle = function(element, elementDragStart, elementDrag, elementDragEnd, cursor, hoverCursor)
 {
-    element.addEventListener("mousedown", WebInspector._elementDragStart.bind(WebInspector, elementDragStart, elementDrag, elementDragEnd, cursor), false);
+    element.addEventListener("mousedown", WebInspector.elementDragStart.bind(WebInspector, elementDragStart, elementDrag, elementDragEnd, cursor), false);
+    if (hoverCursor !== null)
+        element.style.cursor = hoverCursor || cursor;
 }
 
 /**
- * @param {?function(Event)} elementDragStart
- * @param {function(Event)} elementDrag
- * @param {?function(Event)} elementDragEnd
+ * @param {?function(!MouseEvent):boolean} elementDragStart
+ * @param {function(!MouseEvent)} elementDrag
+ * @param {?function(!MouseEvent)} elementDragEnd
  * @param {string} cursor
- * @param {Event} event
+ * @param {?Event} event
  */
-WebInspector._elementDragStart = function(elementDragStart, elementDrag, elementDragEnd, cursor, event)
+WebInspector.elementDragStart = function(elementDragStart, elementDrag, elementDragEnd, cursor, event)
 {
     // Only drag upon left button. Right will likely cause a context menu. So will ctrl-click on mac.
     if (event.button || (WebInspector.isMac() && event.ctrlKey))
@@ -57,7 +60,7 @@ WebInspector._elementDragStart = function(elementDragStart, elementDrag, element
     if (WebInspector._elementDraggingEventListener)
         return;
 
-    if (elementDragStart && !elementDragStart(event))
+    if (elementDragStart && !elementDragStart(/** @type {!MouseEvent} */ (event)))
         return;
 
     if (WebInspector._elementDraggingGlassPane) {
@@ -94,12 +97,18 @@ WebInspector._unregisterMouseOutWhileDragging = function()
     delete WebInspector._mouseOutWhileDraggingTargetDocument;
 }
 
+/**
+ * @param {!Event} event
+ */
 WebInspector._elementDragMove = function(event)
 {
-    if (WebInspector._elementDraggingEventListener(event))
+    if (WebInspector._elementDraggingEventListener(/** @type {!MouseEvent} */ (event)))
         WebInspector._cancelDragEvents(event);
 }
 
+/**
+ * @param {!Event} event
+ */
 WebInspector._cancelDragEvents = function(event)
 {
     var targetDocument = event.target.ownerDocument;
@@ -117,15 +126,18 @@ WebInspector._cancelDragEvents = function(event)
     delete WebInspector._elementEndDraggingEventListener;
 }
 
+/**
+ * @param {!Event} event
+ */
 WebInspector._elementDragEnd = function(event)
 {
     var elementDragEnd = WebInspector._elementEndDraggingEventListener;
 
-    WebInspector._cancelDragEvents(event);
+    WebInspector._cancelDragEvents(/** @type {!MouseEvent} */ (event));
 
     event.preventDefault();
     if (elementDragEnd)
-        elementDragEnd(event);
+        elementDragEnd(/** @type {!MouseEvent} */ (event));
 }
 
 /**
@@ -135,7 +147,7 @@ WebInspector.GlassPane = function()
 {
     this.element = document.createElement("div");
     this.element.style.cssText = "position:absolute;top:0;bottom:0;left:0;right:0;background-color:transparent;z-index:1000;";
-    this.element.id = "glass-pane-for-drag";
+    this.element.id = "glass-pane";
     document.body.appendChild(this.element);
     WebInspector._glassPane = this;
 }
@@ -144,7 +156,10 @@ WebInspector.GlassPane.prototype = {
     dispose: function()
     {
         delete WebInspector._glassPane;
-        WebInspector.inspectorView.focus();
+        if (WebInspector.HelpScreen.isVisible())
+            WebInspector.HelpScreen.focus();
+        else
+            WebInspector.inspectorView.focus();
         this.element.remove();
     }
 }
@@ -240,7 +255,7 @@ WebInspector.animateStyle = function(animations, duration, callback)
 
 WebInspector.isBeingEdited = function(element)
 {
-    if (element.hasStyleClass("text-prompt") || element.nodeName === "INPUT" || element.nodeName === "TEXTAREA")
+    if (element.classList.contains("text-prompt") || element.nodeName === "INPUT" || element.nodeName === "TEXTAREA")
         return true;
 
     if (!WebInspector.__editingCount)
@@ -259,13 +274,13 @@ WebInspector.markBeingEdited = function(element, value)
     if (value) {
         if (element.__editing)
             return false;
-        element.addStyleClass("being-edited");
+        element.classList.add("being-edited");
         element.__editing = true;
         WebInspector.__editingCount = (WebInspector.__editingCount || 0) + 1;
     } else {
         if (!element.__editing)
             return false;
-        element.removeStyleClass("being-edited");
+        element.classList.remove("being-edited");
         delete element.__editing;
         --WebInspector.__editingCount;
     }
@@ -274,9 +289,10 @@ WebInspector.markBeingEdited = function(element, value)
 
 /**
  * @constructor
- * @param {function(Element,string,string,*,string)} commitHandler
- * @param {function(Element,*)} cancelHandler
- * @param {*=} context
+ * @param {function(!Element,string,string,T,string)} commitHandler
+ * @param {function(!Element,T)} cancelHandler
+ * @param {T=} context
+ * @template T
  */
 WebInspector.EditingConfig = function(commitHandler, cancelHandler, context)
 {
@@ -286,7 +302,7 @@ WebInspector.EditingConfig = function(commitHandler, cancelHandler, context)
 
     /**
      * Handles the "paste" event, return values are the same as those for customFinishHandler
-     * @type {function(Element)|undefined}
+     * @type {function(!Element)|undefined}
      */
     this.pasteHandler;
 
@@ -298,7 +314,7 @@ WebInspector.EditingConfig = function(commitHandler, cancelHandler, context)
 
     /**
      * Custom finish handler for the editing session (invoked on keydown)
-     * @type {function(Element,*)|undefined}
+     * @type {function(!Element,*)|undefined}
      */
     this.customFinishHandler;
 }
@@ -311,7 +327,7 @@ WebInspector.EditingConfig.prototype = {
 
     /**
      * @param {string} initialValue
-     * @param {Object} mode
+     * @param {!Object} mode
      * @param {string} theme
      * @param {boolean=} lineWrapping
      * @param {boolean=} smartIndent
@@ -338,7 +354,7 @@ WebInspector.StyleValueDelimiters = " \xA0\t\n\"':;,/()";
 
 
 /**
-  * @param {Event} event
+  * @param {!Event} event
   * @return {?string}
   */
 WebInspector._valueModificationDirection = function(event)
@@ -360,7 +376,7 @@ WebInspector._valueModificationDirection = function(event)
 
 /**
  * @param {string} hexString
- * @param {Event} event
+ * @param {!Event} event
  */
 WebInspector._modifiedHexValue = function(hexString, event)
 {
@@ -399,7 +415,7 @@ WebInspector._modifiedHexValue = function(hexString, event)
 
 /**
  * @param {number} number
- * @param {Event} event
+ * @param {!Event} event
  */
 WebInspector._modifiedFloatNumber = function(number, event)
 {
@@ -432,11 +448,12 @@ WebInspector._modifiedFloatNumber = function(number, event)
 }
 
 /**
-  * @param {Event} event
-  * @param {Element} element
+  * @param {?Event} event
+  * @param {!Element} element
   * @param {function(string,string)=} finishHandler
   * @param {function(string)=} suggestionHandler
   * @param {function(number):number=} customNumberHandler
+  * @return {boolean}
  */
 WebInspector.handleElementValueModifications = function(event, element, finishHandler, suggestionHandler, customNumberHandler)
 {
@@ -517,8 +534,9 @@ WebInspector.handleElementValueModifications = function(event, element, finishHa
 }
 
 /** 
- * @param {Element} element
- * @param {WebInspector.EditingConfig=} config
+ * @param {!Element} element
+ * @param {!WebInspector.EditingConfig=} config
+ * @return {?{cancel: function(), commit: function(), codeMirror: !CodeMirror, setWidth: function(number)}}
  */
 WebInspector.startEditing = function(element, config)
 {
@@ -538,7 +556,7 @@ WebInspector.startEditing = function(element, config)
     var cssLoadView;
 
     /**
-     * @param {Event} e
+     * @param {?Event} e
      */
     function consumeCopy(e)
     {
@@ -559,12 +577,12 @@ WebInspector.startEditing = function(element, config)
             theme: config.theme,
             value: oldText
         });
-        codeMirror.getWrapperElement().addStyleClass("source-code");
+        codeMirror.getWrapperElement().classList.add("source-code");
         codeMirror.on("cursorActivity", function(cm) {
             cm.display.cursor.scrollIntoViewIfNeeded(false);
         });
     } else {
-        element.addStyleClass("editing");
+        element.classList.add("editing");
 
         oldTabIndex = element.getAttribute("tabIndex");
         if (typeof oldTabIndex !== "number" || oldTabIndex < 0)
@@ -573,7 +591,17 @@ WebInspector.startEditing = function(element, config)
     }
 
     /**
-     * @param {Event=} e
+     * @param {number} width
+     */
+    function setWidth(width)
+    {
+        const padding = 30;
+        codeMirror.getWrapperElement().style.width = (width - codeMirror.getWrapperElement().offsetLeft - padding) + "px";
+        codeMirror.refresh();
+    }
+
+    /**
+     * @param {?Event=} e
      */
     function blurEventListener(e) {
         if (!isMultiline || !e || !e.relatedTarget || !e.relatedTarget.isSelfOrDescendant(element))
@@ -608,7 +636,7 @@ WebInspector.startEditing = function(element, config)
             return;
         }
 
-        this.removeStyleClass("editing");
+        this.classList.remove("editing");
         
         if (typeof oldTabIndex !== "number")
             element.removeAttribute("tabIndex");
@@ -692,7 +720,8 @@ WebInspector.startEditing = function(element, config)
     return {
         cancel: editingCancelled.bind(element),
         commit: editingCommitted.bind(element),
-        codeMirror: codeMirror // For testing.
+        codeMirror: codeMirror, // For testing.
+        setWidth: setWidth
     };
 }
 
@@ -862,24 +891,24 @@ WebInspector.port = function()
 WebInspector.installPortStyles = function()
 {
     var platform = WebInspector.platform();
-    document.body.addStyleClass("platform-" + platform);
+    document.body.classList.add("platform-" + platform);
     var flavor = WebInspector.platformFlavor();
     if (flavor)
-        document.body.addStyleClass("platform-" + flavor);
+        document.body.classList.add("platform-" + flavor);
     var port = WebInspector.port();
-    document.body.addStyleClass("port-" + port);
+    document.body.classList.add("port-" + port);
 }
 
 WebInspector._windowFocused = function(event)
 {
     if (event.target.document.nodeType === Node.DOCUMENT_NODE)
-        document.body.removeStyleClass("inactive");
+        document.body.classList.remove("inactive");
 }
 
 WebInspector._windowBlurred = function(event)
 {
     if (event.target.document.nodeType === Node.DOCUMENT_NODE)
-        document.body.addStyleClass("inactive");
+        document.body.classList.add("inactive");
 }
 
 WebInspector.previousFocusElement = function()
@@ -948,16 +977,24 @@ WebInspector.setToolbarColors = function(backgroundColor, color)
         WebInspector._themeStyleElement = document.createElement("style");
         document.head.appendChild(WebInspector._themeStyleElement);
     }
+    var parsedColor = WebInspector.Color.parse(color);
+    var shadowColor = parsedColor ? parsedColor.invert().setAlpha(0.33).toString(WebInspector.Color.Format.RGBA) : "white";
+    var prefix = WebInspector.isMac() ? "body:not(.undocked)" : "";
     WebInspector._themeStyleElement.textContent =
-        "#toolbar {\
-             background-image: none !important;\
-             background-color: " + backgroundColor + " !important;\
-         }\
-         \
-         .toolbar-label {\
-             color: " + color + " !important;\
-             text-shadow: none;\
-         }";
+        String.sprintf(
+            "%s .toolbar-background {\
+                 background-image: none !important;\
+                 background-color: %s !important;\
+                 color: %s !important;\
+             }", prefix, backgroundColor, color) +
+        String.sprintf(
+             "%s .toolbar-background button.status-bar-item .glyph, %s .toolbar-background button.status-bar-item .long-click-glyph {\
+                 background-color: %s;\
+             }", prefix, prefix, color) +
+        String.sprintf(
+             "%s .toolbar-background button.status-bar-item .glyph.shadow, %s .toolbar-background button.status-bar-item .long-click-glyph.shadow {\
+                 background-color: %s;\
+             }", prefix, prefix, shadowColor);
 }
 
 WebInspector.resetToolbarColors = function()
@@ -967,21 +1004,21 @@ WebInspector.resetToolbarColors = function()
 }
 
 /**
- * @param {Element} element
+ * @param {!Element} element
  * @param {number} offset
  * @param {number} length
- * @param {Array.<Object>=} domChanges
+ * @param {!Array.<!Object>=} domChanges
  */
 WebInspector.highlightSearchResult = function(element, offset, length, domChanges)
 {
-    var result = WebInspector.highlightSearchResults(element, [{offset: offset, length: length }], domChanges);
+    var result = WebInspector.highlightSearchResults(element, [new WebInspector.SourceRange(offset, length)], domChanges);
     return result.length ? result[0] : null;
 }
 
 /**
- * @param {Element} element
- * @param {Array.<Object>} resultRanges
- * @param {Array.<Object>=} changes
+ * @param {!Element} element
+ * @param {!Array.<!WebInspector.SourceRange>} resultRanges
+ * @param {!Array.<!Object>=} changes
  */
 WebInspector.highlightSearchResults = function(element, resultRanges, changes)
 {
@@ -989,10 +1026,10 @@ WebInspector.highlightSearchResults = function(element, resultRanges, changes)
 }
 
 /**
- * @param {Element} element
- * @param {Array.<Object>} resultRanges
+ * @param {!Element} element
+ * @param {!Array.<!WebInspector.SourceRange>} resultRanges
  * @param {string} styleClass
- * @param {Array.<Object>=} changes
+ * @param {!Array.<!Object>=} changes
  */
 WebInspector.highlightRangesWithStyleClass = function(element, resultRanges, styleClass, changes)
 {
@@ -1130,7 +1167,7 @@ WebInspector.endBatchUpdate = function()
 }
 
 /**
- * @param {Object} object
+ * @param {!Object} object
  * @param {function()} method
  */
 WebInspector.invokeOnceAfterBatchUpdate = function(object, method)
@@ -1157,7 +1194,7 @@ WebInspector.invokeOnceAfterBatchUpdate = function(object, method)
 WebInspector.CodeMirrorCSSLoadView = function()
 {
     WebInspector.View.call(this);
-    this.element.addStyleClass("hidden");
+    this.element.classList.add("hidden");
     this.registerRequiredCSS("cm/codemirror.css");
     this.registerRequiredCSS("cm/cmdevtools.css");
 }
@@ -1168,6 +1205,9 @@ WebInspector.CodeMirrorCSSLoadView.prototype = {
 
 ;(function() {
 
+/**
+ * @this {Window}
+ */
 function windowLoaded()
 {
     window.addEventListener("focus", WebInspector._windowFocused, false);

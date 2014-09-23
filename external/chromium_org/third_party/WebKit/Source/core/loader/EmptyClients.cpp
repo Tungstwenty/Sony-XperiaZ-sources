@@ -31,10 +31,12 @@
 #include "core/html/HTMLFormElement.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FormState.h"
-#include "core/page/Frame.h"
-#include "core/platform/ColorChooser.h"
-#include "core/platform/DateTimeChooser.h"
-#include "core/platform/FileChooser.h"
+#include "core/frame/Frame.h"
+#include "platform/ColorChooser.h"
+#include "platform/DateTimeChooser.h"
+#include "platform/FileChooser.h"
+#include "public/platform/WebServiceWorkerProvider.h"
+#include "public/platform/WebServiceWorkerProviderClient.h"
 
 namespace WebCore {
 
@@ -57,6 +59,9 @@ void fillWithEmptyClients(Page::PageClients& pageClients)
 
     static BackForwardClient* dummyBackForwardClient = adoptPtr(new EmptyBackForwardClient).leakPtr();
     pageClients.backForwardClient = dummyBackForwardClient;
+
+    static SpellCheckerClient* dummySpellCheckerClient = adoptPtr(new EmptySpellCheckerClient).leakPtr();
+    pageClients.spellCheckerClient = dummySpellCheckerClient;
 }
 
 class EmptyPopupMenu : public PopupMenu {
@@ -82,6 +87,10 @@ PassRefPtr<DateTimeChooser> EmptyChromeClient::openDateTimeChooser(DateTimeChoos
     return PassRefPtr<DateTimeChooser>();
 }
 
+void EmptyChromeClient::openTextDataListChooser(HTMLInputElement&)
+{
+}
+
 void EmptyChromeClient::runOpenPanel(Frame*, PassRefPtr<FileChooser>)
 {
 }
@@ -94,10 +103,6 @@ String EmptyChromeClient::acceptLanguages()
 NavigationPolicy EmptyFrameLoaderClient::decidePolicyForNavigation(const ResourceRequest&, DocumentLoader*, NavigationPolicy)
 {
     return NavigationPolicyIgnore;
-}
-
-bool EmptyFrameLoaderClient::shouldAbortNavigationAfterUrlResolve(const KURL& base, const String& fragment, const KURL& result) {
-  return false;
 }
 
 void EmptyFrameLoaderClient::dispatchWillSendSubmitEvent(PassRefPtr<FormState>)
@@ -113,7 +118,7 @@ PassRefPtr<DocumentLoader> EmptyFrameLoaderClient::createDocumentLoader(const Re
     return DocumentLoader::create(request, substituteData);
 }
 
-PassRefPtr<Frame> EmptyFrameLoaderClient::createFrame(const KURL&, const String&, HTMLFrameOwnerElement*, const String&, bool, int, int)
+PassRefPtr<Frame> EmptyFrameLoaderClient::createFrame(const KURL&, const String&, const String&, HTMLFrameOwnerElement*)
 {
     return 0;
 }
@@ -132,16 +137,13 @@ void EmptyTextCheckerClient::requestCheckingOfString(PassRefPtr<TextCheckingRequ
 {
 }
 
-void EmptyEditorClient::registerUndoStep(PassRefPtr<UndoStep>)
-{
-}
-
-void EmptyEditorClient::registerRedoStep(PassRefPtr<UndoStep>)
-{
-}
-
 void EmptyFrameLoaderClient::didRequestAutocomplete(PassRefPtr<FormState>)
 {
+}
+
+PassOwnPtr<blink::WebServiceWorkerProvider> EmptyFrameLoaderClient::createServiceWorkerProvider(PassOwnPtr<blink::WebServiceWorkerProviderClient>)
+{
+    return nullptr;
 }
 
 }

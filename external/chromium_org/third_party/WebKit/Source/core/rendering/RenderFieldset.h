@@ -24,11 +24,11 @@
 #ifndef RenderFieldset_h
 #define RenderFieldset_h
 
-#include "core/rendering/RenderBlock.h"
+#include "core/rendering/RenderBlockFlow.h"
 
 namespace WebCore {
 
-class RenderFieldset FINAL : public RenderBlock {
+class RenderFieldset FINAL : public RenderBlockFlow {
 public:
     explicit RenderFieldset(Element*);
 
@@ -39,23 +39,18 @@ private:
     virtual const char* renderName() const { return "RenderFieldSet"; }
     virtual bool isFieldset() const { return true; }
 
-    virtual RenderObject* layoutSpecialExcludedChild(bool relayoutChildren);
+    virtual RenderObject* layoutSpecialExcludedChild(bool relayoutChildren, SubtreeLayoutScope&);
 
     virtual void computePreferredLogicalWidths();
     virtual bool avoidsFloats() const { return true; }
+
+    virtual bool supportsPartialLayout() const OVERRIDE { return false; }
 
     virtual void paintBoxDecorations(PaintInfo&, const LayoutPoint&);
     virtual void paintMask(PaintInfo&, const LayoutPoint&);
 };
 
-inline RenderFieldset* toRenderFieldset(RenderObject* object)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!object || object->isFieldset());
-    return static_cast<RenderFieldset*>(object);
-}
-
-// This will catch anyone doing an unnecessary cast.
-void toRenderFieldset(const RenderFieldset*);
+DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderFieldset, isFieldset());
 
 } // namespace WebCore
 

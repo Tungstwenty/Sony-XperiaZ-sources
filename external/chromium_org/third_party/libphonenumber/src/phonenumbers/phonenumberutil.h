@@ -67,8 +67,8 @@ class PhoneNumberUtil : public Singleton<PhoneNumberUtil> {
   friend class PhoneNumberMatcherTest;
   friend class PhoneNumberRegExpsAndMappings;
   friend class PhoneNumberUtilTest;
-  friend class ShortNumberUtil;
-  friend class ShortNumberUtilTest;
+  friend class ShortNumberInfo;
+  friend class ShortNumberInfoTest;
   friend class Singleton<PhoneNumberUtil>;
 
  public:
@@ -188,6 +188,11 @@ class PhoneNumberUtil : public Singleton<PhoneNumberUtil> {
   // strips punctuation and alpha characters.
   void NormalizeDigitsOnly(string* number) const;
 
+  // Normalizes a string of characters representing a phone number. This strips
+  // all characters which are not diallable on a mobile phone keypad (including
+  // all non-ASCII digits).
+  void NormalizeDiallableCharsOnly(string* number) const;
+
   // Gets the national significant number of a phone number. Note a national
   // significant number doesn't contain a national prefix or any formatting.
   void GetNationalSignificantNumber(const PhoneNumber& number,
@@ -266,6 +271,13 @@ class PhoneNumberUtil : public Singleton<PhoneNumberUtil> {
   // Refer to the unittests to see the difference between this function and
   // GetLengthOfGeographicalAreaCode().
   int GetLengthOfNationalDestinationCode(const PhoneNumber& number) const;
+
+  // Returns the mobile token for the provided country calling code if it has
+  // one, otherwise returns an empty string. A mobile token is a number inserted
+  // before the area code when dialing a mobile number from that country from
+  // abroad.
+  void GetCountryMobileToken(int country_calling_code,
+                             string* mobile_token) const;
 
   // Formats a phone number in the specified format using default rules. Note
   // that this does not promise to produce a phone number that the user can
@@ -737,6 +749,7 @@ class PhoneNumberUtil : public Singleton<PhoneNumberUtil> {
   bool ParsePrefixAsIdd(const RegExp& idd_pattern, string* number) const;
 
   void Normalize(string* number) const;
+
   PhoneNumber::CountryCodeSource MaybeStripInternationalPrefixAndNormalize(
       const string& possible_idd_prefix,
       string* number) const;

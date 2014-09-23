@@ -4,7 +4,7 @@ Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC 
 
 © Copyright  1995 - 2013 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
-  Copyright (C) 2012-2013 Sony Mobile Communications AB.
+  Copyright (C) 2012 Sony Mobile Communications AB.
 
  1.    INTRODUCTION
 The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
@@ -87,6 +87,8 @@ Changes made in the code.
              buffers to clear all history.
 
 2013-03-21 - Added CStreamInfo->numAuBitsRemaining to enable decoding down to last bit of the buffers.
+
+2014-04-14 - Change update number of output channels to avoid crash in framework when aacChannels is 0
 ----------------------------------------------------------------------------------------------------------- */
 
 /*****************************  MPEG-4 AAC Decoder  **************************
@@ -1646,7 +1648,7 @@ LINKSPEC_CPP AAC_DECODER_ERROR CAacDecoder_DecodeFrame(
   }
 
   /* Update number of output channels */
-  self->streamInfo.aacNumChannels = aacChannels;
+  self->streamInfo.aacNumChannels = (aacChannels != 0) ? aacChannels : self->aacChannels;
 
  #ifdef TP_PCE_ENABLE
   if (pceRead == 1 && CProgramConfig_IsValid(pce)) {

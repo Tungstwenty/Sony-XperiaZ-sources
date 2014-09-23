@@ -28,8 +28,8 @@
 
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
-#include "core/page/Frame.h"
-#include "core/page/FrameView.h"
+#include "core/frame/Frame.h"
+#include "core/frame/FrameView.h"
 #include "core/page/Page.h"
 #include "core/rendering/PaintInfo.h"
 #include "core/rendering/RenderView.h"
@@ -55,18 +55,25 @@ bool RenderHTMLCanvas::requiresLayer() const
 
 void RenderHTMLCanvas::paintReplaced(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
-    LayoutRect rect = contentBoxRect();
-    rect.moveBy(paintOffset);
+    GraphicsContext* context = paintInfo.context;
 
-    if (Frame* frame = this->frame()) {
-        if (Page* page = frame->page()) {
-            if (paintInfo.phase == PaintPhaseForeground)
-                page->addRelevantRepaintedObject(this, rect);
-        }
+    LayoutRect contentRect = contentBoxRect();
+    contentRect.moveBy(paintOffset);
+    LayoutRect paintRect = replacedContentRect();
+    paintRect.moveBy(paintOffset);
+
+    bool clip = !contentRect.contains(paintRect);
+    if (clip) {
+        // Not allowed to overflow the content box.
+        paintInfo.context->save();
+        paintInfo.context->clip(pixelSnappedIntRect(contentRect));
     }
 
     bool useLowQualityScale = style()->imageRendering() == ImageRenderingOptimizeContrast;
-    toHTMLCanvasElement(node())->paint(paintInfo.context, rect, useLowQualityScale);
+    toHTMLCanvasElement(node())->paint(context, paintRect, useLowQualityScale);
+
+    if (clip)
+        context->restore();
 }
 
 void RenderHTMLCanvas::canvasSizeChanged()
@@ -83,7 +90,7 @@ void RenderHTMLCanvas::canvasSizeChanged()
         return;
 
     if (!preferredLogicalWidthsDirty())
-        setPreferredLogicalWidthsDirty(true);
+        setPreferredLogicalWidthsDirty();
 
     LayoutSize oldSize = size();
     updateLogicalWidth();

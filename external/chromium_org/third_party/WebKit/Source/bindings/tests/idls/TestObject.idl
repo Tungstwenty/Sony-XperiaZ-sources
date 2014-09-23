@@ -35,7 +35,7 @@ enum TestEnumType { "", "EnumValue1", "EnumValue2", "EnumValue3" };
 callback TestCallbackFunction = void (TestEnumType formal1, TestObject formal2);
 
 [
-    Constructor(TestCallback testCallback),
+    Constructor(TestCallbackInterface testCallbackInterface),
     ImplementedAs=TestObj
 ] interface TestObject : EventTarget {
     // Attributes
@@ -57,21 +57,23 @@ callback TestCallbackFunction = void (TestEnumType formal1, TestObject formal2);
     attribute DOMString                stringAttr;
     attribute EventHandler             eventHandlerAttr;
     [MeasureAs=TestFeature] attribute TestObject testObjAttr;
+    [ExposeJSAccessors] attribute DOMString attrWithJSGetterAndSetter;
 
     // WK_ucfirst, WK_lcfirst exceptional cases.
     attribute TestObject                  XMLObjAttr;
     attribute boolean                  create;
 
     // Reflected DOM attributes
-    [Reflect] attribute DOMString reflectedStringAttr;
+    [Reflect, TreatNullAs=NullString] attribute DOMString reflectedStringAttr;
     [Reflect] attribute long reflectedIntegralAttr;
     [Reflect] attribute unsigned long reflectedUnsignedIntegralAttr;
     [Reflect] attribute boolean reflectedBooleanAttr;
-    [Reflect, URL] attribute DOMString reflectedURLAttr;
-    [Reflect=customContentStringAttr] attribute DOMString reflectedStringAttr;
+    [Reflect, TreatNullAs=NullString, URL] attribute DOMString reflectedURLAttr;
+    [Reflect=customContentStringAttr, TreatNullAs=NullString] attribute DOMString reflectedStringAttr;
     [Reflect=customContentIntegralAttr] attribute long reflectedCustomIntegralAttr;
     [Reflect=customContentBooleanAttr] attribute boolean reflectedCustomBooleanAttr;
-    [Reflect=customContentURLAttr, URL] attribute DOMString reflectedCustomURLAttr;
+    [Reflect=customContentURLAttr, TreatNullAs=NullString, URL] attribute DOMString reflectedCustomURLAttr;
+    [Reflect] attribute SVGAnimatedString animatedReflectedAttribute;
 
     // TypedArray attribute
     attribute Float32Array typedArrayAttr;
@@ -90,8 +92,10 @@ callback TestCallbackFunction = void (TestEnumType formal1, TestObject formal2);
     void methodWithEnumArg(TestEnumType enumArg);
     [RaisesException] TestObject methodThatRequiresAllArgsAndThrows(DOMString strArg, TestObject objArg);
 
+    void methodQueryListListener(MediaQueryListListener listener);
     void serializedValue(SerializedScriptValue serializedArg);
     void optionsObject(Dictionary oo, optional Dictionary ooo);
+    void optionsObjectList(sequence<Dictionary> list);
 
     // Indexed/named properties
     [ImplementedAs=item] getter Node (unsigned long index);
@@ -99,10 +103,10 @@ callback TestCallbackFunction = void (TestEnumType formal1, TestObject formal2);
 
     // Exceptions
     [RaisesException] void methodWithException();
-    [GetterRaisesException] attribute long attrWithGetterException;
-    [SetterRaisesException] attribute long attrWithSetterException;
-    [GetterRaisesException] attribute DOMString stringAttrWithGetterException;
-    [SetterRaisesException] attribute DOMString stringAttrWithSetterException;
+    [RaisesException=Getter] attribute long attrWithGetterException;
+    [RaisesException=Setter] attribute long attrWithSetterException;
+    [RaisesException=Getter] attribute DOMString stringAttrWithGetterException;
+    [RaisesException=Setter] attribute DOMString stringAttrWithSetterException;
 
     // 'Custom' extended attribute
     [Custom] attribute long            customAttr;
@@ -121,20 +125,20 @@ callback TestCallbackFunction = void (TestEnumType formal1, TestObject formal2);
     [CallWith=ScriptState] TestObject withScriptStateObj();
     [CallWith=ScriptState, RaisesException] void withScriptStateVoidException();
     [CallWith=ScriptState, RaisesException] TestObject withScriptStateObjException();
-    [CallWith=ScriptExecutionContext] void withScriptExecutionContext();
-    [CallWith=ScriptExecutionContext&ScriptState] void withScriptExecutionContextAndScriptState();
-    [CallWith=ScriptExecutionContext&ScriptState, RaisesException] TestObject withScriptExecutionContextAndScriptStateObjException();
-    [CallWith=  ScriptExecutionContext  &  ScriptState  ] TestObject withScriptExecutionContextAndScriptStateWithSpaces();
+    [CallWith=ExecutionContext] void withExecutionContext();
+    [CallWith=ExecutionContext&ScriptState] void withExecutionContextAndScriptState();
+    [CallWith=ExecutionContext&ScriptState, RaisesException] TestObject withExecutionContextAndScriptStateObjException();
+    [CallWith=  ExecutionContext  &  ScriptState  ] TestObject withExecutionContextAndScriptStateWithSpaces();
     [CallWith=ActiveWindow&FirstWindow] void withActiveWindowAndFirstWindow();
 
     [CallWith=ScriptState] attribute long withScriptStateAttribute;
-    [CallWith=ScriptExecutionContext] attribute TestObject withScriptExecutionContextAttribute;
+    [CallWith=ExecutionContext] attribute TestObject withExecutionContextAttribute;
     [SetterCallWith=ActiveWindow&FirstWindow] attribute TestObject withActiveWindowAndFirstWindowAttribute;
-    [CallWith=ScriptState, GetterRaisesException] attribute TestObject withScriptStateAttributeRaises;
-    [CallWith=ScriptExecutionContext, GetterRaisesException] attribute TestObject withScriptExecutionContextAttributeRaises;
-    [CallWith=ScriptExecutionContext&ScriptState] attribute TestObject withScriptExecutionContextAndScriptStateAttribute;
-    [CallWith=ScriptExecutionContext&ScriptState, GetterRaisesException] attribute TestObject withScriptExecutionContextAndScriptStateAttributeRaises;
-    [CallWith=  ScriptExecutionContext  &  ScriptState  ] attribute TestObject withScriptExecutionContextAndScriptStateWithSpacesAttribute;
+    [CallWith=ScriptState, RaisesException=Getter] attribute TestObject withScriptStateAttributeRaises;
+    [CallWith=ExecutionContext, RaisesException=Getter] attribute TestObject withExecutionContextAttributeRaises;
+    [CallWith=ExecutionContext&ScriptState] attribute TestObject withExecutionContextAndScriptStateAttribute;
+    [CallWith=ExecutionContext&ScriptState, RaisesException=Getter] attribute TestObject withExecutionContextAndScriptStateAttributeRaises;
+    [CallWith=  ExecutionContext  &  ScriptState  ] attribute TestObject withExecutionContextAndScriptStateWithSpacesAttribute;
 
     // optional parameters
     void    methodWithOptionalArg(optional long opt);
@@ -144,18 +148,20 @@ callback TestCallbackFunction = void (TestEnumType formal1, TestObject formal2);
     void    methodWithOptionalStringIsUndefined([Default=Undefined] optional DOMString str);
     void    methodWithOptionalStringIsNullString([Default=NullString] optional DOMString str);
 
-    // Callback parameters
-    void    methodWithCallbackArg(TestCallback callback);
-    void    methodWithNonCallbackArgAndCallbackArg(long nonCallback, TestCallback callback);
-    void    methodWithCallbackAndOptionalArg(optional TestCallback callback);
-    void    methodWithNullableCallbackArg(TestCallback? callback);
-    // static methods with Callback parameter
-    static void    staticMethodWithCallbackAndOptionalArg(optional TestCallback callback);
-    static void    staticMethodWithCallbackArg(TestCallback callback);
+    // Callback interface parameters
+    void    methodWithCallbackInterfaceArg(TestCallbackInterface callbackInterface);
+    void    methodWithNonCallbackArgAndCallbackInterfaceArg(long nonCallback, TestCallbackInterface callbackInterface);
+    void    methodWithCallbackInterfaceAndOptionalArg(optional TestCallbackInterface callbackInterface);
+    void    methodWithNullableCallbackInterfaceArg(TestCallbackInterface? callbackInterface);
+    // static methods with callback interface parameter
+    static void    staticMethodWithCallbackAndOptionalArg(optional TestCallbackInterface callbackInterface);
+    static void    staticMethodWithCallbackArg(TestCallbackInterface callbackInterface);
 
     // 'EnforceRange' extended attribute
     void    methodWithEnforceRangeInt8([EnforceRange] byte value);
     void    methodWithEnforceRangeUInt8([EnforceRange] octet value);
+    void    methodWithEnforceRangeInt16([EnforceRange] short value);
+    void    methodWithEnforceRangeUInt16([EnforceRange] unsigned short value);
     void    methodWithEnforceRangeInt32([EnforceRange] long value);
     void    methodWithEnforceRangeUInt32([EnforceRange] unsigned long value);
     void    methodWithEnforceRangeInt64([EnforceRange] long long value);
@@ -163,6 +169,8 @@ callback TestCallbackFunction = void (TestEnumType formal1, TestObject formal2);
 
     [EnforceRange] attribute byte enforcedRangeByteAttr;
     [EnforceRange] attribute octet enforcedRangeOctetAttr;
+    [EnforceRange] attribute short enforcedRangeShortAttr;
+    [EnforceRange] attribute unsigned short enforcedRangeUnsignedShortAttr;
     [EnforceRange] attribute long enforcedRangeLongAttr;
     [EnforceRange] attribute unsigned long enforcedRangeUnsignedLongAttr;
     [EnforceRange] attribute long long enforcedRangeLongLongAttr;
@@ -182,10 +190,10 @@ callback TestCallbackFunction = void (TestEnumType formal1, TestObject formal2);
     [Conditional=Condition1&Condition2] attribute TestObjectectBConstructor conditionalAttr5;
     [Conditional=Condition1|Condition2] attribute TestObjectectCConstructor conditionalAttr6;
 
-    [Conditional=Condition1] const unsigned short CONDITIONAL_CONST = 0;
-
     readonly attribute any cachedAttribute1;
     readonly attribute any cachedAttribute2;
+    [CachedAttribute=isValueDirty] readonly attribute any cachedDirtyableAttribute;
+    [RaisesException=Getter, CachedAttribute=isValueDirty] readonly attribute any cachedDirtyableAttributeRaises;
 
     attribute any anyAttribute;
 
@@ -194,39 +202,29 @@ callback TestCallbackFunction = void (TestEnumType formal1, TestObject formal2);
     void callbackFunctionArgument(TestCallbackFunction function);
 
     // Overloads
-    void    overloadedMethod(TestObject? objArg, [StrictTypeChecking] DOMString strArg);
-    void    overloadedMethod(TestObject? objArg, optional long longArg);
-    void    overloadedMethod([StrictTypeChecking] DOMString strArg);
     void    overloadedMethod(long longArg);
-    void    overloadedMethod(TestCallback callback);
-    void    overloadedMethod(DOMStringList? listArg);
-    void    overloadedMethod(DOMString[]? arrayArg);
+    void    overloadedMethod(TestCallbackInterface callbackInterfaceArg);
     void    overloadedMethod(TestObject objArg);
     void    overloadedMethod(DOMString[] arrayArg);
-    void    overloadedMethod(sequence<unsigned long> arrayArg);
-    void    overloadedMethod(DOMString strArg);
+    void    overloadedMethod(sequence<unsigned long> sequenceArg);
+    void    overloadedMethodA(TestObject? objArg, optional long longArg);
+    void    overloadedMethodA(TestObject? objArg, DOMString strArg);
+    void    overloadedMethodB(DOMString strArg);
+    void    overloadedMethodB([StrictTypeChecking] DOMString strArg);
 
     // Class methods within JavaScript (like what's used for IDBKeyRange).
     static void classMethod();
     static long classMethodWithOptional(optional long arg);
     [Custom] static void classMethod2(long arg);
 
-    // Static method with conditional on overloaded methods
-    [Conditional=Condition1] static void overloadedMethod1(long arg);
-    [Conditional=Condition1] static void overloadedMethod1([StrictTypeChecking] DOMString type);
-
     void classMethodWithClamp([Clamp] unsigned short objArgsShort, [Clamp] unsigned long objArgsLong);
 
-    // 'EnabledAtRuntime' methods and attributes.
-    [EnabledAtRuntime] void enabledAtRuntimeMethod1(long longArg);
-    [EnabledAtRuntime=FeatureName] void enabledAtRuntimeMethod2(long longArg);
-    [EnabledAtRuntime] attribute long enabledAtRuntimeAttr1;
-    [EnabledAtRuntime=FeatureName] attribute long enabledAtRuntimeAttr2;
-    // 'EnabledPerContext' methods and attributes.
-    [EnabledPerContext] void enabledPerContextMethod1(long longArg);
-    [EnabledPerContext=FeatureName] void enabledPerContextMethod2(long longArg);
-    [EnabledPerContext] attribute long enabledPerContextAttr1;
-    [EnabledPerContext=FeatureName] attribute long enabledPerContextAttr2;
+    // [RuntimeEnabled] methods and attributes.
+    [RuntimeEnabled=FeatureName] void enabledAtRuntimeMethod(long longArg);
+    [RuntimeEnabled=FeatureName] attribute long enabledAtRuntimeAttr;
+    // [PerContextEnabled] methods and attributes.
+    [PerContextEnabled=FeatureName] void enabledPerContextMethod(long longArg);
+    [PerContextEnabled=FeatureName] attribute long enabledPerContextAttr;
 
     attribute float[]                   floatArray;
     attribute double[]                  doubleArray;
@@ -236,43 +234,25 @@ callback TestCallbackFunction = void (TestEnumType formal1, TestObject formal2);
     [RaisesException] DOMString[] stringArrayFunction(DOMString[] values);
     [RaisesException] DOMStringList domStringListFunction(DOMStringList values);
 
-    [CheckSecurityForNode] readonly attribute Document contentDocument;
-    [CheckSecurityForNode, RaisesException] SVGDocument getSVGDocument();
+    [CheckSecurity=Node] readonly attribute Document contentDocument;
+    [CheckSecurity=Node, RaisesException] SVGDocument getSVGDocument();
 
-    void convert1([TreatReturnedNullStringAs=Null] TestNode value);
-    void convert2([TreatReturnedNullStringAs=Undefined] TestNode value);
-    void convert4([TreatNullAs=NullString] TestNode value);
-    void convert5([TreatNullAs=NullString, TreatUndefinedAs=NullString] TestNode value);
+    void convert1([TreatNullAs=NullString] TestNode value);
+    void convert2([TreatNullAs=NullString, TreatUndefinedAs=NullString] TestNode value);
 
     attribute SVGPoint mutablePoint;
     [Immutable] attribute SVGPoint immutablePoint;
     SVGPoint mutablePointFunction();
     [Immutable] SVGPoint immutablePointFunction();
 
+    SVGPoint svgPointMethod(SVGPoint item, unsigned long index);
+    [StrictTypeChecking, RaisesException]  SVGPoint strictSVGPointMethod(SVGPoint item, unsigned long index);
+
     [ImplementedAs=banana] void orange();
     [ImplementedAs=blueberry] attribute long strawberry;
 
     [StrictTypeChecking] attribute float strictFloat;
     [StrictTypeChecking, RaisesException] boolean strictFunction(DOMString str, float a, long b);
-
-    // ObjectiveC reserved words.
-    readonly attribute long      description;
-    attribute long               id;
-    readonly attribute DOMString hash;
-
-    // Check constants and enums.
-    const unsigned short CONST_VALUE_0 = 0;
-    const unsigned short CONST_VALUE_1 = 1;
-    const unsigned short CONST_VALUE_2 = 2;
-    const unsigned short CONST_VALUE_4 = 4;
-    const unsigned short CONST_VALUE_8 = 8;
-    const short CONST_VALUE_9 = -1;
-    const DOMString CONST_VALUE_10 = "my constant string";
-    const unsigned short CONST_VALUE_11 = 0xffffffff;
-    const unsigned short CONST_VALUE_12 = 0x01;
-    const unsigned short CONST_VALUE_13 = 0X20;
-    const unsigned short CONST_VALUE_14 = 0x1abc;
-    [Reflect=CONST_IMPL] const unsigned short CONST_JAVASCRIPT = 15;
 
     [Replaceable] readonly attribute long replaceableAttribute;
 
@@ -285,10 +265,11 @@ callback TestCallbackFunction = void (TestEnumType formal1, TestObject formal2);
     readonly attribute long? nullableLongAttribute;
     readonly attribute boolean? nullableBooleanAttribute;
     readonly attribute DOMString? nullableStringAttribute;
-
     attribute long? nullableLongSettableAttribute;
+    [RaisesException=Getter] attribute long? nullableStringValue;
 
-    [GetterRaisesException] attribute long? nullableStringValue;
+    // Nullable arguments.
+    void methodWithNullableArguments(DOMString? str, long? l, TestObject? obj, optional double? d);
 
     [PerWorldBindings] readonly attribute TestObject perWorldReadOnlyAttribute;
     [PerWorldBindings] attribute TestObject perWorldAttribute;
@@ -296,20 +277,20 @@ callback TestCallbackFunction = void (TestEnumType formal1, TestObject formal2);
     [PerWorldBindings] void overloadedPerWorldMethod(long longArg);
     [PerWorldBindings] void overloadedPerWorldMethod(DOMString strArg, long longArg);
 
-    [ActivityLog=Access] void activityLoggedMethod1(long longArg);
-    [PerWorldBindings, ActivityLog=Access] void activityLoggedMethod2(long longArg);
-    [PerWorldBindings, ActivityLog=AccessForIsolatedWorlds] void activityLoggedInIsolatedWorldMethod(long longArg);
-    [PerWorldBindings, ActivityLog=Access] void overloadedActivityLoggedMethod(long longArg);
-    [PerWorldBindings, ActivityLog=Access] void overloadedActivityLoggedMethod(DOMString strArg, long longArg);
-    [ActivityLog=Access] attribute long activityLoggedAttr1;
-    [PerWorldBindings, ActivityLog=Access] attribute long activityLoggedAttr2;
-    [PerWorldBindings, ActivityLog=AccessForIsolatedWorlds] attribute long activityLoggedInIsolatedWorldsAttr;
-    [ActivityLog=Setter] attribute long activityLoggedAttrSetter1;
-    [PerWorldBindings, ActivityLog=Setter] attribute long activityLoggedAttrSetter2;
-    [PerWorldBindings, ActivityLog=SetterForIsolatedWorlds] attribute long activityLoggedInIsolatedWorldsAttrSetter;
-    [ActivityLog=Getter] attribute long activityLoggedAttrGetter1;
-    [PerWorldBindings, ActivityLog=Getter] attribute long activityLoggedAttrGetter2;
-    [PerWorldBindings, ActivityLog=GetterForIsolatedWorlds] attribute long activityLoggedInIsolatedWorldsAttrGetter;
+    [ActivityLogging=ForAllWorlds] void activityLoggedMethod1(long longArg);
+    [PerWorldBindings, ActivityLogging=ForAllWorlds] void activityLoggedMethod2(long longArg);
+    [PerWorldBindings, ActivityLogging=ForIsolatedWorlds] void activityLoggedInIsolatedWorldMethod(long longArg);
+    [PerWorldBindings, ActivityLogging=ForAllWorlds] void overloadedActivityLoggedMethod(long longArg);
+    [PerWorldBindings, ActivityLogging=ForAllWorlds] void overloadedActivityLoggedMethod(DOMString strArg, long longArg);
+    [ActivityLogging=ForAllWorlds] attribute long activityLoggedAttr1;
+    [PerWorldBindings, ActivityLogging=ForAllWorlds] attribute long activityLoggedAttr2;
+    [PerWorldBindings, ActivityLogging=ForIsolatedWorlds] attribute long activityLoggedInIsolatedWorldsAttr;
+    [ActivityLogging=SetterForAllWorlds] attribute long activityLoggedAttrSetter1;
+    [PerWorldBindings, ActivityLogging=SetterForAllWorlds] attribute long activityLoggedAttrSetter2;
+    [PerWorldBindings, ActivityLogging=SetterForIsolatedWorlds] attribute long activityLoggedInIsolatedWorldsAttrSetter;
+    [ActivityLogging=GetterForAllWorlds] attribute long activityLoggedAttrGetter1;
+    [PerWorldBindings, ActivityLogging=GetterForAllWorlds] attribute long activityLoggedAttrGetter2;
+    [PerWorldBindings, ActivityLogging=GetterForIsolatedWorlds] attribute long activityLoggedInIsolatedWorldsAttrGetter;
 
     // DeprecateAs
     [DeprecateAs=StaticReadonlyAttribute] static readonly attribute long deprecatedStaticReadOnlyAttr;
@@ -321,6 +302,10 @@ callback TestCallbackFunction = void (TestEnumType formal1, TestObject formal2);
     [DeprecateAs=StaticMethod] static void deprecatedStaticMethod();
 
     [DeprecateAs=Constant] const unsigned short DEPRECATED_CONSTANT = 1;
+
+    // PutForwards
+    [PutForwards=href] readonly attribute TestNode location;
+    [PutForwards=hrefThrows] readonly attribute TestNode locationWithException;
 };
 
 // The following comment should not generate any code

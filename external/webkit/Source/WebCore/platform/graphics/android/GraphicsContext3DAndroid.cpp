@@ -170,7 +170,7 @@ bool GraphicsContext3D::getImageData(Image* image,
         // Currently, we cannot handle this in WebGL: give up.
         return false;
     }
-    SkBitmap::Config skiaConfig = bitmap.getConfig();
+    SkBitmap::Config skiaConfig = bitmap.config();
 
     bitmap.lockPixels();
     if (skiaConfig == SkBitmap::kARGB_8888_Config) {

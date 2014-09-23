@@ -28,22 +28,23 @@
 
 #include "HTMLNames.h"
 #include "core/html/HTMLFrameOwnerElement.h"
-#include "core/page/Settings.h"
+#include "core/frame/Settings.h"
 #include "core/page/scrolling/ScrollingConstraints.h"
-#include "core/platform/graphics/DrawLooper.h"
-#include "core/platform/graphics/GraphicsContextStateSaver.h"
-#include "core/platform/graphics/Path.h"
-#include "core/platform/graphics/transforms/TransformState.h"
+#include "core/rendering/CompositedLayerMapping.h"
 #include "core/rendering/ImageQualityController.h"
 #include "core/rendering/RenderBlock.h"
 #include "core/rendering/RenderGeometryMap.h"
 #include "core/rendering/RenderInline.h"
 #include "core/rendering/RenderLayer.h"
-#include "core/rendering/RenderLayerBacking.h"
 #include "core/rendering/RenderLayerCompositor.h"
 #include "core/rendering/RenderNamedFlowThread.h"
 #include "core/rendering/RenderRegion.h"
 #include "core/rendering/RenderView.h"
+#include "core/rendering/style/ShadowList.h"
+#include "platform/geometry/TransformState.h"
+#include "platform/graphics/DrawLooper.h"
+#include "platform/graphics/GraphicsContextStateSaver.h"
+#include "platform/graphics/Path.h"
 #include "wtf/CurrentTime.h"
 
 using namespace std;
@@ -64,7 +65,7 @@ static ContinuationMap* continuationMap = 0;
 
 // This HashMap is similar to the continuation map, but connects first-letter
 // renderers to their remaining text fragments.
-typedef HashMap<const RenderBoxModelObject*, RenderObject*> FirstLetterRemainingTextMap;
+typedef HashMap<const RenderBoxModelObject*, RenderTextFragment*> FirstLetterRemainingTextMap;
 static FirstLetterRemainingTextMap* firstLetterRemainingTextMap = 0;
 
 void RenderBoxModelObject::setSelectionState(SelectionState state)
@@ -102,50 +103,43 @@ bool RenderBoxModelObject::hasAcceleratedCompositing() const
 bool RenderBoxModelObject::startTransition(double timeOffset, CSSPropertyID propertyId, const RenderStyle* fromStyle, const RenderStyle* toStyle)
 {
     ASSERT(hasLayer());
-    ASSERT(isComposited());
-    return layer()->backing()->startTransition(timeOffset, propertyId, fromStyle, toStyle);
+    ASSERT(compositingState() == PaintsIntoOwnBacking);
+    return layer()->compositedLayerMapping()->startTransition(timeOffset, propertyId, fromStyle, toStyle);
 }
 
 void RenderBoxModelObject::transitionPaused(double timeOffset, CSSPropertyID propertyId)
 {
     ASSERT(hasLayer());
-    ASSERT(isComposited());
-    layer()->backing()->transitionPaused(timeOffset, propertyId);
+    ASSERT(compositingState() == PaintsIntoOwnBacking);
+    layer()->compositedLayerMapping()->transitionPaused(timeOffset, propertyId);
 }
 
 void RenderBoxModelObject::transitionFinished(CSSPropertyID propertyId)
 {
     ASSERT(hasLayer());
-    ASSERT(isComposited());
-    layer()->backing()->transitionFinished(propertyId);
+    ASSERT(compositingState() == PaintsIntoOwnBacking);
+    layer()->compositedLayerMapping()->transitionFinished(propertyId);
 }
 
 bool RenderBoxModelObject::startAnimation(double timeOffset, const CSSAnimationData* animation, const KeyframeList& keyframes)
 {
     ASSERT(hasLayer());
-    ASSERT(isComposited());
-    return layer()->backing()->startAnimation(timeOffset, animation, keyframes);
+    ASSERT(compositingState() == PaintsIntoOwnBacking);
+    return layer()->compositedLayerMapping()->startAnimation(timeOffset, animation, keyframes);
 }
 
 void RenderBoxModelObject::animationPaused(double timeOffset, const String& name)
 {
     ASSERT(hasLayer());
-    ASSERT(isComposited());
-    layer()->backing()->animationPaused(timeOffset, name);
+    ASSERT(compositingState() == PaintsIntoOwnBacking);
+    layer()->compositedLayerMapping()->animationPaused(timeOffset, name);
 }
 
 void RenderBoxModelObject::animationFinished(const String& name)
 {
     ASSERT(hasLayer());
-    ASSERT(isComposited());
-    layer()->backing()->animationFinished(name);
-}
-
-void RenderBoxModelObject::suspendAnimations(double time)
-{
-    ASSERT(hasLayer());
-    ASSERT(isComposited());
-    layer()->backing()->suspendAnimations(time);
+    ASSERT(compositingState() == PaintsIntoOwnBacking);
+    layer()->compositedLayerMapping()->animationFinished(name);
 }
 
 bool RenderBoxModelObject::shouldPaintAtLowQuality(GraphicsContext* context, Image* image, const void* layer, const LayoutSize& size)
@@ -180,8 +174,6 @@ void RenderBoxModelObject::updateFromStyle()
 {
     RenderLayerModelObject::updateFromStyle();
 
-    // Set the appropriate bits for a box model object.  Since all bits are cleared in styleWillChange,
-    // we only check for bits that could possibly be set to true.
     RenderStyle* styleToUse = style();
     setHasBoxDecorations(hasBackground() || styleToUse->hasBorder() || styleToUse->hasAppearance() || styleToUse->boxShadow());
     setInline(styleToUse->isDisplayInlineType());
@@ -214,7 +206,7 @@ bool RenderBoxModelObject::hasAutoHeightOrContainingBlockWithAutoHeight() const
     // For percentage heights: The percentage is calculated with respect to the height of the generated box's
     // containing block. If the height of the containing block is not specified explicitly (i.e., it depends
     // on content height), and this element is not absolutely positioned, the value computes to 'auto'.
-    if (!logicalHeightLength.isPercent() || isOutOfFlowPositioned() || document()->inQuirksMode())
+    if (!logicalHeightLength.isPercent() || isOutOfFlowPositioned() || document().inQuirksMode())
         return false;
 
     // Anonymous block boxes are ignored when resolving percentage values that would refer to it:
@@ -511,13 +503,17 @@ RoundedRect RenderBoxModelObject::backgroundRoundedRectAdjustedForBleedAvoidance
 
 static void applyBoxShadowForBackground(GraphicsContext* context, const RenderObject* renderer)
 {
-    const ShadowData* boxShadow = renderer->style()->boxShadow();
-    while (boxShadow->style() != Normal)
-        boxShadow = boxShadow->next();
-
-    FloatSize shadowOffset(boxShadow->x(), boxShadow->y());
-    context->setShadow(shadowOffset, boxShadow->blur(), renderer->resolveColor(boxShadow->color()),
-        DrawLooper::ShadowRespectsTransforms, DrawLooper::ShadowIgnoresAlpha);
+    const ShadowList* shadowList = renderer->style()->boxShadow();
+    ASSERT(shadowList);
+    for (size_t i = shadowList->shadows().size(); i--; ) {
+        const ShadowData& boxShadow = shadowList->shadows()[i];
+        if (boxShadow.style() != Normal)
+            continue;
+        FloatSize shadowOffset(boxShadow.x(), boxShadow.y());
+        context->setShadow(shadowOffset, boxShadow.blur(), renderer->resolveColor(boxShadow.color()),
+            DrawLooper::ShadowRespectsTransforms, DrawLooper::ShadowIgnoresAlpha);
+        return;
+    }
 }
 
 void RenderBoxModelObject::paintFillLayerExtended(const PaintInfo& paintInfo, const Color& color, const FillLayer* bgLayer, const LayoutRect& rect,
@@ -540,10 +536,10 @@ void RenderBoxModelObject::paintFillLayerExtended(const PaintInfo& paintInfo, co
     bool shouldPaintBackgroundImage = bgImage && bgImage->canRender(this, style()->effectiveZoom());
 
     bool forceBackgroundToWhite = false;
-    if (document()->printing()) {
+    if (document().printing()) {
         if (style()->printColorAdjust() == PrintColorAdjustEconomy)
             forceBackgroundToWhite = true;
-        if (document()->settings() && document()->settings()->shouldPrintBackgrounds())
+        if (document().settings() && document().settings()->shouldPrintBackgrounds())
             forceBackgroundToWhite = false;
     }
 
@@ -556,14 +552,14 @@ void RenderBoxModelObject::paintFillLayerExtended(const PaintInfo& paintInfo, co
     // while rendering.)
     if (forceBackgroundToWhite) {
         // Note that we can't reuse this variable below because the bgColor might be changed
-        bool shouldPaintBackgroundColor = !bgLayer->next() && bgColor.alpha();
+        bool shouldPaintBackgroundColor = !bgLayer->next() && bgColor.isValid() && bgColor.alpha();
         if (shouldPaintBackgroundImage || shouldPaintBackgroundColor) {
             bgColor = Color::white;
             shouldPaintBackgroundImage = false;
         }
     }
 
-    bool colorVisible = bgColor.alpha();
+    bool colorVisible = bgColor.isValid() && bgColor.alpha();
 
     // Fast path for drawing simple color backgrounds.
     if (!isRoot && !clippedWithLocalScrolling && !shouldPaintBackgroundImage && isBorderFill && !bgLayer->next()) {
@@ -623,8 +619,8 @@ void RenderBoxModelObject::paintFillLayerExtended(const PaintInfo& paintInfo, co
         // Adjust the paint rect to reflect a scrolled content box with borders at the ends.
         IntSize offset = thisBox->scrolledContentOffset();
         scrolledPaintRect.move(-offset);
-        scrolledPaintRect.setWidth(bLeft + layer()->scrollWidth() + bRight);
-        scrolledPaintRect.setHeight(borderTop() + layer()->scrollHeight() + borderBottom());
+        scrolledPaintRect.setWidth(bLeft + thisBox->scrollWidth() + bRight);
+        scrolledPaintRect.setHeight(borderTop() + thisBox->scrollHeight() + borderBottom());
     }
 
     GraphicsContextStateSaver backgroundClipStateSaver(*context, false);
@@ -673,21 +669,21 @@ void RenderBoxModelObject::paintFillLayerExtended(const PaintInfo& paintInfo, co
     bool isOpaqueRoot = false;
     if (isRoot) {
         isOpaqueRoot = true;
-        if (!bgLayer->next() && !(bgColor.alpha() == 255) && view()->frameView()) {
-            Element* ownerElement = document()->ownerElement();
+        if (!bgLayer->next() && !(bgColor.isValid() && bgColor.alpha() == 255) && view()->frameView()) {
+            Element* ownerElement = document().ownerElement();
             if (ownerElement) {
                 if (!ownerElement->hasTagName(frameTag)) {
                     // Locate the <body> element using the DOM.  This is easier than trying
                     // to crawl around a render tree with potential :before/:after content and
                     // anonymous blocks created by inline <body> tags etc.  We can locate the <body>
                     // render object very easily via the DOM.
-                    HTMLElement* body = document()->body();
+                    HTMLElement* body = document().body();
                     if (body) {
                         // Can't scroll a frameset document anyway.
                         isOpaqueRoot = body->hasLocalName(framesetTag);
                     } else {
                         // SVG documents and XML documents with SVG root nodes are transparent.
-                        isOpaqueRoot = !document()->hasSVGRootNode();
+                        isOpaqueRoot = !document().hasSVGRootNode();
                     }
                 }
             } else
@@ -713,7 +709,7 @@ void RenderBoxModelObject::paintFillLayerExtended(const PaintInfo& paintInfo, co
             if (isOpaqueRoot) {
                 // If we have an alpha and we are painting the root element, go ahead and blend with the base background color.
                 Color baseColor = view()->frameView()->baseBackgroundColor();
-                bool shouldClearDocumentBackground = document()->settings() && document()->settings()->shouldClearDocumentBackground();
+                bool shouldClearDocumentBackground = document().settings() && document().settings()->shouldClearDocumentBackground();
                 CompositeOperator operation = shouldClearDocumentBackground ? CompositeCopy : context->compositeOperation();
 
                 if (baseColor.alpha()) {
@@ -741,8 +737,10 @@ void RenderBoxModelObject::paintFillLayerExtended(const PaintInfo& paintInfo, co
             RenderObject* clientForBackgroundImage = backgroundObject ? backgroundObject : this;
             RefPtr<Image> image = bgImage->image(clientForBackgroundImage, geometry.tileSize());
             bool useLowQualityScaling = shouldPaintAtLowQuality(context, image.get(), bgLayer, geometry.tileSize());
+            if (bgLayer->maskSourceType() == MaskLuminance)
+                context->setColorFilter(ColorFilterLuminanceToAlpha);
             context->drawTiledImage(image.get(), geometry.destRect(), geometry.relativePhase(), geometry.tileSize(),
-                compositeOp, useLowQualityScaling, bgLayer->blendMode());
+                compositeOp, useLowQualityScaling, bgLayer->blendMode(), geometry.spaceSize());
         }
     }
 
@@ -766,8 +764,8 @@ void RenderBoxModelObject::paintFillLayerExtended(const PaintInfo& paintInfo, co
             paint(info, scrolledPaintRect.location() - localOffset);
         }
 
-        context->endTransparencyLayer();
-        context->endTransparencyLayer();
+        context->endLayer();
+        context->endLayer();
     }
 }
 
@@ -933,7 +931,7 @@ IntSize RenderBoxModelObject::calculateFillTileSize(const FillLayer* fillLayer, 
             float verticalScaleFactor = imageIntrinsicSize.height()
                 ? static_cast<float>(positioningAreaSize.height()) / imageIntrinsicSize.height() : 1;
             float scaleFactor = type == Contain ? min(horizontalScaleFactor, verticalScaleFactor) : max(horizontalScaleFactor, verticalScaleFactor);
-            return IntSize(max(1, static_cast<int>(imageIntrinsicSize.width() * scaleFactor)), max(1, static_cast<int>(imageIntrinsicSize.height() * scaleFactor)));
+            return IntSize(max(1l, lround(imageIntrinsicSize.width() * scaleFactor)), max(1l, lround(imageIntrinsicSize.height() * scaleFactor)));
        }
     }
 
@@ -981,10 +979,21 @@ bool RenderBoxModelObject::fixedBackgroundPaintsInLocalCoordinates() const
         return false;
 
     RenderLayer* rootLayer = view()->layer();
-    if (!rootLayer || !rootLayer->isComposited())
+    if (!rootLayer || rootLayer->compositingState() == NotComposited)
         return false;
 
-    return rootLayer->backing()->backgroundLayerPaintsFixedRootBackground();
+    return rootLayer->compositedLayerMapping()->backgroundLayerPaintsFixedRootBackground();
+}
+
+static inline int getSpace(int areaSize, int tileSize)
+{
+    int numberOfTiles = areaSize / tileSize;
+    int space = -1;
+
+    if (numberOfTiles > 1)
+        space = lroundf((float)(areaSize - numberOfTiles * tileSize) / (numberOfTiles - 1));
+
+    return space;
 }
 
 void RenderBoxModelObject::calculateBackgroundImageGeometry(const FillLayer* fillLayer, const LayoutRect& paintRect,
@@ -1060,18 +1069,73 @@ void RenderBoxModelObject::calculateBackgroundImageGeometry(const FillLayer* fil
     int availableHeight = positioningAreaSize.height() - geometry.tileSize().height();
 
     LayoutUnit computedXPosition = minimumValueForLength(fillLayer->xPosition(), availableWidth, renderView, true);
-    if (backgroundRepeatX == RepeatFill)
+    if (backgroundRepeatX == RoundFill && positioningAreaSize.width() > 0 && fillTileSize.width() > 0) {
+        long nrTiles = max(1l, lroundf((float)positioningAreaSize.width() / fillTileSize.width()));
+
+        if (fillLayer->size().size.height().isAuto() && backgroundRepeatY != RoundFill) {
+            fillTileSize.setHeight(fillTileSize.height() * positioningAreaSize.width() / (nrTiles * fillTileSize.width()));
+        }
+
+        fillTileSize.setWidth(positioningAreaSize.width() / nrTiles);
+        geometry.setTileSize(fillTileSize);
         geometry.setPhaseX(geometry.tileSize().width() ? geometry.tileSize().width() - roundToInt(computedXPosition + left) % geometry.tileSize().width() : 0);
-    else {
+        geometry.setSpaceSize(IntSize());
+    }
+
+    LayoutUnit computedYPosition = minimumValueForLength(fillLayer->yPosition(), availableHeight, renderView, true);
+    if (backgroundRepeatY == RoundFill && positioningAreaSize.height() > 0 && fillTileSize.height() > 0) {
+        long nrTiles = max(1l, lroundf((float)positioningAreaSize.height() / fillTileSize.height()));
+
+        if (fillLayer->size().size.width().isAuto() && backgroundRepeatX != RoundFill) {
+            fillTileSize.setWidth(fillTileSize.width() * positioningAreaSize.height() / (nrTiles * fillTileSize.height()));
+        }
+
+        fillTileSize.setHeight(positioningAreaSize.height() / nrTiles);
+        geometry.setTileSize(fillTileSize);
+        geometry.setPhaseY(geometry.tileSize().height() ? geometry.tileSize().height() - roundToInt(computedYPosition + top) % geometry.tileSize().height() : 0);
+        geometry.setSpaceSize(IntSize());
+    }
+
+    if (backgroundRepeatX == RepeatFill) {
+        geometry.setPhaseX(geometry.tileSize().width() ? geometry.tileSize().width() - roundToInt(computedXPosition + left) % geometry.tileSize().width() : 0);
+        geometry.setSpaceSize(IntSize());
+    } else if (backgroundRepeatX == SpaceFill && fillTileSize.width() > 0) {
+        int space = getSpace(positioningAreaSize.width(), geometry.tileSize().width());
+        int actualWidth = geometry.tileSize().width() + space;
+
+        if (space >= 0) {
+            computedXPosition = minimumValueForLength(Length(), availableWidth, renderView, true);
+            geometry.setSpaceSize(IntSize(space, 0));
+            geometry.setPhaseX(actualWidth ? actualWidth - roundToInt(computedXPosition + left) % actualWidth : 0);
+        } else {
+            backgroundRepeatX = NoRepeatFill;
+        }
+    }
+    if (backgroundRepeatX == NoRepeatFill) {
         int xOffset = fillLayer->backgroundXOrigin() == RightEdge ? availableWidth - computedXPosition : computedXPosition;
         geometry.setNoRepeatX(left + xOffset);
+        geometry.setSpaceSize(IntSize(0, geometry.spaceSize().height()));
     }
-    LayoutUnit computedYPosition = minimumValueForLength(fillLayer->yPosition(), availableHeight, renderView, true);
-    if (backgroundRepeatY == RepeatFill)
+
+    if (backgroundRepeatY == RepeatFill) {
         geometry.setPhaseY(geometry.tileSize().height() ? geometry.tileSize().height() - roundToInt(computedYPosition + top) % geometry.tileSize().height() : 0);
-    else {
+        geometry.setSpaceSize(IntSize(geometry.spaceSize().width(), 0));
+    } else if (backgroundRepeatY == SpaceFill && fillTileSize.height() > 0) {
+        int space = getSpace(positioningAreaSize.height(), geometry.tileSize().height());
+        int actualHeight = geometry.tileSize().height() + space;
+
+        if (space >= 0) {
+            computedYPosition = minimumValueForLength(Length(), availableHeight, renderView, true);
+            geometry.setSpaceSize(IntSize(geometry.spaceSize().width(), space));
+            geometry.setPhaseY(actualHeight ? actualHeight - roundToInt(computedYPosition + top) % actualHeight : 0);
+        } else {
+            backgroundRepeatY = NoRepeatFill;
+        }
+    }
+    if (backgroundRepeatY == NoRepeatFill) {
         int yOffset = fillLayer->backgroundYOrigin() == BottomEdge ? availableHeight - computedYPosition : computedYPosition;
         geometry.setNoRepeatY(top + yOffset);
+        geometry.setSpaceSize(IntSize(geometry.spaceSize().width(), 0));
     }
 
     if (fixedAttachment)
@@ -1081,13 +1145,13 @@ void RenderBoxModelObject::calculateBackgroundImageGeometry(const FillLayer* fil
     geometry.setDestOrigin(geometry.destRect().location());
 }
 
-static LayoutUnit computeBorderImageSide(Length borderSlice, LayoutUnit borderSide, LayoutUnit imageSide, LayoutUnit boxExtent, RenderView* renderView)
+static LayoutUnit computeBorderImageSide(const BorderImageLength& borderSlice, LayoutUnit borderSide, LayoutUnit imageSide, LayoutUnit boxExtent, RenderView* renderView)
 {
-    if (borderSlice.isRelative())
-        return borderSlice.value() * borderSide;
-    if (borderSlice.isAuto())
+    if (borderSlice.isNumber())
+        return borderSlice.number() * borderSide;
+    if (borderSlice.length().isAuto())
         return imageSide;
-    return valueForLength(borderSlice, boxExtent, renderView);
+    return valueForLength(borderSlice.length(), boxExtent, renderView);
 }
 
 bool RenderBoxModelObject::paintNinePieceImage(GraphicsContext* graphicsContext, const LayoutRect& rect, const RenderStyle* style,
@@ -1661,7 +1725,7 @@ void RenderBoxModelObject::paintTranslucentBorderSides(GraphicsContext* graphics
         paintBorderSides(graphicsContext, style, outerBorder, innerBorder, innerBorderAdjustment, edges, commonColorEdgeSet, bleedAvoidance, includeLogicalLeftEdge, includeLogicalRightEdge, antialias, &commonColor);
 
         if (useTransparencyLayer)
-            graphicsContext->endTransparencyLayer();
+            graphicsContext->endLayer();
 
         edgesToDraw &= ~commonColorEdgeSet;
     }
@@ -1816,7 +1880,7 @@ void RenderBoxModelObject::paintBorder(const PaintInfo& info, const LayoutRect& 
             graphicsContext->clipRoundedRect(outerBorder);
         // isRenderable() check avoids issue described in https://bugs.webkit.org/show_bug.cgi?id=38787
         // The inside will be clipped out later (in clipBorderSideForComplexInnerPath)
-        if (innerBorder.isRenderable())
+        if (innerBorder.isRenderable() && !innerBorder.isEmpty())
             graphicsContext->clipOutRoundedRect(innerBorder);
     }
 
@@ -2280,7 +2344,9 @@ void RenderBoxModelObject::clipBorderSideForComplexInnerPath(GraphicsContext* gr
     BoxSide side, const class BorderEdge edges[])
 {
     graphicsContext->clip(calculateSideRectIncludingInner(outerBorder, edges, side));
-    graphicsContext->clipOutRoundedRect(calculateAdjustedInnerBorder(innerBorder, side));
+    RoundedRect adjustedInnerRect = calculateAdjustedInnerBorder(innerBorder, side);
+    if (!adjustedInnerRect.isEmpty())
+        graphicsContext->clipOutRoundedRect(adjustedInnerRect);
 }
 
 void RenderBoxModelObject::getBorderEdgeInfo(BorderEdge edges[], const RenderStyle* style, bool includeLogicalLeftEdge, bool includeLogicalRightEdge) const
@@ -2357,16 +2423,22 @@ bool RenderBoxModelObject::boxShadowShouldBeAppliedToBackground(BackgroundBleedA
     if (style()->hasAppearance())
         return false;
 
+    const ShadowList* shadowList = style()->boxShadow();
+    if (!shadowList)
+        return false;
+
     bool hasOneNormalBoxShadow = false;
-    for (const ShadowData* currentShadow = style()->boxShadow(); currentShadow; currentShadow = currentShadow->next()) {
-        if (currentShadow->style() != Normal)
+    size_t shadowCount = shadowList->shadows().size();
+    for (size_t i = 0; i < shadowCount; ++i) {
+        const ShadowData& currentShadow = shadowList->shadows()[i];
+        if (currentShadow.style() != Normal)
             continue;
 
         if (hasOneNormalBoxShadow)
             return false;
         hasOneNormalBoxShadow = true;
 
-        if (currentShadow->spread())
+        if (currentShadow.spread())
             return false;
     }
 
@@ -2374,7 +2446,7 @@ bool RenderBoxModelObject::boxShadowShouldBeAppliedToBackground(BackgroundBleedA
         return false;
 
     Color backgroundColor = resolveColor(CSSPropertyBackgroundColor);
-    if (backgroundColor.hasAlpha())
+    if (!backgroundColor.isValid() || backgroundColor.hasAlpha())
         return false;
 
     const FillLayer* lastBackgroundLayer = style()->backgroundLayers();
@@ -2396,20 +2468,6 @@ bool RenderBoxModelObject::boxShadowShouldBeAppliedToBackground(BackgroundBleedA
     return true;
 }
 
-static inline IntRect areaCastingShadowInHole(const IntRect& holeRect, int shadowBlur, int shadowSpread, const IntSize& shadowOffset)
-{
-    IntRect bounds(holeRect);
-
-    bounds.inflate(shadowBlur);
-
-    if (shadowSpread < 0)
-        bounds.inflate(-shadowSpread);
-
-    IntRect offsetBounds = bounds;
-    offsetBounds.move(-shadowOffset);
-    return unionRect(bounds, offsetBounds);
-}
-
 void RenderBoxModelObject::paintBoxShadow(const PaintInfo& info, const LayoutRect& paintRect, const RenderStyle* s, ShadowStyle shadowStyle, bool includeLogicalLeftEdge, bool includeLogicalRightEdge)
 {
     // FIXME: Deal with border-image.  Would be great to use border-image as a mask.
@@ -2422,22 +2480,26 @@ void RenderBoxModelObject::paintBoxShadow(const PaintInfo& info, const LayoutRec
 
     bool hasBorderRadius = s->hasBorderRadius();
     bool isHorizontal = s->isHorizontalWritingMode();
-
     bool hasOpaqueBackground = s->visitedDependentColor(CSSPropertyBackgroundColor).isValid() && s->visitedDependentColor(CSSPropertyBackgroundColor).alpha() == 255;
-    for (const ShadowData* shadow = s->boxShadow(); shadow; shadow = shadow->next()) {
-        if (shadow->style() != shadowStyle)
+
+    GraphicsContextStateSaver stateSaver(*context, false);
+
+    const ShadowList* shadowList = s->boxShadow();
+    for (size_t i = shadowList->shadows().size(); i--; ) {
+        const ShadowData& shadow = shadowList->shadows()[i];
+        if (shadow.style() != shadowStyle)
             continue;
 
-        IntSize shadowOffset(shadow->x(), shadow->y());
-        int shadowBlur = shadow->blur();
-        int shadowSpread = shadow->spread();
+        IntSize shadowOffset(shadow.x(), shadow.y());
+        int shadowBlur = shadow.blur();
+        int shadowSpread = shadow.spread();
 
         if (shadowOffset.isZero() && !shadowBlur && !shadowSpread)
             continue;
 
-        const Color& shadowColor = resolveColor(shadow->color(), Color::stdShadowColor);
+        const Color& shadowColor = resolveColor(shadow.color());
 
-        if (shadow->style() == Normal) {
+        if (shadow.style() == Normal) {
             RoundedRect fillRect = border;
             fillRect.inflate(shadowSpread);
             if (fillRect.isEmpty())
@@ -2447,26 +2509,50 @@ void RenderBoxModelObject::paintBoxShadow(const PaintInfo& info, const LayoutRec
             shadowRect.inflate(shadowBlur + shadowSpread);
             shadowRect.move(shadowOffset);
 
+            // Save the state and clip, if not already done.
+            // The clip does not depend on any shadow-specific properties.
+            if (!stateSaver.saved()) {
+                stateSaver.save();
+                if (hasBorderRadius) {
+                    RoundedRect rectToClipOut = border;
+
+                    // If the box is opaque, it is unnecessary to clip it out. However, doing so saves time
+                    // when painting the shadow. On the other hand, it introduces subpixel gaps along the
+                    // corners. Those are avoided by insetting the clipping path by one pixel.
+                    if (hasOpaqueBackground)
+                        rectToClipOut.inflateWithRadii(-1);
+
+                    if (!rectToClipOut.isEmpty()) {
+                        context->clipOutRoundedRect(rectToClipOut);
+                    }
+                } else {
+                    IntRect rectToClipOut = border.rect();
+
+                    // If the box is opaque, it is unnecessary to clip it out. However, doing so saves time
+                    // when painting the shadow. On the other hand, it introduces subpixel gaps along the
+                    // edges if they are not pixel-aligned. Those are avoided by insetting the clipping path
+                    // by one pixel.
+                    if (hasOpaqueBackground) {
+                        // FIXME: The function to decide on the policy based on the transform should be a named function.
+                        // FIXME: It's not clear if this check is right. What about integral scale factors?
+                        AffineTransform transform = context->getCTM();
+                        if (transform.a() != 1 || (transform.d() != 1 && transform.d() != -1) || transform.b() || transform.c())
+                            rectToClipOut.inflate(-1);
+                    }
+
+                    if (!rectToClipOut.isEmpty()) {
+                        context->clipOut(rectToClipOut);
+                    }
+                }
+            }
+
             // Draw only the shadow.
             DrawLooper drawLooper;
             drawLooper.addShadow(shadowOffset, shadowBlur, shadowColor,
                 DrawLooper::ShadowRespectsTransforms, DrawLooper::ShadowIgnoresAlpha);
             context->setDrawLooper(drawLooper);
 
-            context->save();
             if (hasBorderRadius) {
-                RoundedRect rectToClipOut = border;
-
-                // If the box is opaque, it is unnecessary to clip it out. However, doing so saves time
-                // when painting the shadow. On the other hand, it introduces subpixel gaps along the
-                // corners. Those are avoided by insetting the clipping path by one pixel.
-                if (hasOpaqueBackground)
-                    rectToClipOut.inflateWithRadii(-1);
-
-                if (!rectToClipOut.isEmpty()) {
-                    context->clipOutRoundedRect(rectToClipOut);
-                }
-
                 RoundedRect influenceRect(shadowRect, border.radii());
                 influenceRect.expandRadii(2 * shadowBlur + shadowSpread);
                 if (allCornersClippedOut(influenceRect, info.rect))
@@ -2478,27 +2564,8 @@ void RenderBoxModelObject::paintBoxShadow(const PaintInfo& info, const LayoutRec
                     context->fillRoundedRect(fillRect, Color::black);
                 }
             } else {
-                IntRect rectToClipOut = border.rect();
-
-                // If the box is opaque, it is unnecessary to clip it out. However, doing so saves time
-                // when painting the shadow. On the other hand, it introduces subpixel gaps along the
-                // edges if they are not pixel-aligned. Those are avoided by insetting the clipping path
-                // by one pixel.
-                if (hasOpaqueBackground) {
-                    // FIXME: The function to decide on the policy based on the transform should be a named function.
-                    // FIXME: It's not clear if this check is right. What about integral scale factors?
-                    AffineTransform transform = context->getCTM();
-                    if (transform.a() != 1 || (transform.d() != 1 && transform.d() != -1) || transform.b() || transform.c())
-                        rectToClipOut.inflate(-1);
-                }
-
-                if (!rectToClipOut.isEmpty()) {
-                    context->clipOut(rectToClipOut);
-                }
                 context->fillRect(fillRect.rect(), Color::black);
             }
-            context->restore();
-            context->clearDrawLooper();
         } else {
             GraphicsContext::Edges clippedEdges = GraphicsContext::NoEdge;
             if (!includeLogicalLeftEdge) {
@@ -2554,14 +2621,14 @@ void RenderBoxModelObject::computeLayerHitTestRects(LayerHitTestRects& rects) co
         continuation()->computeLayerHitTestRects(rects);
 }
 
-RenderObject* RenderBoxModelObject::firstLetterRemainingText() const
+RenderTextFragment* RenderBoxModelObject::firstLetterRemainingText() const
 {
     if (!firstLetterRemainingTextMap)
         return 0;
     return firstLetterRemainingTextMap->get(this);
 }
 
-void RenderBoxModelObject::setFirstLetterRemainingText(RenderObject* remainingText)
+void RenderBoxModelObject::setFirstLetterRemainingText(RenderTextFragment* remainingText)
 {
     if (remainingText) {
         if (!firstLetterRemainingTextMap)
@@ -2580,7 +2647,7 @@ LayoutRect RenderBoxModelObject::localCaretRectForEmptyElement(LayoutUnit width,
     // constructed and this kludge is not called any more. So only the caret size
     // of an empty :first-line'd block is wrong. I think we can live with that.
     RenderStyle* currentStyle = firstLineStyle();
-    LayoutUnit height = lineHeight(true, currentStyle->isHorizontalWritingMode() ? HorizontalLine : VerticalLine);
+    LayoutUnit height = lineHeight(true, currentStyle->isHorizontalWritingMode() ? HorizontalLine : VerticalLine,  PositionOfInteriorLineBoxes);
 
     enum CaretAlignment { alignLeft, alignRight, alignCenter };
 
@@ -2747,7 +2814,8 @@ void RenderBoxModelObject::moveChildrenTo(RenderBoxModelObject* toBoxModelObject
     if (fullRemoveInsert && isRenderBlock()) {
         RenderBlock* block = toRenderBlock(this);
         block->removePositionedObjects(0);
-        block->removeFloatingObjects();
+        if (block->isRenderBlockFlow())
+            toRenderBlockFlow(block)->removeFloatingObjects();
     }
 
     ASSERT(!beforeChild || toBoxModelObject == beforeChild->parent());

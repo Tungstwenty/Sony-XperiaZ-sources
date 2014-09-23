@@ -31,7 +31,8 @@
 #define ViewportStyleResolver_h
 
 #include "CSSPropertyNames.h"
-#include "core/platform/Length.h"
+#include "core/css/RuleSet.h"
+#include "platform/Length.h"
 #include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
 
@@ -50,7 +51,9 @@ public:
 
     ~ViewportStyleResolver();
 
-    void addViewportRule(StyleRuleViewport*);
+    enum Origin { UserAgentOrigin, AuthorOrigin };
+
+    void collectViewportRules(RuleSet*, Origin);
 
     void clearDocument();
     void resolve();
@@ -58,11 +61,14 @@ public:
 private:
     explicit ViewportStyleResolver(Document*);
 
+    void addViewportRule(StyleRuleViewport*, Origin);
+
     float viewportArgumentValue(CSSPropertyID) const;
     Length viewportLengthValue(CSSPropertyID) const;
 
     Document* m_document;
     RefPtr<MutableStylePropertySet> m_propertySet;
+    bool m_hasAuthorStyle;
 };
 
 } // namespace WebCore

@@ -21,15 +21,17 @@
 #ifndef TextCheckingHelper_h
 #define TextCheckingHelper_h
 
-#include "core/page/EditorClient.h"
-#include "core/platform/text/TextChecking.h"
+#include "platform/text/TextChecking.h"
 #include "wtf/text/WTFString.h"
 
 namespace WebCore {
 
 class ExceptionState;
+class Frame;
 class Range;
 class Position;
+class SpellCheckerClient;
+class TextCheckerClient;
 struct TextCheckingResult;
 
 class TextCheckingParagraph {
@@ -59,10 +61,10 @@ public:
 
     bool checkingRangeCovers(int location, int length) const { return location < checkingEnd() && location + length > checkingStart(); }
     PassRefPtr<Range> paragraphRange() const;
+    PassRefPtr<Range> checkingRange() const { return m_checkingRange; }
 
 private:
     void invalidateParagraphRangeValues();
-    PassRefPtr<Range> checkingRange() const { return m_checkingRange; }
     PassRefPtr<Range> offsetAsRange() const;
 
     RefPtr<Range> m_checkingRange;
@@ -77,7 +79,7 @@ private:
 class TextCheckingHelper {
     WTF_MAKE_NONCOPYABLE(TextCheckingHelper);
 public:
-    TextCheckingHelper(EditorClient*, PassRefPtr<Range>);
+    TextCheckingHelper(SpellCheckerClient&, PassRefPtr<Range>);
     ~TextCheckingHelper();
 
     String findFirstMisspelling(int& firstMisspellingOffset, bool markAll, RefPtr<Range>& firstMisspellingRange);
@@ -87,14 +89,14 @@ public:
     void markAllBadGrammar();
 
 private:
-    EditorClient* m_client;
+    SpellCheckerClient* m_client;
     RefPtr<Range> m_range;
 
     int findFirstGrammarDetail(const Vector<GrammarDetail>& grammarDetails, int badGrammarPhraseLocation, int startOffset, int endOffset, bool markAll) const;
     bool unifiedTextCheckerEnabled() const;
 };
 
-void checkTextOfParagraph(TextCheckerClient*, const String&, TextCheckingTypeMask, Vector<TextCheckingResult>&);
+void checkTextOfParagraph(TextCheckerClient&, const String&, TextCheckingTypeMask, Vector<TextCheckingResult>&);
 
 bool unifiedTextCheckerEnabled(const Frame*);
 

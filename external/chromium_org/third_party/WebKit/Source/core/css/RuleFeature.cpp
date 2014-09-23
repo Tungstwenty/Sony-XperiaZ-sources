@@ -38,21 +38,15 @@ namespace WebCore {
 void RuleFeatureSet::collectFeaturesFromSelector(const CSSSelector* selector)
 {
     if (selector->m_match == CSSSelector::Id)
-        idsInRules.add(selector->value().impl());
+        idsInRules.add(selector->value());
     else if (selector->m_match == CSSSelector::Class)
-        classesInRules.add(selector->value().impl());
+        classesInRules.add(selector->value());
     else if (selector->isAttributeSelector())
-        attrsInRules.add(selector->attribute().localName().impl());
+        attrsInRules.add(selector->attribute().localName());
     switch (selector->pseudoType()) {
     case CSSSelector::PseudoFirstLine:
         m_usesFirstLineRules = true;
         break;
-    case CSSSelector::PseudoBefore:
-    case CSSSelector::PseudoAfter:
-        m_usesBeforeAfterRules = true;
-        break;
-    case CSSSelector::PseudoPart:
-        attrsInRules.add(HTMLNames::partAttr.localName().impl());
         break;
     case CSSSelector::PseudoHost:
         collectFeaturesFromSelectorList(selector->selectorList());
@@ -87,7 +81,7 @@ void RuleFeatureSet::add(const RuleFeatureSet& other)
     siblingRules.append(other.siblingRules);
     uncommonAttributeRules.append(other.uncommonAttributeRules);
     m_usesFirstLineRules = m_usesFirstLineRules || other.m_usesFirstLineRules;
-    m_usesBeforeAfterRules = m_usesBeforeAfterRules || other.m_usesBeforeAfterRules;
+    m_maxDirectAdjacentSelectors = std::max(m_maxDirectAdjacentSelectors, other.maxDirectAdjacentSelectors());
 }
 
 void RuleFeatureSet::clear()
@@ -98,7 +92,7 @@ void RuleFeatureSet::clear()
     siblingRules.clear();
     uncommonAttributeRules.clear();
     m_usesFirstLineRules = false;
-    m_usesBeforeAfterRules = false;
+    m_maxDirectAdjacentSelectors = 0;
 }
 
 } // namespace WebCore

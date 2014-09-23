@@ -28,7 +28,7 @@
 #include "config.h"
 #include "core/rendering/RenderImageResourceStyleImage.h"
 
-#include "core/loader/cache/ImageResource.h"
+#include "core/fetch/ImageResource.h"
 #include "core/rendering/RenderObject.h"
 #include "core/rendering/style/StyleFetchedImage.h"
 
@@ -49,7 +49,7 @@ void RenderImageResourceStyleImage::initialize(RenderObject* renderer)
     RenderImageResource::initialize(renderer);
 
     if (m_styleImage->isImageResource())
-        m_cachedImage = static_cast<StyleFetchedImage*>(m_styleImage.get())->cachedImage();
+        m_cachedImage = toStyleFetchedImage(m_styleImage)->cachedImage();
 
     m_styleImage->addClient(m_renderer);
 }

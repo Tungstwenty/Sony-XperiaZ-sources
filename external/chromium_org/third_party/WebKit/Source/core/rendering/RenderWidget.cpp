@@ -25,65 +25,70 @@
 #include "core/rendering/RenderWidget.h"
 
 #include "core/accessibility/AXObjectCache.h"
-#include "core/page/Frame.h"
-#include "core/platform/graphics/GraphicsContext.h"
+#include "core/frame/Frame.h"
+#include "core/rendering/CompositedLayerMapping.h"
+#include "core/rendering/GraphicsContextAnnotator.h"
 #include "core/rendering/HitTestResult.h"
+#include "core/rendering/LayoutRectRecorder.h"
 #include "core/rendering/RenderLayer.h"
-#include "core/rendering/RenderLayerBacking.h"
 #include "core/rendering/RenderView.h"
-
-using namespace std;
+#include "platform/graphics/GraphicsContext.h"
+#include "wtf/HashMap.h"
 
 namespace WebCore {
 
-static HashMap<const Widget*, RenderWidget*>& widgetRendererMap()
-{
-    static HashMap<const Widget*, RenderWidget*>* staticWidgetRendererMap = new HashMap<const Widget*, RenderWidget*>;
-    return *staticWidgetRendererMap;
-}
-
-unsigned WidgetHierarchyUpdatesSuspensionScope::s_widgetHierarchyUpdateSuspendCount = 0;
-
-WidgetHierarchyUpdatesSuspensionScope::WidgetToParentMap& WidgetHierarchyUpdatesSuspensionScope::widgetNewParentMap()
+typedef HashMap<RefPtr<Widget>, FrameView*> WidgetToParentMap;
+static WidgetToParentMap& widgetNewParentMap()
 {
     DEFINE_STATIC_LOCAL(WidgetToParentMap, map, ());
     return map;
 }
 
-void WidgetHierarchyUpdatesSuspensionScope::moveWidgets()
+static unsigned s_updateSuspendCount = 0;
+
+RenderWidget::UpdateSuspendScope::UpdateSuspendScope()
 {
-    WidgetToParentMap map;
-    widgetNewParentMap().swap(map);
-    WidgetToParentMap::iterator end = map.end();
-    for (WidgetToParentMap::iterator it = map.begin(); it != end; ++it) {
-        Widget* child = it->key.get();
-        ScrollView* currentParent = child->parent();
-        FrameView* newParent = it->value;
-        if (newParent != currentParent) {
-            if (currentParent)
-                currentParent->removeChild(child);
-            if (newParent)
-                newParent->addChild(child);
+    ++s_updateSuspendCount;
+}
+
+RenderWidget::UpdateSuspendScope::~UpdateSuspendScope()
+{
+    ASSERT(s_updateSuspendCount > 0);
+    if (s_updateSuspendCount == 1) {
+        WidgetToParentMap map;
+        widgetNewParentMap().swap(map);
+        WidgetToParentMap::iterator end = map.end();
+        for (WidgetToParentMap::iterator it = map.begin(); it != end; ++it) {
+            Widget* child = it->key.get();
+            ScrollView* currentParent = toScrollView(child->parent());
+            FrameView* newParent = it->value;
+            if (newParent != currentParent) {
+                if (currentParent)
+                    currentParent->removeChild(child);
+                if (newParent)
+                    newParent->addChild(child);
+            }
         }
     }
+    --s_updateSuspendCount;
 }
 
 static void moveWidgetToParentSoon(Widget* child, FrameView* parent)
 {
-    if (!WidgetHierarchyUpdatesSuspensionScope::isSuspended()) {
+    if (!s_updateSuspendCount) {
         if (parent)
             parent->addChild(child);
         else
-            child->removeFromParent();
+            toScrollView(child->parent())->removeChild(child);
         return;
     }
-    WidgetHierarchyUpdatesSuspensionScope::scheduleWidgetToMove(child, parent);
+    widgetNewParentMap().set(child, parent);
 }
 
 RenderWidget::RenderWidget(Element* element)
     : RenderReplaced(element)
     , m_widget(0)
-    , m_frameView(element->document()->view())
+    , m_frameView(element->document().view())
     // Reference counting is used to prevent the widget from being
     // destroyed while inside the Widget code, which might not be
     // able to handle that.
@@ -97,7 +102,7 @@ void RenderWidget::willBeDestroyed()
     if (RenderView* v = view())
         v->removeWidget(this);
 
-    if (AXObjectCache* cache = document()->existingAXObjectCache()) {
+    if (AXObjectCache* cache = document().existingAXObjectCache()) {
         cache->childrenChanged(this->parent());
         cache->remove(this);
     }
@@ -136,9 +141,9 @@ bool RenderWidget::setWidgetGeometry(const LayoutRect& frame)
     IntRect clipRect = roundedIntRect(enclosingLayer()->childrenClipRect());
     IntRect newFrame = roundedIntRect(frame);
     bool clipChanged = m_clipRect != clipRect;
-    bool boundsChanged = m_widget->frameRect() != newFrame;
+    bool frameRectChanged = m_widget->frameRect() != newFrame;
 
-    if (!boundsChanged && !clipChanged)
+    if (!frameRectChanged && !clipChanged)
         return false;
 
     m_clipRect = clipRect;
@@ -147,12 +152,13 @@ bool RenderWidget::setWidgetGeometry(const LayoutRect& frame)
     RefPtr<Node> protectedNode(node());
     m_widget->setFrameRect(newFrame);
 
-    if (clipChanged && !boundsChanged)
+    if (clipChanged && !frameRectChanged)
         m_widget->clipRectChanged();
 
-    if (hasLayer() && layer()->isComposited())
-        layer()->backing()->updateAfterWidgetResize();
+    if (hasLayer() && layer()->compositingState() == PaintsIntoOwnBacking)
+        layer()->compositedLayerMapping()->updateAfterWidgetResize();
 
+    bool boundsChanged = m_widget->frameRect().size() != newFrame.size();
     return boundsChanged;
 }
 
@@ -175,12 +181,10 @@ void RenderWidget::setWidget(PassRefPtr<Widget> widget)
 
     if (m_widget) {
         moveWidgetToParentSoon(m_widget.get(), 0);
-        widgetRendererMap().remove(m_widget.get());
         clearWidget();
     }
     m_widget = widget;
     if (m_widget) {
-        widgetRendererMap().add(m_widget.get(), this);
         // If we've already received a layout, apply the calculated space to the
         // widget immediately, but we have to have really been fully constructed (with a non-null
         // style pointer).
@@ -198,15 +202,15 @@ void RenderWidget::setWidget(PassRefPtr<Widget> widget)
         moveWidgetToParentSoon(m_widget.get(), m_frameView);
     }
 
-    if (AXObjectCache* cache = document()->existingAXObjectCache())
+    if (AXObjectCache* cache = document().existingAXObjectCache())
         cache->childrenChanged(this);
 }
 
 void RenderWidget::layout()
 {
-    StackStats::LayoutCheckPoint layoutCheckPoint;
     ASSERT(needsLayout());
 
+    LayoutRectRecorder recorder(*this);
     clearNeedsLayout();
 }
 
@@ -297,13 +301,13 @@ void RenderWidget::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
         paintInfo.context->restore();
 
     // Paint a partially transparent wash over selected widgets.
-    if (isSelected() && !document()->printing()) {
+    if (isSelected() && !document().printing()) {
         // FIXME: selectionRect() is in absolute, not painting coordinates.
         paintInfo.context->fillRect(pixelSnappedIntRect(selectionRect()), selectionBackgroundColor());
     }
 
-    if (hasLayer() && layer()->canResize())
-        layer()->paintResizer(paintInfo.context, roundedIntPoint(adjustedPaintOffset), paintInfo.rect);
+    if (canResize())
+        layer()->scrollableArea()->paintResizer(paintInfo.context, roundedIntPoint(adjustedPaintOffset), paintInfo.rect);
 }
 
 void RenderWidget::setIsOverlapped(bool isOverlapped)
@@ -331,7 +335,7 @@ void RenderWidget::updateWidgetPosition()
     if (m_widget && m_widget->isFrameView()) {
         FrameView* frameView = toFrameView(m_widget.get());
         // Check the frame's page to make sure that the frame isn't in the process of being destroyed.
-        if ((boundsChanged || frameView->needsLayout()) && frameView->frame()->page())
+        if ((boundsChanged || frameView->needsLayout()) && frameView->frame().page())
             frameView->layout();
     }
 }
@@ -343,22 +347,9 @@ void RenderWidget::widgetPositionsUpdated()
     m_widget->widgetPositionsUpdated();
 }
 
-IntRect RenderWidget::windowClipRect() const
-{
-    if (!m_frameView)
-        return IntRect();
-
-    return intersection(m_frameView->contentsToWindow(m_clipRect), m_frameView->windowClipRect());
-}
-
 void RenderWidget::clearWidget()
 {
     m_widget = 0;
-}
-
-RenderWidget* RenderWidget::find(const Widget* widget)
-{
-    return widgetRendererMap().get(widget);
 }
 
 bool RenderWidget::nodeAtPoint(const HitTestRequest& request, HitTestResult& result, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction action)

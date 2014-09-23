@@ -31,6 +31,7 @@
 #include "config.h"
 #include "core/inspector/InspectorInstrumentation.h"
 
+#include "core/fetch/FetchInitiatorInfo.h"
 #include "core/inspector/InspectorAgent.h"
 #include "core/inspector/InspectorCSSAgent.h"
 #include "core/inspector/InspectorConsoleAgent.h"
@@ -41,7 +42,6 @@
 #include "core/inspector/InspectorTimelineAgent.h"
 #include "core/inspector/InstrumentingAgents.h"
 #include "core/inspector/WorkerInspectorController.h"
-#include "core/loader/cache/FetchInitiatorInfo.h"
 #include "core/workers/WorkerGlobalScope.h"
 
 namespace WebCore {
@@ -101,8 +101,7 @@ void continueAfterPingLoaderImpl(InstrumentingAgents* instrumentingAgents, unsig
 
 void didReceiveResourceResponseButCanceledImpl(Frame* frame, DocumentLoader* loader, unsigned long identifier, const ResourceResponse& r)
 {
-    InspectorInstrumentationCookie cookie = willReceiveResourceResponse(frame, identifier, r);
-    didReceiveResourceResponse(cookie, identifier, loader, r, 0);
+    didReceiveResourceResponse(frame, identifier, loader, r, 0);
 }
 
 void continueAfterXFrameOptionsDeniedImpl(Frame* frame, DocumentLoader* loader, unsigned long identifier, const ResourceResponse& r)
@@ -132,13 +131,6 @@ void willDestroyResourceImpl(Resource* cachedResource)
     }
 }
 
-bool profilerEnabledImpl(InstrumentingAgents* instrumentingAgents)
-{
-    if (InspectorProfilerAgent* profilerAgent = instrumentingAgents->inspectorProfilerAgent())
-        return profilerAgent->enabled();
-    return false;
-}
-
 bool collectingHTMLParseErrorsImpl(InstrumentingAgents* instrumentingAgents)
 {
     if (InspectorAgent* inspectorAgent = instrumentingAgents->inspectorAgent())
@@ -146,22 +138,36 @@ bool collectingHTMLParseErrorsImpl(InstrumentingAgents* instrumentingAgents)
     return false;
 }
 
-bool canvasAgentEnabled(ScriptExecutionContext* scriptExecutionContext)
+PassOwnPtr<ScriptSourceCode> preprocessImpl(InstrumentingAgents* instrumentingAgents, Frame* frame, const ScriptSourceCode& sourceCode)
 {
-    InstrumentingAgents* instrumentingAgents = instrumentingAgentsForScriptExecutionContext(scriptExecutionContext);
+    if (InspectorDebuggerAgent* debuggerAgent = instrumentingAgents->inspectorDebuggerAgent())
+        return debuggerAgent->preprocess(frame, sourceCode);
+    return PassOwnPtr<ScriptSourceCode>();
+}
+
+String preprocessEventListenerImpl(InstrumentingAgents* instrumentingAgents, Frame* frame, const String& source, const String& url, const String& functionName)
+{
+    if (InspectorDebuggerAgent* debuggerAgent = instrumentingAgents->inspectorDebuggerAgent())
+        return debuggerAgent->preprocessEventListener(frame, source, url, functionName);
+    return source;
+}
+
+bool canvasAgentEnabled(ExecutionContext* executionContext)
+{
+    InstrumentingAgents* instrumentingAgents = instrumentingAgentsFor(executionContext);
     return instrumentingAgents && instrumentingAgents->inspectorCanvasAgent();
 }
 
-bool consoleAgentEnabled(ScriptExecutionContext* scriptExecutionContext)
+bool consoleAgentEnabled(ExecutionContext* executionContext)
 {
-    InstrumentingAgents* instrumentingAgents = instrumentingAgentsForScriptExecutionContext(scriptExecutionContext);
+    InstrumentingAgents* instrumentingAgents = instrumentingAgentsFor(executionContext);
     InspectorConsoleAgent* consoleAgent = instrumentingAgents ? instrumentingAgents->inspectorConsoleAgent() : 0;
     return consoleAgent && consoleAgent->enabled();
 }
 
-bool timelineAgentEnabled(ScriptExecutionContext* scriptExecutionContext)
+bool timelineAgentEnabled(ExecutionContext* executionContext)
 {
-    InstrumentingAgents* instrumentingAgents = instrumentingAgentsForScriptExecutionContext(scriptExecutionContext);
+    InstrumentingAgents* instrumentingAgents = instrumentingAgentsFor(executionContext);
     return instrumentingAgents && instrumentingAgents->inspectorTimelineAgent();
 }
 
@@ -193,63 +199,54 @@ InspectorTimelineAgent* retrieveTimelineAgent(const InspectorInstrumentationCook
     return 0;
 }
 
-InstrumentingAgents* instrumentingAgentsForPage(Page* page)
+InstrumentingAgents* instrumentingAgentsFor(Page* page)
 {
     if (!page)
         return 0;
     return instrumentationForPage(page);
 }
 
-InstrumentingAgents* instrumentingAgentsForRenderObject(RenderObject* renderer)
+InstrumentingAgents* instrumentingAgentsFor(RenderObject* renderer)
 {
-    return instrumentingAgentsForFrame(renderer->frame());
+    return instrumentingAgentsFor(renderer->frame());
 }
 
-InstrumentingAgents* instrumentingAgentsForWorkerGlobalScope(WorkerGlobalScope* workerGlobalScope)
+InstrumentingAgents* instrumentingAgentsFor(WorkerGlobalScope* workerGlobalScope)
 {
     if (!workerGlobalScope)
         return 0;
     return instrumentationForWorkerGlobalScope(workerGlobalScope);
 }
 
-InstrumentingAgents* instrumentingAgentsForNonDocumentContext(ScriptExecutionContext* context)
+InstrumentingAgents* instrumentingAgentsForNonDocumentContext(ExecutionContext* context)
 {
     if (context->isWorkerGlobalScope())
         return instrumentationForWorkerGlobalScope(toWorkerGlobalScope(context));
     return 0;
 }
 
-bool cssErrorFilter(const CSSParserString& content, int propertyId, int errorType)
-{
-    return InspectorCSSAgent::cssErrorFilter(content, propertyId, errorType);
-}
-
 } // namespace InspectorInstrumentation
 
 namespace InstrumentationEvents {
 const char PaintSetup[] = "PaintSetup";
-const char PaintLayer[] = "PaintLayer";
 const char RasterTask[] = "RasterTask";
-const char ImageDecodeTask[] = "ImageDecodeTask";
 const char Paint[] = "Paint";
 const char Layer[] = "Layer";
 const char BeginFrame[] = "BeginFrame";
-const char UpdateLayer[] = "UpdateLayer";
+const char ActivateLayerTree[] = "ActivateLayerTree";
 };
 
 namespace InstrumentationEventArguments {
+const char FrameId[] = "frameId";
 const char LayerId[] = "layerId";
 const char LayerTreeId[] = "layerTreeId";
-const char NodeId[] = "nodeId";
 const char PageId[] = "pageId";
 };
 
 InstrumentingAgents* instrumentationForPage(Page* page)
 {
     ASSERT(isMainThread());
-    if (InspectorController* controller = page->inspectorController())
-        return controller->m_instrumentingAgents.get();
-    return 0;
+    return page->inspectorController().m_instrumentingAgents.get();
 }
 
 InstrumentingAgents* instrumentationForWorkerGlobalScope(WorkerGlobalScope* workerGlobalScope)

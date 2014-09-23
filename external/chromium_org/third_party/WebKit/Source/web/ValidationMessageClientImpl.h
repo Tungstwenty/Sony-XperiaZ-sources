@@ -27,26 +27,26 @@
 #define ValidationMessageClientImpl_h
 
 #include "core/page/ValidationMessageClient.h"
-#include "core/platform/Timer.h"
-#include "core/platform/graphics/IntRect.h"
+#include "platform/Timer.h"
+#include "platform/geometry/IntRect.h"
 #include "wtf/text/WTFString.h"
 
 namespace WebCore {
 class FrameView;
 }
 
-namespace WebKit {
+namespace blink {
 
 class WebValidationMessageClient;
 class WebViewImpl;
 
 class ValidationMessageClientImpl : public WebCore::ValidationMessageClient {
 public:
-    static PassOwnPtr<ValidationMessageClientImpl> create(WebViewImpl&, WebValidationMessageClient&);
+    static PassOwnPtr<ValidationMessageClientImpl> create(WebViewImpl&, WebValidationMessageClient*);
     virtual ~ValidationMessageClientImpl();
 
 private:
-    ValidationMessageClientImpl(WebViewImpl&, WebValidationMessageClient&);
+    ValidationMessageClientImpl(WebViewImpl&, WebValidationMessageClient*);
     void checkAnchorStatus(WebCore::Timer<ValidationMessageClientImpl>*);
     WebCore::FrameView* currentView();
 
@@ -56,7 +56,7 @@ private:
     virtual void documentDetached(const WebCore::Document&) OVERRIDE;
 
     WebViewImpl& m_webView;
-    WebValidationMessageClient& m_client;
+    WebValidationMessageClient* m_client;
     const WebCore::Element* m_currentAnchor;
     String m_message;
     WebCore::IntRect m_lastAnchorRectInScreen;

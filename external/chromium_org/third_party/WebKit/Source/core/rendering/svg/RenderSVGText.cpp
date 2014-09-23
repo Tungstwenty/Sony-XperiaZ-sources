@@ -28,28 +28,29 @@
 
 #include "core/rendering/svg/RenderSVGText.h"
 
-#include "core/platform/FloatConversion.h"
-#include "core/platform/graphics/FloatQuad.h"
-#include "core/platform/graphics/FontCache.h"
-#include "core/platform/graphics/GraphicsContextStateSaver.h"
-#include "core/platform/graphics/SimpleFontData.h"
-#include "core/platform/graphics/transforms/TransformState.h"
 #include "core/rendering/HitTestRequest.h"
 #include "core/rendering/HitTestResult.h"
+#include "core/rendering/LayoutRectRecorder.h"
 #include "core/rendering/LayoutRepainter.h"
 #include "core/rendering/PointerEventsHitRules.h"
+#include "core/rendering/style/ShadowList.h"
 #include "core/rendering/svg/RenderSVGInlineText.h"
 #include "core/rendering/svg/RenderSVGResource.h"
 #include "core/rendering/svg/RenderSVGRoot.h"
 #include "core/rendering/svg/SVGRenderSupport.h"
 #include "core/rendering/svg/SVGResourcesCache.h"
 #include "core/rendering/svg/SVGRootInlineBox.h"
-#include "core/rendering/svg/SVGTextLayoutAttributesBuilder.h"
 #include "core/rendering/svg/SVGTextRunRenderingContext.h"
 #include "core/svg/SVGLengthList.h"
 #include "core/svg/SVGTextElement.h"
 #include "core/svg/SVGTransformList.h"
 #include "core/svg/SVGURIReference.h"
+#include "platform/FloatConversion.h"
+#include "platform/fonts/FontCache.h"
+#include "platform/fonts/SimpleFontData.h"
+#include "platform/geometry/FloatQuad.h"
+#include "platform/geometry/TransformState.h"
+#include "platform/graphics/GraphicsContextStateSaver.h"
 
 namespace WebCore {
 
@@ -198,7 +199,7 @@ void RenderSVGText::subtreeChildWasAdded(RenderObject* child)
     SVGTextLayoutAttributes* attributes = 0;
     for (size_t i = 0; i < size; ++i) {
         attributes = newLayoutAttributes[i];
-        if (m_layoutAttributes.find(attributes) == notFound) {
+        if (m_layoutAttributes.find(attributes) == kNotFound) {
             // Every time this is invoked, there's only a single new entry in the newLayoutAttributes list, compared to the old in m_layoutAttributes.
             bool stopAfterNext = false;
             SVGTextLayoutAttributes* previous = 0;
@@ -218,7 +219,7 @@ void RenderSVGText::subtreeChildWasAdded(RenderObject* child)
 #ifndef NDEBUG
     // Verify that m_layoutAttributes only differs by a maximum of one entry.
     for (size_t i = 0; i < size; ++i)
-        ASSERT(m_layoutAttributes.find(newLayoutAttributes[i]) != notFound || newLayoutAttributes[i] == attributes);
+        ASSERT(m_layoutAttributes.find(newLayoutAttributes[i]) != kNotFound || newLayoutAttributes[i] == attributes);
 #endif
 
     m_layoutAttributes = newLayoutAttributes;
@@ -230,9 +231,6 @@ static inline void checkLayoutAttributesConsistency(RenderSVGText* text, Vector<
     Vector<SVGTextLayoutAttributes*> newLayoutAttributes;
     collectLayoutAttributes(text, newLayoutAttributes);
     ASSERT(newLayoutAttributes == expectedLayoutAttributes);
-#else
-    UNUSED_PARAM(text);
-    UNUSED_PARAM(expectedLayoutAttributes);
 #endif
 }
 
@@ -272,7 +270,7 @@ void RenderSVGText::subtreeChildWillBeRemoved(RenderObject* child, Vector<SVGTex
         affectedAttributes.append(next);
 
     size_t position = m_layoutAttributes.find(text->layoutAttributes());
-    ASSERT(position != notFound);
+    ASSERT(position != kNotFound);
     m_layoutAttributes.remove(position);
 }
 
@@ -345,14 +343,13 @@ static inline void updateFontInAllDescendants(RenderObject* start, SVGTextLayout
 
 void RenderSVGText::layout()
 {
-    StackStats::LayoutCheckPoint layoutCheckPoint;
     ASSERT(needsLayout());
+    LayoutRectRecorder recorder(*this);
     LayoutRepainter repainter(*this, SVGRenderSupport::checkForSVGRepaintDuringLayout(this));
 
     bool updateCachedBoundariesInParents = false;
     if (m_needsTransformUpdate) {
-        SVGTextElement* text = static_cast<SVGTextElement*>(node());
-        m_localTransform = text->animatedLocalTransform();
+        m_localTransform = toSVGTextElement(node())->animatedLocalTransform();
         m_needsTransformUpdate = false;
         updateCachedBoundariesInParents = true;
     }
@@ -443,11 +440,14 @@ bool RenderSVGText::nodeAtFloatPoint(const HitTestRequest& request, HitTestResul
     PointerEventsHitRules hitRules(PointerEventsHitRules::SVG_TEXT_HITTESTING, request, style()->pointerEvents());
     bool isVisible = (style()->visibility() == VISIBLE);
     if (isVisible || !hitRules.requireVisible) {
-        if ((hitRules.canHitStroke && (style()->svgStyle()->hasStroke() || !hitRules.requireStroke))
+        if ((hitRules.canHitBoundingBox && !objectBoundingBox().isEmpty())
+            || (hitRules.canHitStroke && (style()->svgStyle()->hasStroke() || !hitRules.requireStroke))
             || (hitRules.canHitFill && (style()->svgStyle()->hasFill() || !hitRules.requireFill))) {
             FloatPoint localPoint = localToParentTransform().inverse().mapPoint(pointInParent);
 
             if (!SVGRenderSupport::pointInClippingArea(this, localPoint))
+                return false;
+            if (hitRules.canHitBoundingBox && !objectBoundingBox().contains(localPoint))
                 return false;
 
             HitTestLocation hitTestLocation(LayoutPoint(flooredIntPoint(localPoint)));
@@ -470,11 +470,10 @@ PositionWithAffinity RenderSVGText::positionForPoint(const LayoutPoint& pointInC
     if (!rootBox)
         return createPositionWithAffinity(0, DOWNSTREAM);
 
-    ASSERT_WITH_SECURITY_IMPLICATION(rootBox->isSVGRootInlineBox());
     ASSERT(!rootBox->nextRootBox());
     ASSERT(childrenInline());
 
-    InlineBox* closestBox = static_cast<SVGRootInlineBox*>(rootBox)->closestLeafChildForPosition(pointInContents);
+    InlineBox* closestBox = toSVGRootInlineBox(rootBox)->closestLeafChildForPosition(pointInContents);
     if (!closestBox)
         return createPositionWithAffinity(0, DOWNSTREAM);
 
@@ -521,7 +520,7 @@ FloatRect RenderSVGText::repaintRectInLocalCoordinates() const
     FloatRect repaintRect = strokeBoundingBox();
     SVGRenderSupport::intersectRepaintRectWithResources(this, repaintRect);
 
-    if (const ShadowData* textShadow = style()->textShadow())
+    if (const ShadowList* textShadow = style()->textShadow())
         textShadow->adjustRectForShadow(repaintRect);
 
     return repaintRect;

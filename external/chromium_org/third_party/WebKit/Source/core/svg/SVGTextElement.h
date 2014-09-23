@@ -21,24 +21,27 @@
 #ifndef SVGTextElement_h
 #define SVGTextElement_h
 
+#include "SVGNames.h"
 #include "core/svg/SVGTextPositioningElement.h"
 
 namespace WebCore {
 
 class SVGTextElement FINAL : public SVGTextPositioningElement {
 public:
-    static PassRefPtr<SVGTextElement> create(const QualifiedName&, Document*);
+    static PassRefPtr<SVGTextElement> create(Document&);
 
     virtual AffineTransform animatedLocalTransform() const;
 
 private:
-    SVGTextElement(const QualifiedName&, Document*);
+    explicit SVGTextElement(Document&);
 
     virtual bool supportsFocus() const OVERRIDE { return hasFocusEventListeners(); }
 
     virtual RenderObject* createRenderer(RenderStyle*);
-    virtual bool childShouldCreateRenderer(const NodeRenderingContext&) const;
+    virtual bool childShouldCreateRenderer(const Node& child) const;
 };
+
+DEFINE_NODE_TYPE_CASTS(SVGTextElement, hasTagName(SVGNames::textTag));
 
 } // namespace WebCore
 

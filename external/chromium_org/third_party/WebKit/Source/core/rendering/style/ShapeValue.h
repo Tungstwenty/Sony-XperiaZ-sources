@@ -30,7 +30,9 @@
 #ifndef ShapeValue_h
 #define ShapeValue_h
 
+#include "core/fetch/ImageResource.h"
 #include "core/rendering/style/BasicShapes.h"
+#include "core/rendering/style/RenderStyleConstants.h"
 #include "core/rendering/style/StyleImage.h"
 #include "wtf/PassRefPtr.h"
 
@@ -41,6 +43,7 @@ public:
     enum ShapeValueType {
         // The Auto value is defined by a null ShapeValue*
         Shape,
+        Box,
         Outside,
         Image
     };
@@ -55,6 +58,11 @@ public:
         return adoptRef(new ShapeValue(Outside));
     }
 
+    static PassRefPtr<ShapeValue> createLayoutBoxValue(LayoutBox layoutBox)
+    {
+        return adoptRef(new ShapeValue(layoutBox));
+    }
+
     static PassRefPtr<ShapeValue> createImageValue(PassRefPtr<StyleImage> image)
     {
         return adoptRef(new ShapeValue(image));
@@ -62,32 +70,49 @@ public:
 
     ShapeValueType type() const { return m_type; }
     BasicShape* shape() const { return m_shape.get(); }
+
     StyleImage* image() const { return m_image.get(); }
+    bool isImageValid() const { return image() && image()->cachedImage() && image()->cachedImage()->hasImage(); }
     void setImage(PassRefPtr<StyleImage> image)
     {
+        ASSERT(type() == Image);
         if (m_image != image)
             m_image = image;
     }
+    LayoutBox layoutBox() const { return m_layoutBox; }
+    void setLayoutBox(LayoutBox layoutBox) { m_layoutBox = layoutBox; }
+
     bool operator==(const ShapeValue& other) const { return type() == other.type(); }
 
 private:
     ShapeValue(PassRefPtr<BasicShape> shape)
         : m_type(Shape)
         , m_shape(shape)
+        , m_layoutBox(ContentBox)
     {
     }
     ShapeValue(ShapeValueType type)
         : m_type(type)
+        , m_layoutBox(ContentBox)
     {
     }
     ShapeValue(PassRefPtr<StyleImage> image)
         : m_type(Image)
         , m_image(image)
+        , m_layoutBox(ContentBox)
     {
     }
+    ShapeValue(LayoutBox layoutBox)
+        : m_type(Box)
+        , m_layoutBox(layoutBox)
+    {
+    }
+
+
     ShapeValueType m_type;
     RefPtr<BasicShape> m_shape;
     RefPtr<StyleImage> m_image;
+    LayoutBox m_layoutBox;
 };
 
 }

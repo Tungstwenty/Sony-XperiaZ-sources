@@ -42,12 +42,16 @@ public:
 
     CSSStyleDeclaration* style() const;
 
+    StyleRuleFontFace* styleRule() const { return m_fontFaceRule.get(); }
+
 private:
     CSSFontFaceRule(StyleRuleFontFace*, CSSStyleSheet* parent);
 
     RefPtr<StyleRuleFontFace> m_fontFaceRule;
     mutable RefPtr<StyleRuleCSSStyleDeclaration> m_propertiesCSSOMWrapper;
 };
+
+DEFINE_CSS_RULE_TYPE_CASTS(CSSFontFaceRule, FONT_FACE_RULE);
 
 } // namespace WebCore
 

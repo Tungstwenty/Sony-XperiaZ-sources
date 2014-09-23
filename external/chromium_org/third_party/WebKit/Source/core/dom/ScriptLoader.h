@@ -21,8 +21,8 @@
 #ifndef ScriptLoader_h
 #define ScriptLoader_h
 
-#include "core/loader/cache/ResourceClient.h"
-#include "core/loader/cache/ResourcePtr.h"
+#include "core/fetch/ResourceClient.h"
+#include "core/fetch/ResourcePtr.h"
 #include "wtf/text/TextPosition.h"
 #include "wtf/text/WTFString.h"
 
@@ -50,6 +50,12 @@ public:
     void executeScript(const ScriptSourceCode&);
     void execute(ScriptResource*);
 
+    // Check if potentially cross-origin enabled script is accessible
+    // prior to execution. Returns 'false' if not accessible, signalling
+    // that callers must not dispatch load events as the cross-origin
+    // fetch failed.
+    bool executePotentiallyCrossOriginScript(const ScriptSourceCode&);
+
     // XML parser calls these
     void dispatchLoadEvent();
     void dispatchErrorEvent();
@@ -65,9 +71,10 @@ public:
     bool isParserInserted() const { return m_parserInserted; }
     bool alreadyStarted() const { return m_alreadyStarted; }
     bool forceAsync() const { return m_forceAsync; }
+    bool isPotentiallyCORSEnabled() const { return m_isPotentiallyCORSEnabled; }
 
     // Helper functions used by our parent classes.
-    void insertedInto(ContainerNode*);
+    void didNotifySubtreeInsertionsToDocument();
     void childrenChanged();
     void handleSourceAttribute(const String& sourceUrl);
     void handleAsyncAttribute();
@@ -78,11 +85,10 @@ private:
     bool ignoresLoadRequest() const;
     bool isScriptForEventSupported() const;
 
-    bool requestScript(const String& sourceUrl);
+    bool fetchScript(const String& sourceUrl);
     void stopLoadRequest();
 
     ScriptLoaderClient* client() const;
-    Document* executingDocument() const;
 
     // ResourceClient
     virtual void notifyFinished(Resource*) OVERRIDE;
@@ -99,6 +105,7 @@ private:
     bool m_willExecuteWhenDocumentFinishedParsing : 1;
     bool m_forceAsync : 1;
     bool m_willExecuteInOrder : 1;
+    bool m_isPotentiallyCORSEnabled : 1;
     String m_characterEncoding;
     String m_fallbackCharacterEncoding;
 };

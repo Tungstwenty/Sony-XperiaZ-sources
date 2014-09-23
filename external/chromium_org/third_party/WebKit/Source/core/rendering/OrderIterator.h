@@ -34,6 +34,8 @@
 #include "wtf/Noncopyable.h"
 #include "wtf/Vector.h"
 
+#include <set>
+
 namespace WebCore {
 
 class RenderBox;
@@ -51,35 +53,37 @@ public:
     void reset();
 
 private:
+    RenderBox* firstChildBox();
+    RenderBox* nextSiblingBox();
+
+    // If |m_children| is not empty, we will use it to iterate over this fixed subset.
     const RenderBox* m_containerBox;
+    Vector<RenderBox*> m_children;
+
     RenderBox* m_currentChild;
-    // The inline capacity for a single item is used to cover the most
-    // common case by far: if we only have the default 'order' value 0.
-    typedef Vector<int, 1> OrderValues;
+    size_t m_childIndex;
+
+    typedef std::set<int> OrderValues;
     OrderValues m_orderValues;
-    Vector<int>::const_iterator m_orderValuesIterator;
+    OrderValues::const_iterator m_orderValuesIterator;
+    bool m_isReset;
 };
 
 class OrderIteratorPopulator {
 public:
-    OrderIteratorPopulator(OrderIterator& iterator)
+    explicit OrderIteratorPopulator(OrderIterator& iterator)
         : m_iterator(iterator)
-        , m_anyChildHasDefaultOrderValue(false)
     {
-        // Note that we don't release the memory here, we only invalidate the size.
-        // This avoids unneeded reallocation if the size ends up not changing.
-        m_iterator.m_orderValues.shrink(0);
+        m_iterator.m_orderValues.clear();
     }
 
     ~OrderIteratorPopulator();
 
+    void storeChild(RenderBox*);
     void collectChild(const RenderBox*);
 
 private:
-    void removeDuplicatedOrderValues();
-
     OrderIterator& m_iterator;
-    bool m_anyChildHasDefaultOrderValue;
 };
 
 } // namespace WebCore

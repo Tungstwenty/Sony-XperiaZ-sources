@@ -150,9 +150,11 @@ class Manager(object):
 
     def _set_up_run(self, test_names):
         self._printer.write_update("Checking build ...")
-        if not self._port.check_build(self.needs_servers(test_names)):
-            _log.error("Build check failed")
-            return False
+        if self._options.build:
+            exit_code = self._port.check_build(self.needs_servers(test_names), self._printer)
+            if exit_code:
+                _log.error("Build check failed")
+                return exit_code
 
         # This must be started before we check the system dependencies,
         # since the helper may do things to make the setup correct.
@@ -163,9 +165,10 @@ class Manager(object):
         # Check that the system dependencies (themes, fonts, ...) are correct.
         if not self._options.nocheck_sys_deps:
             self._printer.write_update("Checking system dependencies ...")
-            if not self._port.check_sys_deps(self.needs_servers(test_names)):
+            exit_code = self._port.check_sys_deps(self.needs_servers(test_names))
+            if exit_code:
                 self._port.stop_helper()
-                return False
+                return exit_code
 
         if self._options.clobber_old_results:
             self._clobber_old_results()
@@ -174,7 +177,7 @@ class Manager(object):
         self._port.host.filesystem.maybe_make_directory(self._results_directory)
 
         self._port.setup_test_run()
-        return True
+        return test_run_results.OK_EXIT_STATUS
 
     def run(self, args):
         """Run the tests and return a RunDetails object with the results."""
@@ -184,7 +187,7 @@ class Manager(object):
             paths, test_names = self._collect_tests(args)
         except IOError:
             # This is raised if --test-list doesn't exist
-            return test_run_results.RunDetails(exit_code=-1)
+            return test_run_results.RunDetails(exit_code=test_run_results.NO_TESTS_EXIT_STATUS)
 
         self._printer.write_update("Parsing expectations ...")
         self._expectations = test_expectations.TestExpectations(self._port, test_names)
@@ -195,10 +198,11 @@ class Manager(object):
         # Check to make sure we're not skipping every test.
         if not tests_to_run:
             _log.critical('No tests to run.')
-            return test_run_results.RunDetails(exit_code=-1)
+            return test_run_results.RunDetails(exit_code=test_run_results.NO_TESTS_EXIT_STATUS)
 
-        if not self._set_up_run(tests_to_run):
-            return test_run_results.RunDetails(exit_code=-1)
+        exit_code = self._set_up_run(tests_to_run)
+        if exit_code:
+            return test_run_results.RunDetails(exit_code=exit_code)
 
         # Don't retry failures if an explicit list of tests was passed in.
         if self._options.retry_failures is None:
@@ -211,10 +215,13 @@ class Manager(object):
             self._start_servers(tests_to_run)
 
             initial_results = self._run_tests(tests_to_run, tests_to_skip, self._options.repeat_each, self._options.iterations,
-                int(self._options.child_processes), retrying=False)
+                self._port.num_workers(int(self._options.child_processes)), retrying=False)
+
+            # Don't retry failures when interrupted by user or failures limit exception.
+            should_retry_failures = should_retry_failures and not (initial_results.interrupted or initial_results.keyboard_interrupted)
 
             tests_to_retry = self._tests_to_retry(initial_results)
-            if should_retry_failures and tests_to_retry and not initial_results.interrupted:
+            if should_retry_failures and tests_to_retry:
                 enabled_pixel_tests_in_retry = self._force_pixel_tests_if_needed()
 
                 _log.info('')
@@ -233,7 +240,7 @@ class Manager(object):
 
         # Some crash logs can take a long time to be written out so look
         # for new logs after the test run finishes.
-        _log.debug("looking for new crash logs")
+        self._printer.write_update("looking for new crash logs")
         self._look_for_new_crash_logs(initial_results, start_time)
         if retry_results:
             self._look_for_new_crash_logs(retry_results, start_time)
@@ -249,10 +256,12 @@ class Manager(object):
 
             results_path = self._filesystem.join(self._results_directory, "results.html")
             self._copy_results_html_file(results_path)
-            if self._options.show_results and (exit_code or (self._options.full_results_html and initial_results.total_failures)):
-                self._port.show_results_html_file(results_path)
-
-        self._printer.print_results(time.time() - start_time, initial_results, summarized_failing_results)
+            if initial_results.keyboard_interrupted:
+                exit_code = test_run_results.INTERRUPTED_EXIT_STATUS
+            else:
+                if self._options.show_results and (exit_code or (self._options.full_results_html and initial_results.total_failures)):
+                    self._port.show_results_html_file(results_path)
+                self._printer.print_results(time.time() - start_time, initial_results, summarized_failing_results)
         return test_run_results.RunDetails(exit_code, summarized_full_results, summarized_failing_results, initial_results, retry_results, enabled_pixel_tests_in_retry)
 
     def _run_tests(self, tests_to_run, tests_to_skip, repeat_each, iterations, num_workers, retrying):
@@ -346,6 +355,9 @@ class Manager(object):
         for dirname in possible_dirs:
             if self._filesystem.isdir(self._filesystem.join(layout_tests_dir, dirname)):
                 self._filesystem.rmtree(self._filesystem.join(self._results_directory, dirname))
+
+        # Port specific clean-up.
+        self._port.clobber_old_port_specific_results()
 
     def _tests_to_retry(self, run_results):
         return [result.test_name for result in run_results.unexpected_results_by_name.values() if result.type != test_expectations.PASS]

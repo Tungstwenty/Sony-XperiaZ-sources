@@ -28,21 +28,22 @@
 
 #include "modules/webaudio/MediaStreamAudioSourceNode.h"
 
-#include "core/platform/Logging.h"
+#include "platform/Logging.h"
 #include "modules/webaudio/AudioContext.h"
 #include "modules/webaudio/AudioNodeOutput.h"
 #include "wtf/Locker.h"
 
 namespace WebCore {
 
-PassRefPtr<MediaStreamAudioSourceNode> MediaStreamAudioSourceNode::create(AudioContext* context, MediaStream* mediaStream, AudioSourceProvider* audioSourceProvider)
+PassRefPtr<MediaStreamAudioSourceNode> MediaStreamAudioSourceNode::create(AudioContext* context, MediaStream* mediaStream, MediaStreamTrack* audioTrack, AudioSourceProvider* audioSourceProvider)
 {
-    return adoptRef(new MediaStreamAudioSourceNode(context, mediaStream, audioSourceProvider));
+    return adoptRef(new MediaStreamAudioSourceNode(context, mediaStream, audioTrack, audioSourceProvider));
 }
 
-MediaStreamAudioSourceNode::MediaStreamAudioSourceNode(AudioContext* context, MediaStream* mediaStream, AudioSourceProvider* audioSourceProvider)
+MediaStreamAudioSourceNode::MediaStreamAudioSourceNode(AudioContext* context, MediaStream* mediaStream, MediaStreamTrack* audioTrack, AudioSourceProvider* audioSourceProvider)
     : AudioSourceNode(context, context->sampleRate())
     , m_mediaStream(mediaStream)
+    , m_audioTrack(audioTrack)
     , m_audioSourceProvider(audioSourceProvider)
     , m_sourceNumberOfChannels(0)
 {
@@ -66,7 +67,7 @@ void MediaStreamAudioSourceNode::setFormat(size_t numberOfChannels, float source
         // The sample-rate must be equal to the context's sample-rate.
         if (!numberOfChannels || numberOfChannels > AudioContext::maxNumberOfChannels() || sourceSampleRate != sampleRate()) {
             // process() will generate silence for these uninitialized values.
-            LOG(Media, "MediaStreamAudioSourceNode::setFormat(%u, %f) - unhandled format change", static_cast<unsigned>(numberOfChannels), sourceSampleRate);
+            WTF_LOG(Media, "MediaStreamAudioSourceNode::setFormat(%u, %f) - unhandled format change", static_cast<unsigned>(numberOfChannels), sourceSampleRate);
             m_sourceNumberOfChannels = 0;
             return;
         }

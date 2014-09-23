@@ -33,30 +33,18 @@ class RenderSearchField FINAL : public RenderTextControlSingleLine {
 public:
     RenderSearchField(HTMLInputElement*);
     virtual ~RenderSearchField();
-
-    void updateCancelButtonVisibility() const;
-
     void stopSearchEventTimer();
 
 private:
     virtual void centerContainerIfNeeded(RenderBox*) const OVERRIDE;
     virtual LayoutUnit computeControlLogicalHeight(LayoutUnit lineHeight, LayoutUnit nonContentHeight) const OVERRIDE;
     virtual LayoutUnit computeLogicalHeightLimit() const OVERRIDE;
-    virtual void updateFromElement() OVERRIDE;
-    EVisibility visibilityForCancelButton() const;
 
     Element* searchDecorationElement() const;
     Element* cancelButtonElement() const;
 };
 
-inline RenderSearchField* toRenderSearchField(RenderObject* object)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!object || object->isTextField());
-    return static_cast<RenderSearchField*>(object);
-}
-
-// This will catch anyone doing an unnecessary cast.
-void toRenderSearchField(const RenderSearchField*);
+DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderSearchField, isTextField());
 
 }
 

@@ -34,22 +34,27 @@
 #include "WebCommon.h"
 #include "WebPrivatePtr.h"
 
-#if WEBKIT_IMPLEMENTATION
+#if INSIDE_BLINK
 #include "wtf/PassOwnPtr.h"
 #endif
 
-namespace WebKit {
+namespace blink {
 
 enum WebCryptoAlgorithmId {
     WebCryptoAlgorithmIdAesCbc,
     WebCryptoAlgorithmIdHmac,
     WebCryptoAlgorithmIdRsaSsaPkcs1v1_5,
+    WebCryptoAlgorithmIdRsaEsPkcs1v1_5,
     WebCryptoAlgorithmIdSha1,
     WebCryptoAlgorithmIdSha224,
     WebCryptoAlgorithmIdSha256,
     WebCryptoAlgorithmIdSha384,
     WebCryptoAlgorithmIdSha512,
-#if WEBKIT_IMPLEMENTATION
+    WebCryptoAlgorithmIdAesGcm,
+    WebCryptoAlgorithmIdRsaOaep,
+    WebCryptoAlgorithmIdAesCtr,
+    WebCryptoAlgorithmIdAesKw,
+#if INSIDE_BLINK
     NumberOfWebCryptoAlgorithmId,
 #endif
 };
@@ -59,15 +64,23 @@ enum WebCryptoAlgorithmParamsType {
     WebCryptoAlgorithmParamsTypeAesCbcParams,
     WebCryptoAlgorithmParamsTypeAesKeyGenParams,
     WebCryptoAlgorithmParamsTypeHmacParams,
+    WebCryptoAlgorithmParamsTypeHmacKeyParams,
     WebCryptoAlgorithmParamsTypeRsaSsaParams,
     WebCryptoAlgorithmParamsTypeRsaKeyGenParams,
+    WebCryptoAlgorithmParamsTypeAesGcmParams,
+    WebCryptoAlgorithmParamsTypeRsaOaepParams,
+    WebCryptoAlgorithmParamsTypeAesCtrParams,
 };
 
 class WebCryptoAesCbcParams;
 class WebCryptoAesKeyGenParams;
 class WebCryptoHmacParams;
+class WebCryptoHmacKeyParams;
 class WebCryptoRsaSsaParams;
 class WebCryptoRsaKeyGenParams;
+class WebCryptoAesGcmParams;
+class WebCryptoRsaOaepParams;
+class WebCryptoAesCtrParams;
 
 class WebCryptoAlgorithmParams;
 class WebCryptoAlgorithmPrivate;
@@ -76,14 +89,18 @@ class WebCryptoAlgorithmPrivate;
 //   * Immutable
 //   * Threadsafe
 //   * Copiable (cheaply)
+//
+// If WebCryptoAlgorithm "isNull()" then it is invalid to call any of the other
+// methods on it (other than destruction, assignment, or isNull()).
 class WebCryptoAlgorithm {
 public:
-#if WEBKIT_IMPLEMENTATION
+#if INSIDE_BLINK
     WebCryptoAlgorithm() { }
-    WebCryptoAlgorithm(WebCryptoAlgorithmId, const char* name, PassOwnPtr<WebCryptoAlgorithmParams>);
+    BLINK_PLATFORM_EXPORT WebCryptoAlgorithm(WebCryptoAlgorithmId, PassOwnPtr<WebCryptoAlgorithmParams>);
 #endif
 
-    WEBKIT_EXPORT static WebCryptoAlgorithm adoptParamsAndCreate(WebCryptoAlgorithmId, const char* name, WebCryptoAlgorithmParams*);
+    BLINK_PLATFORM_EXPORT static WebCryptoAlgorithm createNull();
+    BLINK_PLATFORM_EXPORT static WebCryptoAlgorithm adoptParamsAndCreate(WebCryptoAlgorithmId, WebCryptoAlgorithmParams*);
 
     ~WebCryptoAlgorithm() { reset(); }
 
@@ -94,26 +111,31 @@ public:
         return *this;
     }
 
-    WEBKIT_EXPORT WebCryptoAlgorithmId id() const;
-    WEBKIT_EXPORT const char* name() const;
+    BLINK_PLATFORM_EXPORT bool isNull() const;
 
-    WEBKIT_EXPORT WebCryptoAlgorithmParamsType paramsType() const;
+    BLINK_PLATFORM_EXPORT WebCryptoAlgorithmId id() const;
+
+    BLINK_PLATFORM_EXPORT WebCryptoAlgorithmParamsType paramsType() const;
 
     // Retrieves the type-specific parameters. The algorithm contains at most 1
     // type of parameters. Retrieving an invalid parameter will return 0.
-    WEBKIT_EXPORT WebCryptoAesCbcParams* aesCbcParams() const;
-    WEBKIT_EXPORT WebCryptoAesKeyGenParams* aesKeyGenParams() const;
-    WEBKIT_EXPORT WebCryptoHmacParams* hmacParams() const;
-    WEBKIT_EXPORT WebCryptoRsaSsaParams* rsaSsaParams() const;
-    WEBKIT_EXPORT WebCryptoRsaKeyGenParams* rsaKeyGenParams() const;
+    BLINK_PLATFORM_EXPORT const WebCryptoAesCbcParams* aesCbcParams() const;
+    BLINK_PLATFORM_EXPORT const WebCryptoAesKeyGenParams* aesKeyGenParams() const;
+    BLINK_PLATFORM_EXPORT const WebCryptoHmacParams* hmacParams() const;
+    BLINK_PLATFORM_EXPORT const WebCryptoHmacKeyParams* hmacKeyParams() const;
+    BLINK_PLATFORM_EXPORT const WebCryptoRsaSsaParams* rsaSsaParams() const;
+    BLINK_PLATFORM_EXPORT const WebCryptoRsaKeyGenParams* rsaKeyGenParams() const;
+    BLINK_PLATFORM_EXPORT const WebCryptoAesGcmParams* aesGcmParams() const;
+    BLINK_PLATFORM_EXPORT const WebCryptoRsaOaepParams* rsaOaepParams() const;
+    BLINK_PLATFORM_EXPORT const WebCryptoAesCtrParams* aesCtrParams() const;
 
 private:
-    WEBKIT_EXPORT void assign(const WebCryptoAlgorithm& other);
-    WEBKIT_EXPORT void reset();
+    BLINK_PLATFORM_EXPORT void assign(const WebCryptoAlgorithm& other);
+    BLINK_PLATFORM_EXPORT void reset();
 
     WebPrivatePtr<WebCryptoAlgorithmPrivate> m_private;
 };
 
-} // namespace WebKit
+} // namespace blink
 
 #endif

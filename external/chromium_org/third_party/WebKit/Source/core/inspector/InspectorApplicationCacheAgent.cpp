@@ -26,15 +26,14 @@
 #include "config.h"
 #include "core/inspector/InspectorApplicationCacheAgent.h"
 
-#include "InspectorFrontend.h"
 #include "core/inspector/InspectorPageAgent.h"
 #include "core/inspector/InspectorState.h"
 #include "core/inspector/InstrumentingAgents.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
-#include "core/loader/appcache/ApplicationCacheHost.h"
-#include "core/page/Frame.h"
-#include "core/platform/network/NetworkStateNotifier.h"
+#include "core/frame/Frame.h"
+#include "core/page/NetworkStateNotifier.h"
+#include "wtf/text/StringBuilder.h"
 
 namespace WebCore {
 
@@ -74,12 +73,12 @@ void InspectorApplicationCacheAgent::enable(ErrorString*)
     m_instrumentingAgents->setInspectorApplicationCacheAgent(this);
 
     // We need to pass initial navigator.onOnline.
-    networkStateChanged();
+    networkStateChanged(networkStateNotifier().onLine());
 }
 
 void InspectorApplicationCacheAgent::updateApplicationCacheStatus(Frame* frame)
 {
-    DocumentLoader* documentLoader = frame->loader()->documentLoader();
+    DocumentLoader* documentLoader = frame->loader().documentLoader();
     if (!documentLoader)
         return;
 
@@ -91,10 +90,9 @@ void InspectorApplicationCacheAgent::updateApplicationCacheStatus(Frame* frame)
     m_frontend->applicationCacheStatusUpdated(m_pageAgent->frameId(frame), manifestURL, static_cast<int>(status));
 }
 
-void InspectorApplicationCacheAgent::networkStateChanged()
+void InspectorApplicationCacheAgent::networkStateChanged(bool online)
 {
-    bool isNowOnline = networkStateNotifier().onLine();
-    m_frontend->networkStateUpdated(isNowOnline);
+    m_frontend->networkStateUpdated(online);
 }
 
 void InspectorApplicationCacheAgent::getFramesWithManifests(ErrorString*, RefPtr<TypeBuilder::Array<TypeBuilder::ApplicationCache::FrameWithManifest> >& result)
@@ -102,8 +100,8 @@ void InspectorApplicationCacheAgent::getFramesWithManifests(ErrorString*, RefPtr
     result = TypeBuilder::Array<TypeBuilder::ApplicationCache::FrameWithManifest>::create();
 
     Frame* mainFrame = m_pageAgent->mainFrame();
-    for (Frame* frame = mainFrame; frame; frame = frame->tree()->traverseNext(mainFrame)) {
-        DocumentLoader* documentLoader = frame->loader()->documentLoader();
+    for (Frame* frame = mainFrame; frame; frame = frame->tree().traverseNext(mainFrame)) {
+        DocumentLoader* documentLoader = frame->loader().documentLoader();
         if (!documentLoader)
             continue;
 
@@ -179,26 +177,26 @@ PassRefPtr<TypeBuilder::Array<TypeBuilder::ApplicationCache::ApplicationCacheRes
 
 PassRefPtr<TypeBuilder::ApplicationCache::ApplicationCacheResource> InspectorApplicationCacheAgent::buildObjectForApplicationCacheResource(const ApplicationCacheHost::ResourceInfo& resourceInfo)
 {
-    String types;
+    StringBuilder builder;
     if (resourceInfo.m_isMaster)
-        types.append("Master ");
+        builder.append("Master ");
 
     if (resourceInfo.m_isManifest)
-        types.append("Manifest ");
+        builder.append("Manifest ");
 
     if (resourceInfo.m_isFallback)
-        types.append("Fallback ");
+        builder.append("Fallback ");
 
     if (resourceInfo.m_isForeign)
-        types.append("Foreign ");
+        builder.append("Foreign ");
 
     if (resourceInfo.m_isExplicit)
-        types.append("Explicit ");
+        builder.append("Explicit ");
 
     RefPtr<TypeBuilder::ApplicationCache::ApplicationCacheResource> value = TypeBuilder::ApplicationCache::ApplicationCacheResource::create()
         .setUrl(resourceInfo.m_resource.string())
         .setSize(static_cast<int>(resourceInfo.m_size))
-        .setType(types);
+        .setType(builder.toString());
     return value;
 }
 

@@ -32,18 +32,23 @@
 #define Stream_h
 
 #include "bindings/v8/ScriptWrappable.h"
-#include "weborigin/KURL.h"
+#include "core/dom/ActiveDOMObject.h"
+#include "platform/weborigin/KURL.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/text/WTFString.h"
 
 namespace WebCore {
 
-class Stream : public ScriptWrappable, public RefCounted<Stream> {
+class ExecutionContext;
+
+class Stream : public ScriptWrappable, public ActiveDOMObject, public RefCounted<Stream> {
 public:
-    static PassRefPtr<Stream> create(const String& mediaType)
+    static PassRefPtr<Stream> create(ExecutionContext* context, const String& mediaType)
     {
-        return adoptRef(new Stream(mediaType));
+        RefPtr<Stream> stream = adoptRef(new Stream(context, mediaType));
+        stream->suspendIfNeeded();
+        return stream.release();
     }
 
     virtual ~Stream();
@@ -58,6 +63,9 @@ public:
     // Mark this stream finalized so that a reader of this stream is notified
     // of EOF.
     void finalize();
+    // Mark this stream finalized due to an error so that a reader of this
+    // stream is notified of EOF due to the error.
+    void abort();
 
     // Allow an external reader class to mark this object neutered so that they
     // won't load the corresponding stream again. All stream objects are
@@ -65,8 +73,15 @@ public:
     void neuter() { m_isNeutered = true; }
     bool isNeutered() const { return m_isNeutered; }
 
+    // Implementation of ActiveDOMObject.
+    //
+    // FIXME: Implement suspend() and resume() when necessary.
+    virtual void suspend() OVERRIDE;
+    virtual void resume() OVERRIDE;
+    virtual void stop() OVERRIDE;
+
 protected:
-    explicit Stream(const String& mediaType);
+    Stream(ExecutionContext*, const String& mediaType);
 
     // This is an internal URL referring to the blob data associated with this object. It serves
     // as an identifier for this blob. The internal URL is never used to source the blob's content

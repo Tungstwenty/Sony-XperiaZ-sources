@@ -71,10 +71,10 @@ void MergeIdenticalElementsCommand::doUnapply()
     if (!parent || !parent->rendererIsEditable())
         return;
 
-    TrackExceptionState es;
+    TrackExceptionState exceptionState;
 
-    parent->insertBefore(m_element1.get(), m_element2.get(), es);
-    if (es.hadException())
+    parent->insertBefore(m_element1.get(), m_element2.get(), exceptionState);
+    if (exceptionState.hadException())
         return;
 
     Vector<RefPtr<Node> > children;
@@ -83,15 +83,7 @@ void MergeIdenticalElementsCommand::doUnapply()
 
     size_t size = children.size();
     for (size_t i = 0; i < size; ++i)
-        m_element1->appendChild(children[i].release(), es);
+        m_element1->appendChild(children[i].release(), exceptionState);
 }
-
-#ifndef NDEBUG
-void MergeIdenticalElementsCommand::getNodesInCommand(HashSet<Node*>& nodes)
-{
-    addNodeAndDescendants(m_element1.get(), nodes);
-    addNodeAndDescendants(m_element2.get(), nodes);
-}
-#endif
 
 } // namespace WebCore

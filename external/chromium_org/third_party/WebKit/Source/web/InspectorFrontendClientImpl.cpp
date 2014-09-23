@@ -37,16 +37,15 @@
 #include "bindings/v8/ScriptController.h"
 #include "core/dom/Document.h"
 #include "core/inspector/InspectorFrontendHost.h"
-#include "core/page/Frame.h"
+#include "core/frame/Frame.h"
 #include "core/page/Page.h"
-#include "core/platform/NotImplemented.h"
 #include "public/platform/WebFloatPoint.h"
 #include "public/platform/WebString.h"
 #include "wtf/text/WTFString.h"
 
 using namespace WebCore;
 
-namespace WebKit {
+namespace blink {
 
 InspectorFrontendClientImpl::InspectorFrontendClientImpl(Page* frontendPage, WebDevToolsFrontendClient* client, WebDevToolsFrontendImpl* frontend)
     : m_frontendPage(frontendPage)
@@ -63,8 +62,9 @@ InspectorFrontendClientImpl::~InspectorFrontendClientImpl()
 
 void InspectorFrontendClientImpl::windowObjectCleared()
 {
-    v8::HandleScope handleScope;
-    v8::Handle<v8::Context> frameContext = m_frontendPage->mainFrame() ? m_frontendPage->mainFrame()->script()->currentWorldContext() : v8::Local<v8::Context>();
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+    v8::HandleScope handleScope(isolate);
+    v8::Handle<v8::Context> frameContext = m_frontendPage->mainFrame() ? m_frontendPage->mainFrame()->script().currentWorldContext() : v8::Local<v8::Context>();
     v8::Context::Scope contextScope(frameContext);
 
     if (m_frontendHost)
@@ -73,53 +73,48 @@ void InspectorFrontendClientImpl::windowObjectCleared()
     v8::Handle<v8::Value> frontendHostObj = toV8(m_frontendHost.get(), v8::Handle<v8::Object>(), frameContext->GetIsolate());
     v8::Handle<v8::Object> global = frameContext->Global();
 
-    global->Set(v8::String::New("InspectorFrontendHost"), frontendHostObj);
-}
+    global->Set(v8::String::NewFromUtf8(isolate, "InspectorFrontendHost"), frontendHostObj);
 
-void InspectorFrontendClientImpl::moveWindowBy(float x, float y)
-{
-    m_client->moveWindowBy(WebFloatPoint(x, y));
-}
-
-void InspectorFrontendClientImpl::bringToFront()
-{
-    m_client->activateWindow();
-}
-
-void InspectorFrontendClientImpl::closeWindow()
-{
-    m_client->closeWindow();
-}
-
-void InspectorFrontendClientImpl::requestSetDockSide(DockSide side)
-{
-    String sideString = "undocked";
-    switch (side) {
-    case DockedToRight: sideString = "right"; break;
-    case DockedToBottom: sideString = "bottom"; break;
-    case Undocked: sideString = "undocked"; break;
+    ScriptController* scriptController = m_frontendPage->mainFrame() ? &m_frontendPage->mainFrame()->script() : 0;
+    if (scriptController) {
+        String installLegacyOverrides =
+            "" // Support for legacy front-ends (<M31). Do not add items here.
+            "(function(host, methodNames) {"
+            "    var callId = 0;"
+            "    function dispatch(methodName)"
+            "    {"
+            "        var argsArray = Array.prototype.slice.call(arguments, 1);"
+            "        var message = {\"method\": methodName, \"id\": ++callId};"
+            "        if (argsArray.length)"
+            "            message.params = argsArray;"
+            "        this.sendMessageToEmbedder(JSON.stringify(message));"
+            "    };"
+            "    methodNames.forEach(function(methodName) { host[methodName] = dispatch.bind(host, methodName); });"
+            "})(InspectorFrontendHost,"
+            "    ['addFileSystem',"
+            "     'append',"
+            "     'bringToFront',"
+            "     'indexPath',"
+            "     'moveWindowBy',"
+            "     'openInNewTab',"
+            "     'removeFileSystem',"
+            "     'requestFileSystems',"
+            "     'requestSetDockSide',"
+            "     'save',"
+            "     'searchInPath',"
+            "     'stopIndexing']);"
+            ""
+            "" // Support for legacy front-ends (<M28). Do not add items here.
+            "InspectorFrontendHost.canInspectWorkers = function() { return true; };"
+            "InspectorFrontendHost.canSaveAs = function() { return true; };"
+            "InspectorFrontendHost.canSave = function() { return true; };"
+            "InspectorFrontendHost.supportsFileSystems = function() { return true; };"
+            "InspectorFrontendHost.loaded = function() {};"
+            "InspectorFrontendHost.hiddenPanels = function() { return ""; };"
+            "InspectorFrontendHost.localizedStringsURL = function() { return ""; };"
+            "InspectorFrontendHost.close = function(url) { };";
+        scriptController->executeScriptInMainWorld(installLegacyOverrides, ScriptController::ExecuteScriptWhenScriptsDisabled);
     }
-    m_client->requestSetDockSide(sideString);
-}
-
-void InspectorFrontendClientImpl::changeAttachedWindowHeight(unsigned height)
-{
-    m_client->changeAttachedWindowHeight(height);
-}
-
-void InspectorFrontendClientImpl::openInNewTab(const String& url)
-{
-    m_client->openInNewTab(url);
-}
-
-void InspectorFrontendClientImpl::save(const String& url, const String& content, bool forceSaveAs)
-{
-    m_client->save(url, content, forceSaveAs);
-}
-
-void InspectorFrontendClientImpl::append(const String& url, const String& content)
-{
-    m_client->append(url, content);
 }
 
 void InspectorFrontendClientImpl::inspectedURLChanged(const String& url)
@@ -132,34 +127,9 @@ void InspectorFrontendClientImpl::sendMessageToBackend(const String& message)
     m_client->sendMessageToBackend(message);
 }
 
-void InspectorFrontendClientImpl::requestFileSystems()
+void InspectorFrontendClientImpl::sendMessageToEmbedder(const String& message)
 {
-    m_client->requestFileSystems();
-}
-
-void InspectorFrontendClientImpl::indexPath(int requestId, const String& fileSystemPath)
-{
-    m_client->indexPath(requestId, fileSystemPath);
-}
-
-void InspectorFrontendClientImpl::stopIndexing(int requestId)
-{
-    m_client->stopIndexing(requestId);
-}
-
-void InspectorFrontendClientImpl::searchInPath(int requestId, const String& fileSystemPath, const String& query)
-{
-    m_client->searchInPath(requestId, fileSystemPath, query);
-}
-
-void InspectorFrontendClientImpl::addFileSystem()
-{
-    m_client->addFileSystem();
-}
-
-void InspectorFrontendClientImpl::removeFileSystem(const String& fileSystemPath)
-{
-    m_client->removeFileSystem(fileSystemPath);
+    m_client->sendMessageToEmbedder(message);
 }
 
 bool InspectorFrontendClientImpl::isUnderTest()
@@ -167,4 +137,4 @@ bool InspectorFrontendClientImpl::isUnderTest()
     return m_client->isUnderTest();
 }
 
-} // namespace WebKit
+} // namespace blink

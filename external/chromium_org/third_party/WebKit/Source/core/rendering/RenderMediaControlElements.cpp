@@ -29,17 +29,19 @@
 
 #include "core/rendering/RenderMediaControlElements.h"
 
+#include "core/rendering/LayoutRectRecorder.h"
 #include "core/rendering/RenderView.h"
 
 namespace WebCore {
 
 RenderTextTrackContainerElement::RenderTextTrackContainerElement(Element* element)
-    : RenderBlock(element)
+    : RenderBlockFlow(element)
 {
 }
 
 void RenderTextTrackContainerElement::layout()
 {
+    LayoutRectRecorder recorder(*this);
     RenderBlock::layout();
     if (style()->display() == NONE)
         return;

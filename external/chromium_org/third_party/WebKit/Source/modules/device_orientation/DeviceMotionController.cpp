@@ -27,7 +27,10 @@
 #include "config.h"
 #include "modules/device_orientation/DeviceMotionController.h"
 
+#include "RuntimeEnabledFeatures.h"
 #include "core/dom/Document.h"
+#include "core/events/ThreadLocalEventNames.h"
+#include "core/page/Page.h"
 #include "modules/device_orientation/DeviceMotionData.h"
 #include "modules/device_orientation/DeviceMotionDispatcher.h"
 #include "modules/device_orientation/DeviceMotionEvent.h"
@@ -36,16 +39,18 @@ namespace WebCore {
 
 DeviceMotionController::DeviceMotionController(Document* document)
     : DeviceSensorEventController(document)
+    , DOMWindowLifecycleObserver(document->domWindow())
 {
 }
 
 DeviceMotionController::~DeviceMotionController()
 {
+    stopUpdating();
 }
 
 void DeviceMotionController::didChangeDeviceMotion(DeviceMotionData* deviceMotionData)
 {
-    dispatchDeviceEvent(DeviceMotionEvent::create(eventNames().devicemotionEvent, deviceMotionData));
+    dispatchDeviceEvent(DeviceMotionEvent::create(EventTypeNames::devicemotion, deviceMotionData));
 }
 
 const char* DeviceMotionController::supplementName()
@@ -55,10 +60,10 @@ const char* DeviceMotionController::supplementName()
 
 DeviceMotionController* DeviceMotionController::from(Document* document)
 {
-    DeviceMotionController* controller = static_cast<DeviceMotionController*>(Supplement<ScriptExecutionContext>::from(document, supplementName()));
+    DeviceMotionController* controller = static_cast<DeviceMotionController*>(DocumentSupplement::from(document, supplementName()));
     if (!controller) {
         controller = new DeviceMotionController(document);
-        Supplement<ScriptExecutionContext>::provideTo(document, supplementName(), adoptPtr(controller));
+        DocumentSupplement::provideTo(document, supplementName(), adoptPtr(controller));
     }
     return controller;
 }
@@ -70,7 +75,7 @@ bool DeviceMotionController::hasLastData()
 
 PassRefPtr<Event> DeviceMotionController::getLastEvent()
 {
-    return DeviceMotionEvent::create(eventNames().devicemotionEvent, DeviceMotionDispatcher::instance().latestDeviceMotionData());
+    return DeviceMotionEvent::create(EventTypeNames::devicemotion, DeviceMotionDispatcher::instance().latestDeviceMotionData());
 }
 
 void DeviceMotionController::registerWithDispatcher()
@@ -85,9 +90,31 @@ void DeviceMotionController::unregisterWithDispatcher()
 
 bool DeviceMotionController::isNullEvent(Event* event)
 {
-    ASSERT(event->type() == eventNames().devicemotionEvent);
-    DeviceMotionEvent* motionEvent = static_cast<DeviceMotionEvent*>(event);
+    DeviceMotionEvent* motionEvent = toDeviceMotionEvent(event);
     return !motionEvent->deviceMotionData()->canProvideEventData();
+}
+
+void DeviceMotionController::didAddEventListener(DOMWindow*, const AtomicString& eventType)
+{
+    if (eventType == EventTypeNames::devicemotion && RuntimeEnabledFeatures::deviceMotionEnabled()) {
+        if (page() && page()->visibilityState() == PageVisibilityStateVisible)
+            startUpdating();
+        m_hasEventListener = true;
+    }
+}
+
+void DeviceMotionController::didRemoveEventListener(DOMWindow*, const AtomicString& eventType)
+{
+    if (eventType == EventTypeNames::devicemotion) {
+        stopUpdating();
+        m_hasEventListener = false;
+    }
+}
+
+void DeviceMotionController::didRemoveAllEventListeners(DOMWindow*)
+{
+    stopUpdating();
+    m_hasEventListener = false;
 }
 
 } // namespace WebCore

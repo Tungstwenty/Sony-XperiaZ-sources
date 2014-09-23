@@ -30,7 +30,7 @@
 
 #include "public/testing/WebTestProxy.h"
 
-#include "AccessibilityControllerChromium.h"
+#include "AccessibilityController.h"
 #include "EventSender.h"
 #include "MockColorChooser.h"
 #include "MockWebSpeechInputController.h"
@@ -49,17 +49,17 @@
 #include "public/testing/WebTestDelegate.h"
 #include "public/testing/WebTestInterfaces.h"
 #include "public/testing/WebTestRunner.h"
-#include "public/web/WebAccessibilityNotification.h"
-#include "public/web/WebAccessibilityObject.h"
+#include "public/web/WebAXEnums.h"
+#include "public/web/WebAXObject.h"
 #include "public/web/WebCachedURLRequest.h"
 #include "public/web/WebConsoleMessage.h"
 #include "public/web/WebDataSource.h"
-#include "public/web/WebDeviceOrientationClientMock.h"
 #include "public/web/WebDocument.h"
 #include "public/web/WebElement.h"
 #include "public/web/WebFrame.h"
 #include "public/web/WebGeolocationClientMock.h"
 #include "public/web/WebHistoryItem.h"
+#include "public/web/WebMIDIClientMock.h"
 #include "public/web/WebNode.h"
 #include "public/web/WebPluginParams.h"
 #include "public/web/WebPrintParams.h"
@@ -72,7 +72,7 @@
 #include <cctype>
 #include "skia/ext/platform_canvas.h"
 
-using namespace WebKit;
+using namespace blink;
 using namespace std;
 
 namespace WebTestRunner {
@@ -92,66 +92,6 @@ public:
 private:
     CallbackMethodType m_callback;
 };
-
-void printNodeDescription(WebTestDelegate* delegate, const WebNode& node, int exception)
-{
-    if (exception) {
-        delegate->printMessage("ERROR");
-        return;
-    }
-    if (node.isNull()) {
-        delegate->printMessage("(null)");
-        return;
-    }
-    delegate->printMessage(node.nodeName().utf8().data());
-    const WebNode& parent = node.parentNode();
-    if (!parent.isNull()) {
-        delegate->printMessage(" > ");
-        printNodeDescription(delegate, parent, 0);
-    }
-}
-
-void printRangeDescription(WebTestDelegate* delegate, const WebRange& range)
-{
-    if (range.isNull()) {
-        delegate->printMessage("(null)");
-        return;
-    }
-    char buffer[100];
-    snprintf(buffer, sizeof(buffer), "range from %d of ", range.startOffset());
-    delegate->printMessage(buffer);
-    int exception = 0;
-    WebNode startNode = range.startContainer(exception);
-    printNodeDescription(delegate, startNode, exception);
-    snprintf(buffer, sizeof(buffer), " to %d of ", range.endOffset());
-    delegate->printMessage(buffer);
-    WebNode endNode = range.endContainer(exception);
-    printNodeDescription(delegate, endNode, exception);
-}
-
-string editingActionDescription(WebEditingAction action)
-{
-    switch (action) {
-    case WebKit::WebEditingActionTyped:
-        return "WebViewInsertActionTyped";
-    case WebKit::WebEditingActionPasted:
-        return "WebViewInsertActionPasted";
-    case WebKit::WebEditingActionDropped:
-        return "WebViewInsertActionDropped";
-    }
-    return "(UNKNOWN ACTION)";
-}
-
-string textAffinityDescription(WebTextAffinity affinity)
-{
-    switch (affinity) {
-    case WebKit::WebTextAffinityUpstream:
-        return "NSSelectionAffinityUpstream";
-    case WebKit::WebTextAffinityDownstream:
-        return "NSSelectionAffinityDownstream";
-    }
-    return "(UNKNOWN AFFINITY)";
-}
 
 void printFrameDescription(WebTestDelegate* delegate, WebFrame* frame)
 {
@@ -284,17 +224,17 @@ const char* illegalString = "illegal value";
 const char* webNavigationTypeToString(WebNavigationType type)
 {
     switch (type) {
-    case WebKit::WebNavigationTypeLinkClicked:
+    case blink::WebNavigationTypeLinkClicked:
         return linkClickedString;
-    case WebKit::WebNavigationTypeFormSubmitted:
+    case blink::WebNavigationTypeFormSubmitted:
         return formSubmittedString;
-    case WebKit::WebNavigationTypeBackForward:
+    case blink::WebNavigationTypeBackForward:
         return backForwardString;
-    case WebKit::WebNavigationTypeReload:
+    case blink::WebNavigationTypeReload:
         return reloadString;
-    case WebKit::WebNavigationTypeFormResubmitted:
+    case blink::WebNavigationTypeFormResubmitted:
         return formResubmittedString;
-    case WebKit::WebNavigationTypeOther:
+    case blink::WebNavigationTypeOther:
         return otherString;
     }
     return illegalString;
@@ -408,8 +348,6 @@ string dumpHistoryItem(const WebHistoryItem& item, int indent, bool isCurrent)
         result.append(item.target().utf8());
         result.append("\")");
     }
-    if (item.isTargetItem())
-        result.append("  **nav target**");
     result.append("\n");
 
     const WebVector<WebHistoryItem>& children = item.children();
@@ -455,7 +393,7 @@ WebTestProxyBase::WebTestProxyBase()
     : m_testInterfaces(0)
     , m_delegate(0)
     , m_webWidget(0)
-    , m_spellcheck(new SpellCheckClient)
+    , m_spellcheck(new SpellCheckClient(this))
     , m_chooserCount(0)
     , m_validationMessageClient(new MockWebValidationMessageClient())
 {
@@ -498,9 +436,15 @@ WebWidget* WebTestProxyBase::webWidget()
 
 WebView* WebTestProxyBase::webView()
 {
-    WEBKIT_ASSERT(m_webWidget);
+    BLINK_ASSERT(m_webWidget);
     // TestRunner does not support popup widgets. So m_webWidget is always a WebView.
     return static_cast<WebView*>(m_webWidget);
+}
+
+void WebTestProxyBase::didForceResize()
+{
+    invalidateAll();
+    discardBackingStore();
 }
 
 void WebTestProxyBase::reset()
@@ -513,6 +457,8 @@ void WebTestProxyBase::reset()
     m_logConsoleOutput = true;
     if (m_geolocationClient.get())
         m_geolocationClient->resetMock();
+    if (m_midiClient.get())
+        m_midiClient->resetMock();
 #if ENABLE_INPUT_SPEECH
     if (m_speechInputController.get())
         m_speechInputController->clearResults();
@@ -529,10 +475,23 @@ WebValidationMessageClient* WebTestProxyBase::validationMessageClient()
     return m_validationMessageClient.get();
 }
 
-WebColorChooser* WebTestProxyBase::createColorChooser(WebColorChooserClient* client, const WebKit::WebColor& color)
+WebColorChooser* WebTestProxyBase::createColorChooser(WebColorChooserClient* client, const blink::WebColor& color)
 {
     // This instance is deleted by WebCore::ColorInputType
     return new MockColorChooser(client, m_delegate, this);
+}
+
+WebColorChooser* WebTestProxyBase::createColorChooser(WebColorChooserClient* client, const blink::WebColor& color, const blink::WebVector<blink::WebColorSuggestion>& suggestions)
+{
+    // This instance is deleted by WebCore::ColorInputType
+    return new MockColorChooser(client, m_delegate, this);
+}
+
+bool WebTestProxyBase::runFileChooser(const blink::WebFileChooserParams&, blink::WebFileChooserCompletion*)
+{
+    m_delegate->printMessage("Mock: Opening a file chooser.\n");
+    // FIXME: Add ability to set file names to a file upload control.
+    return false;
 }
 
 string WebTestProxyBase::captureTree(bool debugRenderTree)
@@ -540,12 +499,16 @@ string WebTestProxyBase::captureTree(bool debugRenderTree)
     WebScriptController::flushConsoleMessages();
 
     bool shouldDumpAsText = m_testInterfaces->testRunner()->shouldDumpAsText();
+    bool shouldDumpAsMarkup = m_testInterfaces->testRunner()->shouldDumpAsMarkup();
     bool shouldDumpAsPrinted = m_testInterfaces->testRunner()->isPrinting();
     WebFrame* frame = webView()->mainFrame();
     string dataUtf8;
     if (shouldDumpAsText) {
         bool recursive = m_testInterfaces->testRunner()->shouldDumpChildFramesAsText();
         dataUtf8 = shouldDumpAsPrinted ? dumpFramesAsPrintedText(frame, recursive) : dumpFramesAsText(frame, recursive);
+    } else if (shouldDumpAsMarkup) {
+        // Append a newline for the test driver.
+        dataUtf8 = frame->contentAsMarkup().utf8() + "\n";
     } else {
         bool recursive = m_testInterfaces->testRunner()->shouldDumpChildFrameScrollPositions();
         WebFrame::RenderAsTextControls renderTextBehavior = WebFrame::RenderAsTextNormal;
@@ -611,8 +574,8 @@ void WebTestProxyBase::setLogConsoleOutput(bool enabled)
 
 void WebTestProxyBase::paintRect(const WebRect& rect)
 {
-    WEBKIT_ASSERT(!m_isPainting);
-    WEBKIT_ASSERT(canvas());
+    BLINK_ASSERT(!m_isPainting);
+    BLINK_ASSERT(canvas());
     m_isPainting = true;
     float deviceScaleFactor = webView()->deviceScaleFactor();
     int scaledX = static_cast<int>(static_cast<float>(rect.x) * deviceScaleFactor);
@@ -652,13 +615,13 @@ void WebTestProxyBase::paintInvalidatedRegion()
             continue;
         paintRect(rect);
     }
-    WEBKIT_ASSERT(m_paintRect.isEmpty());
+    BLINK_ASSERT(m_paintRect.isEmpty());
 }
 
 void WebTestProxyBase::paintPagesWithBoundaries()
 {
-    WEBKIT_ASSERT(!m_isPainting);
-    WEBKIT_ASSERT(canvas());
+    BLINK_ASSERT(!m_isPainting);
+    BLINK_ASSERT(canvas());
     m_isPainting = true;
 
     WebSize pageSizeInPixels = webWidget()->size();
@@ -703,7 +666,7 @@ void WebTestProxyBase::displayRepaintMask()
 
 void WebTestProxyBase::display()
 {
-    const WebKit::WebSize& size = webWidget()->size();
+    const blink::WebSize& size = webWidget()->size();
     WebRect rect(0, 0, size.width, size.height);
     m_paintRect = rect;
     paintInvalidatedRegion();
@@ -728,17 +691,17 @@ WebGeolocationClientMock* WebTestProxyBase::geolocationClientMock()
     return m_geolocationClient.get();
 }
 
-WebDeviceOrientationClientMock* WebTestProxyBase::deviceOrientationClientMock()
+WebMIDIClientMock* WebTestProxyBase::midiClientMock()
 {
-    if (!m_deviceOrientationClient.get())
-        m_deviceOrientationClient.reset(WebDeviceOrientationClientMock::create());
-    return m_deviceOrientationClient.get();
+    if (!m_midiClient.get())
+        m_midiClient.reset(new WebMIDIClientMock);
+    return m_midiClient.get();
 }
 
 #if ENABLE_INPUT_SPEECH
 MockWebSpeechInputController* WebTestProxyBase::speechInputControllerMock()
 {
-    WEBKIT_ASSERT(m_speechInputController.get());
+    BLINK_ASSERT(m_speechInputController.get());
     return m_speechInputController.get();
 }
 #endif
@@ -818,87 +781,105 @@ void WebTestProxyBase::didAutoResize(const WebSize&)
     invalidateAll();
 }
 
-void WebTestProxyBase::postAccessibilityNotification(const WebKit::WebAccessibilityObject& obj, WebKit::WebAccessibilityNotification notification)
+void WebTestProxyBase::postAccessibilityEvent(const blink::WebAXObject& obj, blink::WebAXEvent event)
 {
-    if (notification == WebKit::WebAccessibilityNotificationFocusedUIElementChanged)
+    if (event == blink::WebAXEventFocus)
         m_testInterfaces->accessibilityController()->setFocusedElement(obj);
 
-    const char* notificationName;
-    switch (notification) {
-    case WebKit::WebAccessibilityNotificationActiveDescendantChanged:
-        notificationName = "ActiveDescendantChanged";
+    const char* eventName = 0;
+    switch (event) {
+    case blink::WebAXEventActiveDescendantChanged:
+        eventName = "ActiveDescendantChanged";
         break;
-    case WebKit::WebAccessibilityNotificationAutocorrectionOccured:
-        notificationName = "AutocorrectionOccured";
+    case blink::WebAXEventAlert:
+        eventName = "Alert";
         break;
-    case WebKit::WebAccessibilityNotificationCheckedStateChanged:
-        notificationName = "CheckedStateChanged";
+    case blink::WebAXEventAriaAttributeChanged:
+        eventName = "AriaAttributeChanged";
         break;
-    case WebKit::WebAccessibilityNotificationChildrenChanged:
-        notificationName = "ChildrenChanged";
+    case blink::WebAXEventAutocorrectionOccured:
+        eventName = "AutocorrectionOccured";
         break;
-    case WebKit::WebAccessibilityNotificationFocusedUIElementChanged:
-        notificationName = "FocusedUIElementChanged";
+    case blink::WebAXEventBlur:
+        eventName = "Blur";
         break;
-    case WebKit::WebAccessibilityNotificationLayoutComplete:
-        notificationName = "LayoutComplete";
+    case blink::WebAXEventCheckedStateChanged:
+        eventName = "CheckedStateChanged";
         break;
-    case WebKit::WebAccessibilityNotificationLoadComplete:
-        notificationName = "LoadComplete";
+    case blink::WebAXEventChildrenChanged:
+        eventName = "ChildrenChanged";
         break;
-    case WebKit::WebAccessibilityNotificationSelectedChildrenChanged:
-        notificationName = "SelectedChildrenChanged";
+    case blink::WebAXEventFocus:
+        eventName = "Focus";
         break;
-    case WebKit::WebAccessibilityNotificationSelectedTextChanged:
-        notificationName = "SelectedTextChanged";
+    case blink::WebAXEventHide:
+        eventName = "Hide";
         break;
-    case WebKit::WebAccessibilityNotificationValueChanged:
-        notificationName = "ValueChanged";
+    case blink::WebAXEventInvalidStatusChanged:
+        eventName = "InvalidStatusChanged";
         break;
-    case WebKit::WebAccessibilityNotificationScrolledToAnchor:
-        notificationName = "ScrolledToAnchor";
+    case blink::WebAXEventLayoutComplete:
+        eventName = "LayoutComplete";
         break;
-    case WebKit::WebAccessibilityNotificationLiveRegionChanged:
-        notificationName = "LiveRegionChanged";
+    case blink::WebAXEventLiveRegionChanged:
+        eventName = "LiveRegionChanged";
         break;
-    case WebKit::WebAccessibilityNotificationMenuListItemSelected:
-        notificationName = "MenuListItemSelected";
+    case blink::WebAXEventLoadComplete:
+        eventName = "LoadComplete";
         break;
-    case WebKit::WebAccessibilityNotificationMenuListValueChanged:
-        notificationName = "MenuListValueChanged";
+    case blink::WebAXEventLocationChanged:
+        eventName = "LocationChanged";
         break;
-    case WebKit::WebAccessibilityNotificationRowCountChanged:
-        notificationName = "RowCountChanged";
+    case blink::WebAXEventMenuListItemSelected:
+        eventName = "MenuListItemSelected";
         break;
-    case WebKit::WebAccessibilityNotificationRowCollapsed:
-        notificationName = "RowCollapsed";
+    case blink::WebAXEventMenuListValueChanged:
+        eventName = "MenuListValueChanged";
         break;
-    case WebKit::WebAccessibilityNotificationRowExpanded:
-        notificationName = "RowExpanded";
+    case blink::WebAXEventRowCollapsed:
+        eventName = "RowCollapsed";
         break;
-    case WebKit::WebAccessibilityNotificationInvalidStatusChanged:
-        notificationName = "InvalidStatusChanged";
+    case blink::WebAXEventRowCountChanged:
+        eventName = "RowCountChanged";
         break;
-    case WebKit::WebAccessibilityNotificationTextChanged:
-        notificationName = "TextChanged";
+    case blink::WebAXEventRowExpanded:
+        eventName = "RowExpanded";
         break;
-    case WebKit::WebAccessibilityNotificationAriaAttributeChanged:
-        notificationName = "AriaAttributeChanged";
+    case blink::WebAXEventScrolledToAnchor:
+        eventName = "ScrolledToAnchor";
         break;
-    default:
-        notificationName = "UnknownNotification";
+    case blink::WebAXEventSelectedChildrenChanged:
+        eventName = "SelectedChildrenChanged";
+        break;
+    case blink::WebAXEventSelectedTextChanged:
+        eventName = "SelectedTextChanged";
+        break;
+    case blink::WebAXEventShow:
+        eventName = "Show";
+        break;
+    case blink::WebAXEventTextChanged:
+        eventName = "TextChanged";
+        break;
+    case blink::WebAXEventTextInserted:
+        eventName = "TextInserted";
+        break;
+    case blink::WebAXEventTextRemoved:
+        eventName = "TextRemoved";
+        break;
+    case blink::WebAXEventValueChanged:
+        eventName = "ValueChanged";
         break;
     }
 
-    m_testInterfaces->accessibilityController()->notificationReceived(obj, notificationName);
+    m_testInterfaces->accessibilityController()->notificationReceived(obj, eventName);
 
     if (m_testInterfaces->accessibilityController()->shouldLogAccessibilityEvents()) {
         string message("AccessibilityNotification - ");
-        message += notificationName;
+        message += eventName;
 
-        WebKit::WebNode node = obj.node();
+        blink::WebNode node = obj.node();
         if (!node.isNull() && node.isElementNode()) {
-            WebKit::WebElement element = node.to<WebKit::WebElement>();
+            blink::WebElement element = node.to<blink::WebElement>();
             if (element.hasAttribute("id")) {
                 message += " - id:";
                 message += element.getAttribute("id").utf8().data();
@@ -919,87 +900,6 @@ void WebTestProxyBase::startDragging(WebFrame*, const WebDragData& data, WebDrag
 // The output from these methods in layout test mode should match that
 // expected by the layout tests. See EditingDelegate.m in DumpRenderTree.
 
-bool WebTestProxyBase::shouldBeginEditing(const WebRange& range)
-{
-    if (m_testInterfaces->testRunner()->shouldDumpEditingCallbacks()) {
-        m_delegate->printMessage("EDITING DELEGATE: shouldBeginEditingInDOMRange:");
-        printRangeDescription(m_delegate, range);
-        m_delegate->printMessage("\n");
-    }
-    return true;
-}
-
-bool WebTestProxyBase::shouldEndEditing(const WebRange& range)
-{
-    if (m_testInterfaces->testRunner()->shouldDumpEditingCallbacks()) {
-        m_delegate->printMessage("EDITING DELEGATE: shouldEndEditingInDOMRange:");
-        printRangeDescription(m_delegate, range);
-        m_delegate->printMessage("\n");
-    }
-    return true;
-}
-
-bool WebTestProxyBase::shouldInsertNode(const WebNode& node, const WebRange& range, WebEditingAction action)
-{
-    if (m_testInterfaces->testRunner()->shouldDumpEditingCallbacks()) {
-        m_delegate->printMessage("EDITING DELEGATE: shouldInsertNode:");
-        printNodeDescription(m_delegate, node, 0);
-        m_delegate->printMessage(" replacingDOMRange:");
-        printRangeDescription(m_delegate, range);
-        m_delegate->printMessage(string(" givenAction:") + editingActionDescription(action) + "\n");
-    }
-    return true;
-}
-
-bool WebTestProxyBase::shouldInsertText(const WebString& text, const WebRange& range, WebEditingAction action)
-{
-    if (m_testInterfaces->testRunner()->shouldDumpEditingCallbacks()) {
-        m_delegate->printMessage(string("EDITING DELEGATE: shouldInsertText:") + text.utf8().data() + " replacingDOMRange:");
-        printRangeDescription(m_delegate, range);
-        m_delegate->printMessage(string(" givenAction:") + editingActionDescription(action) + "\n");
-    }
-    return true;
-}
-
-bool WebTestProxyBase::shouldChangeSelectedRange(
-    const WebRange& fromRange, const WebRange& toRange, WebTextAffinity affinity, bool stillSelecting)
-{
-    if (m_testInterfaces->testRunner()->shouldDumpEditingCallbacks()) {
-        m_delegate->printMessage("EDITING DELEGATE: shouldChangeSelectedDOMRange:");
-        printRangeDescription(m_delegate, fromRange);
-        m_delegate->printMessage(" toDOMRange:");
-        printRangeDescription(m_delegate, toRange);
-        m_delegate->printMessage(string(" affinity:") + textAffinityDescription(affinity) + " stillSelecting:" + (stillSelecting ? "TRUE" : "FALSE") + "\n");
-    }
-    return true;
-}
-
-bool WebTestProxyBase::shouldDeleteRange(const WebRange& range)
-{
-    if (m_testInterfaces->testRunner()->shouldDumpEditingCallbacks()) {
-        m_delegate->printMessage("EDITING DELEGATE: shouldDeleteDOMRange:");
-        printRangeDescription(m_delegate, range);
-        m_delegate->printMessage("\n");
-    }
-    return true;
-}
-
-bool WebTestProxyBase::shouldApplyStyle(const WebString& style, const WebRange& range)
-{
-    if (m_testInterfaces->testRunner()->shouldDumpEditingCallbacks()) {
-        m_delegate->printMessage(string("EDITING DELEGATE: shouldApplyStyle:") + style.utf8().data() + " toElementsInDOMRange:");
-        printRangeDescription(m_delegate, range);
-        m_delegate->printMessage("\n");
-    }
-    return true;
-}
-
-void WebTestProxyBase::didBeginEditing()
-{
-    if (m_testInterfaces->testRunner()->shouldDumpEditingCallbacks())
-        m_delegate->printMessage("EDITING DELEGATE: webViewDidBeginEditing:WebViewDidBeginEditingNotification\n");
-}
-
 void WebTestProxyBase::didChangeSelection(bool isEmptySelection)
 {
     if (m_testInterfaces->testRunner()->shouldDumpEditingCallbacks())
@@ -1012,13 +912,7 @@ void WebTestProxyBase::didChangeContents()
         m_delegate->printMessage("EDITING DELEGATE: webViewDidChange:WebViewDidChangeNotification\n");
 }
 
-void WebTestProxyBase::didEndEditing()
-{
-    if (m_testInterfaces->testRunner()->shouldDumpEditingCallbacks())
-        m_delegate->printMessage("EDITING DELEGATE: webViewDidEndEditing:WebViewDidEndEditingNotification\n");
-}
-
-bool WebTestProxyBase::createView(WebFrame*, const WebURLRequest& request, const WebWindowFeatures&, const WebString&, WebNavigationPolicy)
+bool WebTestProxyBase::createView(WebFrame*, const WebURLRequest& request, const WebWindowFeatures&, const WebString&, WebNavigationPolicy, bool)
 {
     if (!m_testInterfaces->testRunner()->canOpenWindows())
         return false;
@@ -1072,16 +966,17 @@ void WebTestProxyBase::printPage(WebFrame* frame)
 
 WebNotificationPresenter* WebTestProxyBase::notificationPresenter()
 {
-#if ENABLE_NOTIFICATIONS
     return m_testInterfaces->testRunner()->notificationPresenter();
-#else
-    return 0;
-#endif
 }
 
 WebGeolocationClient* WebTestProxyBase::geolocationClient()
 {
     return geolocationClientMock();
+}
+
+WebMIDIClient* WebTestProxyBase::webMIDIClient()
+{
+    return midiClientMock();
 }
 
 WebSpeechInputController* WebTestProxyBase::speechInputController(WebSpeechInputListener* listener)
@@ -1093,7 +988,7 @@ WebSpeechInputController* WebTestProxyBase::speechInputController(WebSpeechInput
     }
     return m_speechInputController.get();
 #else
-    WEBKIT_ASSERT(listener);
+    BLINK_ASSERT(listener);
     return 0;
 #endif
 }
@@ -1101,11 +996,6 @@ WebSpeechInputController* WebTestProxyBase::speechInputController(WebSpeechInput
 WebSpeechRecognizer* WebTestProxyBase::speechRecognizer()
 {
     return speechRecognizerMock();
-}
-
-WebDeviceOrientationClient* WebTestProxyBase::deviceOrientationClient()
-{
-    return deviceOrientationClientMock();
 }
 
 bool WebTestProxyBase::requestPointerLock()
@@ -1204,8 +1094,6 @@ void WebTestProxyBase::didReceiveTitle(WebFrame* frame, const WebString& title, 
 
     if (m_testInterfaces->testRunner()->shouldDumpTitleChanges())
         m_delegate->printMessage(string("TITLE CHANGED: '") + title8.data() + "'\n");
-
-    m_testInterfaces->testRunner()->setTitleTextDirection(direction);
 }
 
 void WebTestProxyBase::didChangeIcon(WebFrame* frame, WebIconURL::Type)
@@ -1270,7 +1158,7 @@ void WebTestProxyBase::didDispatchPingLoader(WebFrame*, const WebURL& url)
         m_delegate->printMessage(string("PingLoader dispatched to '") + URLDescription(url).c_str() + "'.\n");
 }
 
-void WebTestProxyBase::willRequestResource(WebFrame* frame, const WebKit::WebCachedURLRequest& request)
+void WebTestProxyBase::willRequestResource(WebFrame* frame, const blink::WebCachedURLRequest& request)
 {
     if (m_testInterfaces->testRunner()->shouldDumpResourceRequestCallbacks()) {
         printFrameDescription(m_delegate, frame);
@@ -1285,7 +1173,7 @@ void WebTestProxyBase::didCreateDataSource(WebFrame*, WebDataSource* ds)
         ds->setDeferMainResourceDataLoad(false);
 }
 
-void WebTestProxyBase::willSendRequest(WebFrame*, unsigned identifier, WebKit::WebURLRequest& request, const WebKit::WebURLResponse& redirectResponse)
+void WebTestProxyBase::willSendRequest(WebFrame*, unsigned identifier, blink::WebURLRequest& request, const blink::WebURLResponse& redirectResponse)
 {
     // Need to use GURL for host() and SchemeIs()
     GURL url = request.url();
@@ -1294,7 +1182,7 @@ void WebTestProxyBase::willSendRequest(WebFrame*, unsigned identifier, WebKit::W
     GURL mainDocumentURL = request.firstPartyForCookies();
 
     if (redirectResponse.isNull() && (m_testInterfaces->testRunner()->shouldDumpResourceLoadCallbacks() || m_testInterfaces->testRunner()->shouldDumpResourcePriorities())) {
-        WEBKIT_ASSERT(m_resourceIdentifierMap.find(identifier) == m_resourceIdentifierMap.end());
+        BLINK_ASSERT(m_resourceIdentifierMap.find(identifier) == m_resourceIdentifierMap.end());
         m_resourceIdentifierMap[identifier] = descriptionSuitableForTestResult(requestURL);
     }
 
@@ -1342,7 +1230,7 @@ void WebTestProxyBase::willSendRequest(WebFrame*, unsigned identifier, WebKit::W
     request.setURL(m_delegate->rewriteLayoutTestsURL(request.url().spec()));
 }
 
-void WebTestProxyBase::didReceiveResponse(WebFrame*, unsigned identifier, const WebKit::WebURLResponse& response)
+void WebTestProxyBase::didReceiveResponse(WebFrame*, unsigned identifier, const blink::WebURLResponse& response)
 {
     if (m_testInterfaces->testRunner()->shouldDumpResourceLoadCallbacks()) {
         if (m_resourceIdentifierMap.find(identifier) == m_resourceIdentifierMap.end())
@@ -1364,7 +1252,7 @@ void WebTestProxyBase::didReceiveResponse(WebFrame*, unsigned identifier, const 
     }
 }
 
-void WebTestProxyBase::didChangeResourcePriority(WebFrame*, unsigned identifier, const WebKit::WebURLRequest::Priority& priority)
+void WebTestProxyBase::didChangeResourcePriority(WebFrame*, unsigned identifier, const blink::WebURLRequest::Priority& priority)
 {
     if (m_testInterfaces->testRunner()->shouldDumpResourcePriorities()) {
         if (m_resourceIdentifierMap.find(identifier) == m_resourceIdentifierMap.end())
@@ -1394,7 +1282,25 @@ void WebTestProxyBase::didAddMessageToConsole(const WebConsoleMessage& message, 
     // This matches win DumpRenderTree's UIDelegate.cpp.
     if (!m_logConsoleOutput)
         return;
-    m_delegate->printMessage(string("CONSOLE MESSAGE: "));
+    string level;
+    switch (message.level) {
+    case WebConsoleMessage::LevelDebug:
+        level = "DEBUG";
+        break;
+    case WebConsoleMessage::LevelLog:
+        level = "MESSAGE";
+        break;
+    case WebConsoleMessage::LevelInfo:
+        level = "INFO";
+        break;
+    case WebConsoleMessage::LevelWarning:
+        level = "WARNING";
+        break;
+    case WebConsoleMessage::LevelError:
+        level = "ERROR";
+        break;
+    }
+    m_delegate->printMessage(string("CONSOLE ") + level + ": ");
     if (sourceLine) {
         char buffer[40];
         snprintf(buffer, sizeof(buffer), "line %d: ", sourceLine);
@@ -1451,9 +1357,9 @@ WebNavigationPolicy WebTestProxyBase::decidePolicyForNavigation(WebFrame*, WebDa
 
     m_delegate->printMessage(string("Policy delegate: attempt to load ") + URLDescription(request.url()) + " with navigation type '" + webNavigationTypeToString(type) + "'\n");
     if (m_testInterfaces->testRunner()->policyDelegateIsPermissive())
-        result = WebKit::WebNavigationPolicyCurrentTab;
+        result = blink::WebNavigationPolicyCurrentTab;
     else
-        result = WebKit::WebNavigationPolicyIgnore;
+        result = blink::WebNavigationPolicyIgnore;
 
     if (m_testInterfaces->testRunner()->policyDelegateShouldNotifyDone())
         m_testInterfaces->testRunner()->policyDelegateDone();
@@ -1468,6 +1374,13 @@ bool WebTestProxyBase::willCheckAndDispatchMessageEvent(WebFrame*, WebFrame*, We
     }
 
     return false;
+}
+
+void WebTestProxyBase::postSpellCheckEvent(const WebString& eventName)
+{
+    if (m_testInterfaces->testRunner()->shouldDumpSpellCheckCallbacks()) {
+        m_delegate->printMessage(string("SpellCheckEvent: ") + eventName.utf8().data() + "\n");
+    }
 }
 
 void WebTestProxyBase::resetInputMethod()

@@ -32,165 +32,45 @@
 #ifndef Notification_h
 #define Notification_h
 
-#include "bindings/v8/ScriptWrappable.h"
-#include "core/dom/ActiveDOMObject.h"
-#include "core/dom/EventNames.h"
-#include "core/dom/EventTarget.h"
-#include "core/loader/ThreadableLoaderClient.h"
-#include "core/platform/SharedBuffer.h"
-#include "core/platform/text/TextDirection.h"
-#include "modules/notifications/NotificationClient.h"
-#include "weborigin/KURL.h"
+#include "modules/notifications/NotificationBase.h"
+#include "platform/AsyncMethodRunner.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
-#include "wtf/RefPtr.h"
-#include "wtf/text/AtomicStringHash.h"
 
-#if ENABLE(NOTIFICATIONS)
-#include "core/platform/Timer.h"
-#endif
-
-#if ENABLE(NOTIFICATIONS) || ENABLE(LEGACY_NOTIFICATIONS)
 namespace WebCore {
 
 class Dictionary;
-class ExceptionState;
-class NotificationCenter;
+class ExecutionContext;
+class NotificationClient;
 class NotificationPermissionCallback;
-class ResourceError;
-class ResourceResponse;
-class ScriptExecutionContext;
-class ThreadableLoader;
 
-class Notification : public RefCounted<Notification>, public ScriptWrappable, public ActiveDOMObject, public EventTarget {
-    WTF_MAKE_FAST_ALLOCATED;
+class Notification : public RefCounted<Notification>, public NotificationBase {
+    REFCOUNTED_EVENT_TARGET(Notification);
+
 public:
-    Notification();
-#if ENABLE(LEGACY_NOTIFICATIONS)
-    static PassRefPtr<Notification> create(const String& title, const String& body, const String& iconURI, ScriptExecutionContext*, ExceptionState&, PassRefPtr<NotificationCenter> provider);
-#endif
-#if ENABLE(NOTIFICATIONS)
-    static PassRefPtr<Notification> create(ScriptExecutionContext*, const String& title, const Dictionary& options);
-#endif
+    static PassRefPtr<Notification> create(ExecutionContext*, const String& title, const Dictionary& options);
 
     virtual ~Notification();
 
-    void show();
-#if ENABLE(LEGACY_NOTIFICATIONS)
-    void cancel() { close(); }
-#endif
-    void close();
-
-    KURL iconURL() const { return m_icon; }
-    void setIconURL(const KURL& url) { m_icon = url; }
-
-    String title() const { return m_title; }
-    String body() const { return m_body; }
-
-    String lang() const { return m_lang; }
-    void setLang(const String& lang) { m_lang = lang; }
-
-    String dir() const { return m_direction; }
-    void setDir(const String& dir) { m_direction = dir; }
-
-#if ENABLE(LEGACY_NOTIFICATIONS)
-    String replaceId() const { return tag(); }
-    void setReplaceId(const String& replaceId) { setTag(replaceId); }
-#endif
-
-    String tag() const { return m_tag; }
-    void setTag(const String& tag) { m_tag = tag; }
-
-    TextDirection direction() const { return dir() == "rtl" ? RTL : LTR; }
-
-#if ENABLE(LEGACY_NOTIFICATIONS)
-    DEFINE_MAPPED_ATTRIBUTE_EVENT_LISTENER(display, show);
-#endif
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(show);
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(error);
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(close);
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(click);
-
-    void dispatchClickEvent();
-    void dispatchCloseEvent();
-    void dispatchErrorEvent();
-    void dispatchShowEvent();
-
-    using RefCounted<Notification>::ref;
-    using RefCounted<Notification>::deref;
+    static const String& permission(ExecutionContext*);
+    static void requestPermission(ExecutionContext*, PassOwnPtr<NotificationPermissionCallback> = nullptr);
 
     // EventTarget interface
-    virtual const AtomicString& interfaceName() const;
-    virtual ScriptExecutionContext* scriptExecutionContext() const { return ActiveDOMObject::scriptExecutionContext(); }
+    virtual const AtomicString& interfaceName() const OVERRIDE;
 
     // ActiveDOMObject interface
-    virtual void contextDestroyed();
-
-    void stopLoadingIcon();
-
-    // Deprecated. Use functions from NotificationCenter.
-    void detachPresenter() { }
-
-    void finalize();
-
-#if ENABLE(NOTIFICATIONS)
-    static const String& permission(ScriptExecutionContext*);
-    static const String& permissionString(NotificationClient::Permission);
-    static void requestPermission(ScriptExecutionContext*, PassRefPtr<NotificationPermissionCallback> = 0);
-#endif
+    virtual void stop() OVERRIDE;
+    virtual bool hasPendingActivity() const OVERRIDE;
 
 private:
-#if ENABLE(LEGACY_NOTIFICATIONS)
-    Notification(const String& title, const String& body, const String& iconURI, ScriptExecutionContext*, ExceptionState&, PassRefPtr<NotificationCenter>);
-#endif
-#if ENABLE(NOTIFICATIONS)
-    Notification(ScriptExecutionContext*, const String& title);
-#endif
+    Notification(ExecutionContext*, const String& title, NotificationClient*);
 
-    void setBody(const String& body) { m_body = body; }
+    void showSoon();
 
-    // EventTarget interface
-    virtual void refEventTarget() { ref(); }
-    virtual void derefEventTarget() { deref(); }
-    virtual EventTargetData* eventTargetData();
-    virtual EventTargetData* ensureEventTargetData();
-
-    void startLoadingIcon();
-    void finishLoadingIcon();
-
-#if ENABLE(NOTIFICATIONS)
-    void taskTimerFired(Timer<Notification>*);
-#endif
-
-    // Text notifications.
-    KURL m_icon;
-    String m_title;
-    String m_body;
-
-    String m_direction;
-    String m_lang;
-    String m_tag;
-
-    enum NotificationState {
-        Idle = 0,
-        Showing = 1,
-        Closed = 2,
-    };
-
-    NotificationState m_state;
-
-    RefPtr<NotificationCenter> m_notificationCenter;
-
-    EventTargetData m_eventTargetData;
-
-#if ENABLE(NOTIFICATIONS)
-    OwnPtr<Timer<Notification> > m_taskTimer;
-#endif
+    OwnPtr<AsyncMethodRunner<Notification> > m_asyncRunner;
 };
 
 } // namespace WebCore
-
-#endif // ENABLE(NOTIFICATIONS) || ENABLE(LEGACY_NOTIFICATIONS)
 
 #endif // Notifications_h

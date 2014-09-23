@@ -32,23 +32,23 @@
 #include "InspectorFrontendClientLocal.h"
 
 #include "bindings/v8/ScriptObject.h"
+#include "bindings/v8/ScriptState.h"
 #include "core/inspector/InspectorController.h"
 #include "core/inspector/InspectorFrontendHost.h"
 #include "core/page/Page.h"
-#include "core/page/Settings.h"
-#include "core/platform/Timer.h"
+#include "core/frame/Settings.h"
+#include "platform/Timer.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebThread.h"
-#include <wtf/Deque.h>
-#include <wtf/text/WTFString.h>
+#include "wtf/Deque.h"
 
 namespace WebCore {
 
 class InspectorBackendMessageQueue : public RefCounted<InspectorBackendMessageQueue> {
     WTF_MAKE_FAST_ALLOCATED;
 public:
-    explicit InspectorBackendMessageQueue(InspectorController* inspectorController)
-        : m_inspectorController(inspectorController)
+    explicit InspectorBackendMessageQueue(InspectorController& inspectorController)
+        : m_inspectorController(&inspectorController)
     {
     }
 
@@ -68,7 +68,7 @@ public:
 private:
     void schedule()
     {
-        class TaskImpl : public WebKit::WebThread::Task {
+        class TaskImpl : public blink::WebThread::Task {
         public:
             RefPtr<InspectorBackendMessageQueue> owner;
             virtual void run()
@@ -78,7 +78,7 @@ private:
         };
         TaskImpl* taskImpl = new TaskImpl;
         taskImpl->owner = this;
-        WebKit::Platform::current()->currentThread()->postTask(taskImpl);
+        blink::Platform::current()->currentThread()->postTask(taskImpl);
     }
 
     void deliver()
@@ -96,11 +96,10 @@ private:
     Deque<String> m_messages;
 };
 
-InspectorFrontendClientLocal::InspectorFrontendClientLocal(InspectorController* inspectorController, Page* frontendPage)
-    : m_inspectorController(inspectorController)
-    , m_frontendPage(frontendPage)
+InspectorFrontendClientLocal::InspectorFrontendClientLocal(InspectorController& inspectorController, Page* frontendPage)
+    : m_frontendPage(frontendPage)
 {
-    m_frontendPage->settings()->setAllowFileAccessFromFileURLs(true);
+    m_frontendPage->settings().setAllowFileAccessFromFileURLs(true);
     m_messageQueue = adoptRef(new InspectorBackendMessageQueue(inspectorController));
 }
 
@@ -110,7 +109,6 @@ InspectorFrontendClientLocal::~InspectorFrontendClientLocal()
     if (m_frontendHost)
         m_frontendHost->disconnectClient();
     m_frontendPage = 0;
-    m_inspectorController = 0;
 }
 
 void InspectorFrontendClientLocal::windowObjectCleared()

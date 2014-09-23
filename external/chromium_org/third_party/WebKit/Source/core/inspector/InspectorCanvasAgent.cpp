@@ -32,10 +32,8 @@
 #include "core/inspector/InspectorCanvasAgent.h"
 
 #include "HTMLNames.h"
-#include "InspectorFrontend.h"
 #include "bindings/v8/ScriptObject.h"
 #include "bindings/v8/ScriptProfiler.h"
-#include "bindings/v8/ScriptState.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/inspector/BindingVisitors.h"
 #include "core/inspector/InjectedScript.h"
@@ -45,15 +43,15 @@
 #include "core/inspector/InspectorState.h"
 #include "core/inspector/InstrumentingAgents.h"
 #include "core/loader/DocumentLoader.h"
-#include "core/page/DOMWindow.h"
-#include "core/page/Frame.h"
+#include "core/frame/DOMWindow.h"
+#include "core/frame/Frame.h"
 
 using WebCore::TypeBuilder::Array;
 using WebCore::TypeBuilder::Canvas::ResourceId;
 using WebCore::TypeBuilder::Canvas::ResourceState;
 using WebCore::TypeBuilder::Canvas::TraceLog;
 using WebCore::TypeBuilder::Canvas::TraceLogId;
-using WebCore::TypeBuilder::Network::FrameId;
+using WebCore::TypeBuilder::Page::FrameId;
 using WebCore::TypeBuilder::Runtime::RemoteObject;
 
 namespace WebCore {
@@ -272,10 +270,10 @@ void InspectorCanvasAgent::findFramesWithUninstrumentedCanvases()
 
         virtual void visitNode(Node* node) OVERRIDE
         {
-            if (!node->hasTagName(HTMLNames::canvasTag) || !node->document() || !node->document()->frame())
+            if (!node->hasTagName(HTMLNames::canvasTag) || !node->document().frame())
                 return;
 
-            Frame* frame = node->document()->frame();
+            Frame* frame = node->document().frame();
             if (frame->page() != m_page)
                 return;
 
@@ -325,7 +323,7 @@ void InspectorCanvasAgent::didCommitLoad(Frame*, DocumentLoader* loader)
                 String frameId = m_pageAgent->frameId(frame);
                 m_frontend->traceLogsRemoved(&frameId, 0);
             }
-            frame = frame->tree()->traverseNext();
+            frame = frame->tree().traverseNext();
         }
     }
 }

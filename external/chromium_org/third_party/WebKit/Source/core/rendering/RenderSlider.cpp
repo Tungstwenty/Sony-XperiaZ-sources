@@ -21,8 +21,11 @@
 #include "config.h"
 #include "core/rendering/RenderSlider.h"
 
+#include "core/dom/shadow/ShadowRoot.h"
 #include "core/html/HTMLInputElement.h"
+#include "core/html/shadow/ShadowElementNames.h"
 #include "core/html/shadow/SliderThumbElement.h"
+#include "core/rendering/LayoutRectRecorder.h"
 #include "wtf/MathExtras.h"
 
 using std::min;
@@ -40,11 +43,6 @@ RenderSlider::RenderSlider(HTMLInputElement* element)
 
 RenderSlider::~RenderSlider()
 {
-}
-
-bool RenderSlider::canBeReplacedWithInlineRunIn() const
-{
-    return false;
 }
 
 int RenderSlider::baselinePosition(FontBaseline, bool /*firstLine*/, LineDirectionMode, LinePositionMode linePositionMode) const
@@ -85,15 +83,20 @@ void RenderSlider::computePreferredLogicalWidths()
     m_minPreferredLogicalWidth += toAdd;
     m_maxPreferredLogicalWidth += toAdd;
 
-    setPreferredLogicalWidthsDirty(false);
+    clearPreferredLogicalWidthsDirty();
+}
+
+inline SliderThumbElement* RenderSlider::sliderThumbElement() const
+{
+    return toSliderThumbElement(toElement(node())->userAgentShadowRoot()->getElementById(ShadowElementNames::sliderThumb()));
 }
 
 void RenderSlider::layout()
 {
-    StackStats::LayoutCheckPoint layoutCheckPoint;
+    LayoutRectRecorder recorder(*this);
     // FIXME: Find a way to cascade appearance.
     // http://webkit.org/b/62535
-    RenderBox* thumbBox = sliderThumbElementOf(node())->renderBox();
+    RenderBox* thumbBox = sliderThumbElement()->renderBox();
     if (thumbBox && thumbBox->isSliderThumb())
         static_cast<RenderSliderThumb*>(thumbBox)->updateAppearance(style());
 
@@ -102,7 +105,7 @@ void RenderSlider::layout()
 
 bool RenderSlider::inDragMode() const
 {
-    return sliderThumbElementOf(node())->active();
+    return sliderThumbElement()->active();
 }
 
 } // namespace WebCore

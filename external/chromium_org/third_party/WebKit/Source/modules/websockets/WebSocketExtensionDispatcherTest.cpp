@@ -91,7 +91,7 @@ TEST_F(WebSocketExtensionDispatcherTest, TestSingle)
     EXPECT_EQ(1UL, m_parsedExtensionTokens.size());
     EXPECT_EQ("deflate-frame", m_parsedExtensionTokens[0]);
     EXPECT_EQ("deflate-frame", m_extensions.acceptedExtensions());
-    EXPECT_EQ(0, m_parsedParameters[0].size());
+    EXPECT_EQ(0UL, m_parsedParameters[0].size());
 }
 
 TEST_F(WebSocketExtensionDispatcherTest, TestParameters)
@@ -100,7 +100,7 @@ TEST_F(WebSocketExtensionDispatcherTest, TestParameters)
     EXPECT_TRUE(m_extensions.processHeaderValue("mux; max-channels=4; flow-control  "));
     EXPECT_EQ(1UL, m_parsedExtensionTokens.size());
     EXPECT_EQ("mux", m_parsedExtensionTokens[0]);
-    EXPECT_EQ(2, m_parsedParameters[0].size());
+    EXPECT_EQ(2UL, m_parsedParameters[0].size());
     HashMap<String, String>::iterator parameter = m_parsedParameters[0].find("max-channels");
     EXPECT_TRUE(parameter != m_parsedParameters[0].end());
     EXPECT_EQ("4", parameter->value);
@@ -123,8 +123,8 @@ TEST_F(WebSocketExtensionDispatcherTest, TestMultiple)
     addMockProcessor("mux");
     addMockProcessor("deflate-frame");
     EXPECT_TRUE(m_extensions.processHeaderValue("mux ;  max-channels =4;flow-control, deflate-frame  "));
-    EXPECT_TRUE(m_extensions.acceptedExtensions().find("mux") != notFound);
-    EXPECT_TRUE(m_extensions.acceptedExtensions().find("deflate-frame") != notFound);
+    EXPECT_TRUE(m_extensions.acceptedExtensions().find("mux") != kNotFound);
+    EXPECT_TRUE(m_extensions.acceptedExtensions().find("deflate-frame") != kNotFound);
     for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); ++i) {
         EXPECT_EQ(expected[i].token, m_parsedExtensionTokens[i]);
         const HashMap<String, String>& expectedParameters = expected[i].parameters;
@@ -145,7 +145,7 @@ TEST_F(WebSocketExtensionDispatcherTest, TestQuotedString)
 {
     addMockProcessor("x-foo");
     ASSERT_TRUE(m_extensions.processHeaderValue("x-foo; param1=\"quoted-string\"; param2=\"quoted\\.string\""));
-    EXPECT_EQ(2, m_parsedParameters[0].size());
+    EXPECT_EQ(2UL, m_parsedParameters[0].size());
     EXPECT_EQ("quoted-string", m_parsedParameters[0].get("param1"));
     EXPECT_EQ("quoted.string", m_parsedParameters[0].get("param2"));
 }

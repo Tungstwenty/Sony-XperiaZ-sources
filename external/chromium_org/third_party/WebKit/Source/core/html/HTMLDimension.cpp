@@ -62,7 +62,6 @@ static HTMLDimension parseDimension(const CharacterType* characters, size_t last
 
         if (position < endOfCurrentToken && characters[position] == '.') {
             ++position;
-            size_t fractionStart = position;
             Vector<CharacterType> fractionNumbers;
             while (position < endOfCurrentToken && (isASCIIDigit(characters[position]) || isASCIISpace(characters[position]))) {
                 if (isASCIIDigit(characters[position]))
@@ -120,7 +119,7 @@ Vector<HTMLDimension> parseListOfDimensions(const String& input)
     size_t lastParsedIndex = 0;
     while (true) {
         size_t nextComma = trimmedString.find(comma, lastParsedIndex);
-        if (nextComma == notFound)
+        if (nextComma == kNotFound)
             break;
 
         parsedDimensions.append(parseDimension(trimmedString, lastParsedIndex, nextComma));

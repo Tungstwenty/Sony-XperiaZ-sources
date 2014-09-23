@@ -28,6 +28,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "config.h"
+
 #include "FrameTestHelpers.h"
 #include "URLTestHelpers.h"
 #include "V8Event.h"
@@ -36,7 +38,9 @@
 #include "WebView.h"
 #include "WebViewImpl.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/v8/ScriptController.h"
 #include "bindings/v8/SerializedScriptValue.h"
+#include "bindings/v8/V8AbstractEventListener.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebUnitTestSupport.h"
 #include "public/web/WebDOMCustomEvent.h"
@@ -45,72 +49,73 @@
 #include <gtest/gtest.h>
 
 using namespace WebCore;
-using namespace WebKit;
+using namespace blink;
 
 namespace {
 
-class TestListener : public EventListener {
+class TestListener : public V8AbstractEventListener {
 public:
     virtual bool operator==(const EventListener& listener)
     {
         return true;
     }
 
-    virtual void handleEvent(ScriptExecutionContext* context, Event* event)
+    virtual void handleEvent(ExecutionContext* context, Event* event)
     {
         EXPECT_EQ(event->type(), "blah");
 
-        v8::Context::Scope scope(m_v8Context);
-        v8::Isolate* isolate = m_v8Context->GetIsolate();
+        v8::Local<v8::Context> v8Context = WebCore::toV8Context(context, mainThreadNormalWorld());
+        v8::Isolate* isolate = v8Context->GetIsolate();
+        v8::Context::Scope scope(v8Context);
         v8::Handle<v8::Value> jsEvent = toV8(event, v8::Handle<v8::Object>(), isolate);
 
-        EXPECT_EQ(jsEvent->ToObject()->Get(v8::String::New("detail")), v8::Boolean::New(true));
+        EXPECT_EQ(jsEvent->ToObject()->Get(v8::String::NewFromUtf8(isolate, "detail")), v8::Boolean::New(isolate, true));
     }
 
-    static PassRefPtr<TestListener> create(v8::Local<v8::Context> v8Context)
+    static PassRefPtr<TestListener> create(v8::Isolate* isolate)
     {
-        return adoptRef(new TestListener(v8Context));
+        return adoptRef(new TestListener(isolate));
     }
 
 private:
-    TestListener()
-        : EventListener(JSEventListenerType)
+    TestListener(v8::Isolate* isolate)
+        : V8AbstractEventListener(false, 0, isolate)
     {
     }
 
-    TestListener(v8::Local<v8::Context> v8Context)
-        : EventListener(JSEventListenerType)
-        , m_v8Context(v8Context)
+    virtual v8::Local<v8::Value> callListenerFunction(ExecutionContext*, v8::Handle<v8::Value> jsevent, Event*)
     {
+        ASSERT_NOT_REACHED();
+        return v8::Local<v8::Value>();
     }
-
-    v8::Local<v8::Context> m_v8Context;
 };
 
 // Tests that a CustomEvent can be initialized with a 'detail' value that is a
 // SerializedScriptValue, and that this value can be retrieved and read in an
 // event listener. Initialization of a CustomEvent with a SerializedScriptValue
 // is an internal API, so it cannot be tested with a LayoutTest.
+//
+// Triggers crash in GC. http://crbug.com/317669
 TEST(CustomEventTest, InitWithSerializedScriptValue)
 {
     const std::string baseURL = "http://www.test.com";
     const std::string path = "visible_iframe.html";
 
     URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(baseURL.c_str()), WebString::fromUTF8(path.c_str()));
-    WebView* webView = FrameTestHelpers::createWebViewAndLoad(baseURL + path);
-    WebFrameImpl* frame = static_cast<WebFrameImpl*>(webView->mainFrame());
+    FrameTestHelpers::WebViewHelper webViewHelper;
+    WebFrameImpl* frame = toWebFrameImpl(webViewHelper.initializeAndLoad(baseURL + path)->mainFrame());
 
     WebDOMEvent event = frame->frame()->document()->createEvent("CustomEvent", IGNORE_EXCEPTION);
     WebDOMCustomEvent customEvent = event.to<WebDOMCustomEvent>();
 
-    v8::HandleScope handleScope;
-    customEvent.initCustomEvent("blah", false, false, WebSerializedScriptValue::serialize(v8::Boolean::New(true)));
-    RefPtr<EventListener> listener = TestListener::create(frame->mainWorldScriptContext());
+    v8::Isolate* isolate = toIsolate(frame->frame());
+    v8::HandleScope handleScope(isolate);
+    customEvent.initCustomEvent("blah", false, false, WebSerializedScriptValue::serialize(v8::Boolean::New(isolate, true)));
+    RefPtr<EventListener> listener = TestListener::create(isolate);
     frame->frame()->document()->addEventListener("blah", listener, false);
     frame->frame()->document()->dispatchEvent(event);
 
     Platform::current()->unitTestSupport()->unregisterAllMockedURLs();
-    webView->close();
 }
 
 }

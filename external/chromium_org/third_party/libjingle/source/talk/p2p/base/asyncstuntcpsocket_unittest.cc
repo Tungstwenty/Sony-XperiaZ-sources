@@ -109,7 +109,8 @@ class AsyncStunTCPSocketTest : public testing::Test,
   }
 
   void OnReadPacket(talk_base::AsyncPacketSocket* socket, const char* data,
-                    size_t len, const talk_base::SocketAddress& remote_addr) {
+                    size_t len, const talk_base::SocketAddress& remote_addr,
+                    const talk_base::PacketTime& packet_time) {
     recv_packets_.push_back(std::string(data, len));
   }
 
@@ -121,7 +122,8 @@ class AsyncStunTCPSocketTest : public testing::Test,
   }
 
   bool Send(const void* data, size_t len) {
-    size_t ret = send_socket_->Send(reinterpret_cast<const char*>(data), len);
+    size_t ret = send_socket_->Send(
+        reinterpret_cast<const char*>(data), len, talk_base::DSCP_NO_CHANGE);
     vss_->ProcessMessagesUntilIdle();
     return (ret == len);
   }

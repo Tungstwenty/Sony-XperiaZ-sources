@@ -7,6 +7,7 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_helper.h"
 #include "base/android/scoped_java_ref.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
@@ -14,6 +15,8 @@
 #include "content/browser/renderer_host/java/java_bridge_dispatcher_host.h"
 #include "content/common/android/hash_set.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_delegate.h"
 #include "third_party/WebKit/public/web/WebBindings.h"
 
 namespace content {
@@ -26,18 +29,18 @@ JavaBridgeDispatcherHostManager::JavaBridgeDispatcherHostManager(
 JavaBridgeDispatcherHostManager::~JavaBridgeDispatcherHostManager() {
   for (ObjectMap::iterator iter = objects_.begin(); iter != objects_.end();
       ++iter) {
-    WebKit::WebBindings::releaseObject(iter->second);
+    blink::WebBindings::releaseObject(iter->second);
   }
   DCHECK_EQ(0U, instances_.size());
 }
 
-void JavaBridgeDispatcherHostManager::AddNamedObject(const string16& name,
+void JavaBridgeDispatcherHostManager::AddNamedObject(const base::string16& name,
                                                      NPObject* object) {
   // Record this object in a map so that we can add it into RenderViewHosts
   // created later. The JavaBridgeDispatcherHost instances will take a
   // reference to the object, but we take one too, because this method can be
   // called before there are any such instances.
-  WebKit::WebBindings::retainObject(object);
+  blink::WebBindings::retainObject(object);
   objects_[name] = object;
 
   for (InstanceMap::iterator iter = instances_.begin();
@@ -67,19 +70,25 @@ void JavaBridgeDispatcherHostManager::SetRetainedObjectSet(
   }
 }
 
-void JavaBridgeDispatcherHostManager::RemoveNamedObject(const string16& name) {
+void JavaBridgeDispatcherHostManager::RemoveNamedObject(
+    const base::string16& name) {
   ObjectMap::iterator iter = objects_.find(name);
   if (iter == objects_.end()) {
     return;
   }
 
-  WebKit::WebBindings::releaseObject(iter->second);
+  blink::WebBindings::releaseObject(iter->second);
   objects_.erase(iter);
 
   for (InstanceMap::iterator iter = instances_.begin();
       iter != instances_.end(); ++iter) {
     iter->second->RemoveNamedObject(name);
   }
+}
+
+void JavaBridgeDispatcherHostManager::OnGetChannelHandle(
+    RenderViewHost* render_view_host, IPC::Message* reply_msg) {
+  instances_[render_view_host]->OnGetChannelHandle(reply_msg);
 }
 
 void JavaBridgeDispatcherHostManager::RenderViewCreated(
@@ -99,15 +108,10 @@ void JavaBridgeDispatcherHostManager::RenderViewCreated(
 
 void JavaBridgeDispatcherHostManager::RenderViewDeleted(
     RenderViewHost* render_view_host) {
+  if (!instances_.count(render_view_host))  // Needed for tests.
+    return;
+  instances_[render_view_host]->RenderViewDeleted();
   instances_.erase(render_view_host);
-}
-
-void JavaBridgeDispatcherHostManager::WebContentsDestroyed(
-    WebContents* web_contents) {
-  // When a WebContents is shutting down, it clears its observers before
-  // it kills all of its RenderViewHosts, so we won't get a call to
-  // RenderViewDeleted() for all RenderViewHosts.
-  instances_.clear();
 }
 
 void JavaBridgeDispatcherHostManager::DocumentAvailableInMainFrame() {
@@ -151,6 +155,15 @@ void JavaBridgeDispatcherHostManager::JavaBoundObjectDestroyed(
   if (!retained_object_set.is_null()) {
     JNI_Java_HashSet_remove(env, retained_object_set, object);
   }
+}
+
+void JavaBridgeDispatcherHostManager::AddMessageToConsole(
+    int32 level,
+    const char* message) {
+  WebContentsDelegate* delegate = web_contents()->GetDelegate();
+  if (delegate)
+    delegate->AddMessageToConsole(
+        web_contents(), level, ASCIIToUTF16(message), 0, ASCIIToUTF16(""));
 }
 
 }  // namespace content

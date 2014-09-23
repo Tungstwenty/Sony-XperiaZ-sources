@@ -22,7 +22,6 @@
 
 #include "core/svg/SVGStopElement.h"
 
-#include "SVGNames.h"
 #include "core/rendering/svg/RenderSVGGradientStop.h"
 #include "core/rendering/svg/RenderSVGResource.h"
 #include "core/svg/SVGElementInstance.h"
@@ -37,18 +36,17 @@ BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGStopElement)
     REGISTER_PARENT_ANIMATED_PROPERTIES(SVGElement)
 END_REGISTER_ANIMATED_PROPERTIES
 
-inline SVGStopElement::SVGStopElement(const QualifiedName& tagName, Document* document)
-    : SVGElement(tagName, document)
+inline SVGStopElement::SVGStopElement(Document& document)
+    : SVGElement(SVGNames::stopTag, document)
     , m_offset(0)
 {
-    ASSERT(hasTagName(SVGNames::stopTag));
     ScriptWrappable::init(this);
     registerAnimatedPropertiesForSVGStopElement();
 }
 
-PassRefPtr<SVGStopElement> SVGStopElement::create(const QualifiedName& tagName, Document* document)
+PassRefPtr<SVGStopElement> SVGStopElement::create(Document& document)
 {
-    return adoptRef(new SVGStopElement(tagName, document));
+    return adoptRef(new SVGStopElement(document));
 }
 
 bool SVGStopElement::isSupportedAttribute(const QualifiedName& attrName)
@@ -102,7 +100,7 @@ RenderObject* SVGStopElement::createRenderer(RenderStyle*)
     return new RenderSVGGradientStop(this);
 }
 
-bool SVGStopElement::rendererIsNeeded(const NodeRenderingContext&)
+bool SVGStopElement::rendererIsNeeded(const RenderStyle&)
 {
     return true;
 }
@@ -114,7 +112,7 @@ Color SVGStopElement::stopColorIncludingOpacity() const
     // which the renderer or style is null. This entire class is scheduled for removal (Bug WK 86941)
     // and we will tolerate this null check until then.
     if (!style || !style->svgStyle())
-        return Color(Color::transparent); // Transparent black.
+        return Color(Color::transparent, true); // Transparent black.
 
     const SVGRenderStyle* svgStyle = style->svgStyle();
     return colorWithOverrideAlpha(svgStyle->stopColor().rgb(), svgStyle->stopOpacity());

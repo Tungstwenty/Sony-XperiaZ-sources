@@ -54,9 +54,9 @@ namespace WTF {
         // The starting table size. Can be overridden when we know beforehand that
         // a hash table will have at least N entries.
 #if defined(MEMORY_TOOL_REPLACES_ALLOCATOR)
-        static const int minimumTableSize = 1;
+        static const unsigned minimumTableSize = 1;
 #else
-        static const int minimumTableSize = 8;
+        static const unsigned minimumTableSize = 8;
 #endif
     };
 
@@ -190,7 +190,7 @@ namespace WTF {
 
         static const bool needsDestruction = FirstTraits::needsDestruction || SecondTraits::needsDestruction;
 
-        static const int minimumTableSize = FirstTraits::minimumTableSize;
+        static const unsigned minimumTableSize = FirstTraits::minimumTableSize;
 
         static void constructDeletedValue(TraitType& slot) { FirstTraits::constructDeletedValue(slot.first); }
         static bool isDeletedValue(const TraitType& value) { return FirstTraits::isDeletedValue(value.first); }
@@ -207,9 +207,9 @@ namespace WTF {
         {
         }
 
-        KeyValuePair(const KeyTypeArg& key, const ValueTypeArg& value)
-            : key(key)
-            , value(value)
+        KeyValuePair(const KeyTypeArg& _key, const ValueTypeArg& _value)
+            : key(_key)
+            , value(_value)
         {
         }
 
@@ -236,7 +236,7 @@ namespace WTF {
 
         static const bool needsDestruction = KeyTraits::needsDestruction || ValueTraits::needsDestruction;
 
-        static const int minimumTableSize = KeyTraits::minimumTableSize;
+        static const unsigned minimumTableSize = KeyTraits::minimumTableSize;
 
         static void constructDeletedValue(TraitType& slot) { KeyTraits::constructDeletedValue(slot.key); }
         static bool isDeletedValue(const TraitType& value) { return KeyTraits::isDeletedValue(value.key); }

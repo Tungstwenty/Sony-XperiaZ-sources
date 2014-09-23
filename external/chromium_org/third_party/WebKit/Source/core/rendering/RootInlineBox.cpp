@@ -21,20 +21,16 @@
 #include "core/rendering/RootInlineBox.h"
 
 #include "core/dom/Document.h"
-#include "core/page/Chrome.h"
-#include "core/page/ChromeClient.h"
-#include "core/page/Frame.h"
-#include "core/page/Page.h"
-#include "core/platform/graphics/GraphicsContext.h"
-#include "core/platform/text/BidiResolver.h"
 #include "core/rendering/EllipsisBox.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/InlineTextBox.h"
 #include "core/rendering/PaintInfo.h"
-#include "core/rendering/RenderBlock.h"
+#include "core/rendering/RenderBlockFlow.h"
 #include "core/rendering/RenderFlowThread.h"
+#include "core/rendering/RenderInline.h"
 #include "core/rendering/RenderView.h"
 #include "core/rendering/VerticalPositionCache.h"
+#include "platform/text/BidiResolver.h"
 #include "wtf/unicode/Unicode.h"
 
 using namespace std;
@@ -51,7 +47,7 @@ COMPILE_ASSERT(sizeof(RootInlineBox) == sizeof(SameSizeAsRootInlineBox), RootInl
 typedef WTF::HashMap<const RootInlineBox*, EllipsisBox*> EllipsisBoxMap;
 static EllipsisBoxMap* gEllipsisBoxMap = 0;
 
-RootInlineBox::RootInlineBox(RenderBlock* block)
+RootInlineBox::RootInlineBox(RenderBlockFlow* block)
     : InlineFlowBox(block)
     , m_lineBreakPos(0)
     , m_lineBreakObj(0)
@@ -133,7 +129,7 @@ float RootInlineBox::placeEllipsis(const AtomicString& ellipsisStr,  bool ltr, f
     // Create an ellipsis box.
     EllipsisBox* ellipsisBox = new EllipsisBox(renderer(), ellipsisStr, this,
         ellipsisWidth - (markupBox ? markupBox->logicalWidth() : 0), logicalHeight(),
-        y(), !prevRootBox(), isHorizontal(), markupBox);
+        x(), y(), !prevRootBox(), isHorizontal(), markupBox);
 
     if (!gEllipsisBoxMap)
         gEllipsisBoxMap = new EllipsisBoxMap();
@@ -141,8 +137,8 @@ float RootInlineBox::placeEllipsis(const AtomicString& ellipsisStr,  bool ltr, f
     setHasEllipsisBox(true);
 
     // FIXME: Do we need an RTL version of this?
-    if (ltr && (x() + logicalWidth() + ellipsisWidth) <= blockRightEdge) {
-        ellipsisBox->setX(x() + logicalWidth());
+    if (ltr && (logicalLeft() + logicalWidth() + ellipsisWidth) <= blockRightEdge) {
+        ellipsisBox->setLogicalLeft(logicalLeft() + logicalWidth());
         return logicalWidth() + ellipsisWidth;
     }
 
@@ -152,7 +148,7 @@ float RootInlineBox::placeEllipsis(const AtomicString& ellipsisStr,  bool ltr, f
     bool foundBox = false;
     float truncatedWidth = 0;
     float position = placeEllipsisBox(ltr, blockLeftEdge, blockRightEdge, ellipsisWidth, truncatedWidth, foundBox);
-    ellipsisBox->setX(position);
+    ellipsisBox->setLogicalLeft(position);
     return truncatedWidth;
 }
 
@@ -250,7 +246,7 @@ LayoutUnit RootInlineBox::alignBoxesInBlockDirection(LayoutUnit heightOfBlock, G
     bool setMaxDescent = false;
 
     // Figure out if we're in no-quirks mode.
-    bool noQuirksMode = renderer()->document()->inNoQuirksMode();
+    bool noQuirksMode = renderer()->document().inNoQuirksMode();
 
     m_baselineType = requiresIdeographicBaseline(textBoxDataMap) ? IdeographicBaseline : AlphabeticBaseline;
 
@@ -295,14 +291,12 @@ LayoutUnit RootInlineBox::alignBoxesInBlockDirection(LayoutUnit heightOfBlock, G
     return heightOfBlock + maxHeight;
 }
 
-#if ENABLE(CSS3_TEXT)
 float RootInlineBox::maxLogicalTop() const
 {
     float maxLogicalTop = 0;
     computeMaxLogicalTop(maxLogicalTop);
     return maxLogicalTop;
 }
-#endif // CSS3_TEXT
 
 LayoutUnit RootInlineBox::beforeAnnotationsAdjustment() const
 {
@@ -344,7 +338,7 @@ LayoutUnit RootInlineBox::lineSnapAdjustment(LayoutUnit delta) const
 
     // Get the current line grid and offset.
     LayoutState* layoutState = block()->view()->layoutState();
-    RenderBlock* lineGrid = layoutState->lineGrid();
+    RenderBlockFlow* lineGrid = layoutState->lineGrid();
     LayoutSize lineGridOffset = layoutState->lineGridOffset();
     if (!lineGrid || lineGrid->style()->writingMode() != block()->style()->writingMode())
         return 0;
@@ -602,9 +596,9 @@ int RootInlineBox::blockDirectionPointInLine() const
     return !block()->style()->isFlippedBlocksWritingMode() ? max(lineTop(), selectionTop()) : min(lineBottom(), selectionBottom());
 }
 
-RenderBlock* RootInlineBox::block() const
+RenderBlockFlow* RootInlineBox::block() const
 {
-    return toRenderBlock(renderer());
+    return toRenderBlockFlow(renderer());
 }
 
 static bool isEditableLeaf(InlineBox* leaf)
@@ -664,6 +658,13 @@ BidiStatus RootInlineBox::lineBreakBidiStatus() const
 
 void RootInlineBox::setLineBreakInfo(RenderObject* obj, unsigned breakPos, const BidiStatus& status)
 {
+    // When setting lineBreakObj, the RenderObject must not be a RenderInline
+    // with no line boxes, otherwise all sorts of invariants are broken later.
+    // This has security implications because if the RenderObject does not
+    // point to at least one line box, then that RenderInline can be deleted
+    // later without resetting the lineBreakObj, leading to use-after-free.
+    ASSERT_WITH_SECURITY_IMPLICATION(!obj || obj->isText() || !(obj->isRenderInline() && obj->isBox() && !toRenderBox(obj)->inlineBoxWrapper()));
+
     m_lineBreakObj = obj;
     m_lineBreakPos = breakPos;
     m_lineBreakBidiStatusEor = status.eor;
@@ -700,17 +701,16 @@ LayoutRect RootInlineBox::paddedLayoutOverflowRect(LayoutUnit endPadding) const
     if (!endPadding)
         return lineLayoutOverflow;
 
-    // FIXME: Audit whether to use pixel snapped values when not using integers for layout: https://bugs.webkit.org/show_bug.cgi?id=63656
     if (isHorizontal()) {
         if (isLeftToRightDirection())
-            lineLayoutOverflow.shiftMaxXEdgeTo(max<LayoutUnit>(lineLayoutOverflow.maxX(), pixelSnappedLogicalRight() + endPadding));
+            lineLayoutOverflow.shiftMaxXEdgeTo(max<LayoutUnit>(lineLayoutOverflow.maxX(), logicalRight() + endPadding));
         else
-            lineLayoutOverflow.shiftXEdgeTo(min<LayoutUnit>(lineLayoutOverflow.x(), pixelSnappedLogicalLeft() - endPadding));
+            lineLayoutOverflow.shiftXEdgeTo(min<LayoutUnit>(lineLayoutOverflow.x(), logicalLeft() - endPadding));
     } else {
         if (isLeftToRightDirection())
-            lineLayoutOverflow.shiftMaxYEdgeTo(max<LayoutUnit>(lineLayoutOverflow.maxY(), pixelSnappedLogicalRight() + endPadding));
+            lineLayoutOverflow.shiftMaxYEdgeTo(max<LayoutUnit>(lineLayoutOverflow.maxY(), logicalRight() + endPadding));
         else
-            lineLayoutOverflow.shiftYEdgeTo(min<LayoutUnit>(lineLayoutOverflow.y(), pixelSnappedLogicalLeft() - endPadding));
+            lineLayoutOverflow.shiftYEdgeTo(min<LayoutUnit>(lineLayoutOverflow.y(), logicalLeft() - endPadding));
     }
 
     return lineLayoutOverflow;
@@ -842,7 +842,7 @@ LayoutUnit RootInlineBox::verticalPositionForBox(InlineBox* box, VerticalPositio
 
     // This method determines the vertical position for inline elements.
     bool firstLine = isFirstLineStyle();
-    if (firstLine && !renderer->document()->styleSheetCollection()->usesFirstLineRules())
+    if (firstLine && !renderer->document().styleEngine()->usesFirstLineRules())
         firstLine = false;
 
     // Check the cache.

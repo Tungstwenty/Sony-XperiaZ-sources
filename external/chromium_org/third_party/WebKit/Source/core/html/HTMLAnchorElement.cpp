@@ -24,12 +24,12 @@
 #include "config.h"
 #include "core/html/HTMLAnchorElement.h"
 
-#include "HTMLNames.h"
 #include "core/dom/Attribute.h"
-#include "core/dom/EventNames.h"
-#include "core/dom/KeyboardEvent.h"
-#include "core/dom/MouseEvent.h"
 #include "core/editing/FrameSelection.h"
+#include "core/events/KeyboardEvent.h"
+#include "core/events/MouseEvent.h"
+#include "core/events/ThreadLocalEventNames.h"
+#include "core/frame/Frame.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
@@ -40,29 +40,28 @@
 #include "core/loader/PingLoader.h"
 #include "core/page/Chrome.h"
 #include "core/page/ChromeClient.h"
-#include "core/page/Frame.h"
 #include "core/page/Page.h"
-#include "core/page/Settings.h"
-#include "core/platform/HistogramSupport.h"
-#include "core/platform/PlatformMouseEvent.h"
-#include "core/platform/network/DNS.h"
-#include "core/platform/network/ResourceRequest.h"
+#include "core/frame/Settings.h"
 #include "core/rendering/RenderImage.h"
+#include "core/svg/graphics/SVGImage.h"
+#include "platform/PlatformMouseEvent.h"
+#include "platform/network/DNS.h"
+#include "platform/network/ResourceRequest.h"
+#include "platform/weborigin/KnownPorts.h"
+#include "platform/weborigin/SecurityOrigin.h"
+#include "platform/weborigin/SecurityPolicy.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebPrescientNetworking.h"
 #include "public/platform/WebURL.h"
-#include "weborigin/KnownPorts.h"
-#include "weborigin/SecurityOrigin.h"
-#include "weborigin/SecurityPolicy.h"
 #include "wtf/text/StringBuilder.h"
 
 namespace WebCore {
 
 namespace {
 
-void preconnectToURL(const KURL& url, WebKit::WebPreconnectMotivation motivation)
+void preconnectToURL(const KURL& url, blink::WebPreconnectMotivation motivation)
 {
-    WebKit::WebPrescientNetworking* prescientNetworking = WebKit::Platform::current()->prescientNetworking();
+    blink::WebPrescientNetworking* prescientNetworking = blink::Platform::current()->prescientNetworking();
     if (!prescientNetworking)
         return;
 
@@ -91,11 +90,11 @@ private:
     void handleMouseOut(Event* event);
     void handleLeftMouseDown(Event* event);
     void handleGestureTapUnconfirmed(Event*);
-    void handleGestureTapDown(Event*);
+    void handleGestureShowPress(Event*);
     void handleClick(Event* event);
 
     bool shouldPrefetch(const KURL&);
-    void prefetch(WebKit::WebPreconnectMotivation);
+    void prefetch(blink::WebPreconnectMotivation);
 
     HTMLAnchorElement* m_anchorElement;
     double m_mouseOverTimestamp;
@@ -108,7 +107,7 @@ private:
 
 using namespace HTMLNames;
 
-HTMLAnchorElement::HTMLAnchorElement(const QualifiedName& tagName, Document* document)
+HTMLAnchorElement::HTMLAnchorElement(const QualifiedName& tagName, Document& document)
     : HTMLElement(tagName, document)
     , m_hasRootEditableElementForSelectionOnMouseDown(false)
     , m_wasShiftKeyDownOnMouseDown(false)
@@ -118,12 +117,12 @@ HTMLAnchorElement::HTMLAnchorElement(const QualifiedName& tagName, Document* doc
     ScriptWrappable::init(this);
 }
 
-PassRefPtr<HTMLAnchorElement> HTMLAnchorElement::create(Document* document)
+PassRefPtr<HTMLAnchorElement> HTMLAnchorElement::create(Document& document)
 {
     return adoptRef(new HTMLAnchorElement(aTag, document));
 }
 
-PassRefPtr<HTMLAnchorElement> HTMLAnchorElement::create(const QualifiedName& tagName, Document* document)
+PassRefPtr<HTMLAnchorElement> HTMLAnchorElement::create(const QualifiedName& tagName, Document& document)
 {
     return adoptRef(new HTMLAnchorElement(tagName, document));
 }
@@ -131,15 +130,6 @@ PassRefPtr<HTMLAnchorElement> HTMLAnchorElement::create(const QualifiedName& tag
 HTMLAnchorElement::~HTMLAnchorElement()
 {
     clearRootEditableElementForSelectionOnMouseDown();
-}
-
-// This function does not allow leading spaces before the port number.
-static unsigned parsePortFromStringPosition(const String& value, unsigned portStart, unsigned& portEnd)
-{
-    portEnd = portStart;
-    while (isASCIIDigit(value[portEnd]))
-        ++portEnd;
-    return value.substring(portStart, portEnd - portStart).toUInt();
 }
 
 bool HTMLAnchorElement::supportsFocus() const
@@ -162,23 +152,17 @@ bool HTMLAnchorElement::isMouseFocusable() const
 
 bool HTMLAnchorElement::isKeyboardFocusable() const
 {
-    if (!isLink())
+    if (isFocusable() && Element::supportsFocus())
         return HTMLElement::isKeyboardFocusable();
 
-    if (!isFocusable())
-        return false;
-
-    Page* page = document()->page();
-    if (!page)
-        return false;
-
-    if (!page->chrome().client()->tabsToLinks())
-        return false;
-
-    if (isInCanvasSubtree())
-        return true;
-
-    return hasNonEmptyBoundingBox();
+    if (isLink()) {
+        Page* page = document().page();
+        if (!page)
+            return false;
+        if (!page->chrome().client().tabsToLinks())
+            return false;
+    }
+    return HTMLElement::isKeyboardFocusable();
 }
 
 static void appendServerMapMousePosition(StringBuilder& url, Event* event)
@@ -230,10 +214,10 @@ void HTMLAnchorElement::defaultEventHandler(Event* event)
         if (rendererIsEditable()) {
             // This keeps track of the editable block that the selection was in (if it was in one) just before the link was clicked
             // for the LiveWhenNotFocused editable link behavior
-            if (event->type() == eventNames().mousedownEvent && event->isMouseEvent() && toMouseEvent(event)->button() != RightButton && document()->frame() && document()->frame()->selection()) {
-                setRootEditableElementForSelectionOnMouseDown(document()->frame()->selection()->rootEditableElement());
+            if (event->type() == EventTypeNames::mousedown && event->isMouseEvent() && toMouseEvent(event)->button() != RightButton && document().frame()) {
+                setRootEditableElementForSelectionOnMouseDown(document().frame()->selection().rootEditableElement());
                 m_wasShiftKeyDownOnMouseDown = toMouseEvent(event)->shiftKey();
-            } else if (event->type() == eventNames().mouseoverEvent) {
+            } else if (event->type() == EventTypeNames::mouseover) {
                 // These are cleared on mouseover and not mouseout because their values are needed for drag events,
                 // but drag events happen after mouse out events.
                 clearRootEditableElementForSelectionOnMouseDown();
@@ -245,11 +229,11 @@ void HTMLAnchorElement::defaultEventHandler(Event* event)
     HTMLElement::defaultEventHandler(event);
 }
 
-void HTMLAnchorElement::setActive(bool down, bool pause)
+void HTMLAnchorElement::setActive(bool down)
 {
     if (rendererIsEditable()) {
         EditableLinkBehavior editableLinkBehavior = EditableLinkDefaultBehavior;
-        if (Settings* settings = document()->settings())
+        if (Settings* settings = document().settings())
             editableLinkBehavior = settings->editableLinkBehavior();
 
         switch (editableLinkBehavior) {
@@ -264,7 +248,7 @@ void HTMLAnchorElement::setActive(bool down, bool pause)
             // Don't set the link to be active if the current selection is in the same editable block as
             // this link
             case EditableLinkLiveWhenNotFocused:
-                if (down && document()->frame() && document()->frame()->selection()->rootEditableElement() == rootEditableElement())
+                if (down && document().frame() && document().frame()->selection().rootEditableElement() == rootEditableElement())
                     return;
                 break;
 
@@ -274,7 +258,7 @@ void HTMLAnchorElement::setActive(bool down, bool pause)
 
     }
 
-    ContainerNode::setActive(down, pause);
+    ContainerNode::setActive(down);
 }
 
 void HTMLAnchorElement::parseAttribute(const QualifiedName& name, const AtomicString& value)
@@ -284,17 +268,17 @@ void HTMLAnchorElement::parseAttribute(const QualifiedName& name, const AtomicSt
         setIsLink(!value.isNull());
         if (wasLink != isLink()) {
             didAffectSelector(AffectedSelectorLink | AffectedSelectorVisited | AffectedSelectorEnabled);
-            if (wasLink && treeScope()->adjustedFocusedElement() == this) {
+            if (wasLink && treeScope().adjustedFocusedElement() == this) {
                 // We might want to call blur(), but it's dangerous to dispatch
                 // events here.
-                document()->setNeedsFocusedElementCheck();
+                document().setNeedsFocusedElementCheck();
             }
         }
         if (isLink()) {
             String parsedURL = stripLeadingAndTrailingHTMLSpaces(value);
-            if (document()->isDNSPrefetchEnabled()) {
+            if (document().isDNSPrefetchEnabled()) {
                 if (protocolIs(parsedURL, "http") || protocolIs(parsedURL, "https") || parsedURL.startsWith("//"))
-                    prefetchDNS(document()->completeURL(parsedURL).host());
+                    prefetchDNS(document().completeURL(parsedURL).host());
             }
 
             if (wasLink)
@@ -340,12 +324,32 @@ bool HTMLAnchorElement::draggable() const
 
 KURL HTMLAnchorElement::href() const
 {
-    return document()->completeURL(stripLeadingAndTrailingHTMLSpaces(getAttribute(hrefAttr)));
+    return document().completeURL(stripLeadingAndTrailingHTMLSpaces(getAttribute(hrefAttr)));
 }
 
 void HTMLAnchorElement::setHref(const AtomicString& value)
 {
     setAttribute(hrefAttr, value);
+}
+
+KURL HTMLAnchorElement::url() const
+{
+    return href();
+}
+
+void HTMLAnchorElement::setURL(const KURL& url)
+{
+    setHref(AtomicString(url.string()));
+}
+
+String HTMLAnchorElement::input() const
+{
+    return getAttribute(hrefAttr);
+}
+
+void HTMLAnchorElement::setInput(const String& value)
+{
+    setHref(value);
 }
 
 bool HTMLAnchorElement::hasRel(uint32_t relation) const
@@ -378,178 +382,10 @@ String HTMLAnchorElement::target() const
     return getAttribute(targetAttr);
 }
 
-String HTMLAnchorElement::hash() const
-{
-    String fragmentIdentifier = href().fragmentIdentifier();
-    if (fragmentIdentifier.isEmpty())
-        return emptyString();
-    return AtomicString(String("#" + fragmentIdentifier));
-}
-
-void HTMLAnchorElement::setHash(const String& value)
-{
-    KURL url = href();
-    if (value[0] == '#')
-        url.setFragmentIdentifier(value.substring(1));
-    else
-        url.setFragmentIdentifier(value);
-    setHref(url.string());
-}
-
-String HTMLAnchorElement::host() const
-{
-    const KURL& url = href();
-    if (url.hostEnd() == url.pathStart())
-        return url.host();
-    if (isDefaultPortForProtocol(url.port(), url.protocol()))
-        return url.host();
-    return url.host() + ":" + String::number(url.port());
-}
-
-void HTMLAnchorElement::setHost(const String& value)
-{
-    if (value.isEmpty())
-        return;
-    KURL url = href();
-    if (!url.canSetHostOrPort())
-        return;
-
-    size_t separator = value.find(':');
-    if (!separator)
-        return;
-
-    if (separator == notFound)
-        url.setHostAndPort(value);
-    else {
-        unsigned portEnd;
-        unsigned port = parsePortFromStringPosition(value, separator + 1, portEnd);
-        if (!port) {
-            // http://dev.w3.org/html5/spec/infrastructure.html#url-decomposition-idl-attributes
-            // specifically goes against RFC 3986 (p3.2) and
-            // requires setting the port to "0" if it is set to empty string.
-            url.setHostAndPort(value.substring(0, separator + 1) + "0");
-        } else {
-            if (isDefaultPortForProtocol(port, url.protocol()))
-                url.setHostAndPort(value.substring(0, separator));
-            else
-                url.setHostAndPort(value.substring(0, portEnd));
-        }
-    }
-    setHref(url.string());
-}
-
-String HTMLAnchorElement::hostname() const
-{
-    return href().host();
-}
-
-void HTMLAnchorElement::setHostname(const String& value)
-{
-    // Before setting new value:
-    // Remove all leading U+002F SOLIDUS ("/") characters.
-    unsigned i = 0;
-    unsigned hostLength = value.length();
-    while (value[i] == '/')
-        i++;
-
-    if (i == hostLength)
-        return;
-
-    KURL url = href();
-    if (!url.canSetHostOrPort())
-        return;
-
-    url.setHost(value.substring(i));
-    setHref(url.string());
-}
-
-String HTMLAnchorElement::pathname() const
-{
-    return href().path();
-}
-
-void HTMLAnchorElement::setPathname(const String& value)
-{
-    KURL url = href();
-    if (!url.canSetPathname())
-        return;
-
-    if (value[0] == '/')
-        url.setPath(value);
-    else
-        url.setPath("/" + value);
-
-    setHref(url.string());
-}
-
-String HTMLAnchorElement::port() const
-{
-    if (href().hasPort())
-        return String::number(href().port());
-
-    return emptyString();
-}
-
-void HTMLAnchorElement::setPort(const String& value)
-{
-    KURL url = href();
-    if (!url.canSetHostOrPort())
-        return;
-
-    // http://dev.w3.org/html5/spec/infrastructure.html#url-decomposition-idl-attributes
-    // specifically goes against RFC 3986 (p3.2) and
-    // requires setting the port to "0" if it is set to empty string.
-    unsigned port = value.toUInt();
-    if (isDefaultPortForProtocol(port, url.protocol()))
-        url.removePort();
-    else
-        url.setPort(port);
-
-    setHref(url.string());
-}
-
-String HTMLAnchorElement::protocol() const
-{
-    return href().protocol() + ":";
-}
-
-void HTMLAnchorElement::setProtocol(const String& value)
-{
-    KURL url = href();
-    url.setProtocol(value);
-    setHref(url.string());
-}
-
-String HTMLAnchorElement::search() const
-{
-    String query = href().query();
-    return query.isEmpty() ? emptyString() : "?" + query;
-}
-
-String HTMLAnchorElement::origin() const
-{
-    RefPtr<SecurityOrigin> origin = SecurityOrigin::create(href());
-    return origin->toString();
-}
-
-void HTMLAnchorElement::setSearch(const String& value)
-{
-    KURL url = href();
-    String newSearch = (value[0] == '?') ? value.substring(1) : value;
-    // Make sure that '#' in the query does not leak to the hash.
-    url.setQuery(newSearch.replaceWithLiteral('#', "%23"));
-
-    setHref(url.string());
-}
 
 String HTMLAnchorElement::text()
 {
     return innerText();
-}
-
-String HTMLAnchorElement::toString() const
-{
-    return href().string();
 }
 
 bool HTMLAnchorElement::isLiveLink() const
@@ -559,49 +395,49 @@ bool HTMLAnchorElement::isLiveLink() const
 
 void HTMLAnchorElement::sendPings(const KURL& destinationURL)
 {
-    if (!hasAttribute(pingAttr) || !document()->settings() || !document()->settings()->hyperlinkAuditingEnabled())
+    if (!hasAttribute(pingAttr) || !document().settings() || !document().settings()->hyperlinkAuditingEnabled())
         return;
 
     SpaceSplitString pingURLs(getAttribute(pingAttr), false);
     for (unsigned i = 0; i < pingURLs.size(); i++)
-        PingLoader::sendPing(document()->frame(), document()->completeURL(pingURLs[i]), destinationURL);
+        PingLoader::sendPing(document().frame(), document().completeURL(pingURLs[i]), destinationURL);
 }
 
 void HTMLAnchorElement::handleClick(Event* event)
 {
     event->setDefaultHandled();
 
-    Frame* frame = document()->frame();
+    Frame* frame = document().frame();
     if (!frame)
         return;
 
     StringBuilder url;
     url.append(stripLeadingAndTrailingHTMLSpaces(fastGetAttribute(hrefAttr)));
     appendServerMapMousePosition(url, event);
-    KURL completedURL = document()->completeURL(url.toString());
-    if (frame->loader()->client()->shouldAbortNavigationAfterUrlResolve(document()->baseURI(), url.toString(), completedURL))
-      return;
+    KURL completedURL = document().completeURL(url.toString());
+
+    // Schedule the ping before the frame load. Prerender in Chrome may kill the renderer as soon as the navigation is
+    // sent out.
+    sendPings(completedURL);
 
     ResourceRequest request(completedURL);
     if (prefetchEventHandler()->hasIssuedPreconnect())
-        frame->loader()->client()->dispatchWillRequestAfterPreconnect(request);
+        frame->loader().client()->dispatchWillRequestAfterPreconnect(request);
     if (hasAttribute(downloadAttr)) {
         if (!hasRel(RelationNoReferrer)) {
-            String referrer = SecurityPolicy::generateReferrerHeader(document()->referrerPolicy(), completedURL, frame->loader()->outgoingReferrer());
+            String referrer = SecurityPolicy::generateReferrerHeader(document().referrerPolicy(), completedURL, document().outgoingReferrer());
             if (!referrer.isEmpty())
                 request.setHTTPReferrer(referrer);
         }
 
-        frame->loader()->client()->loadURLExternally(request, NavigationPolicyDownload, fastGetAttribute(downloadAttr));
+        frame->loader().client()->loadURLExternally(request, NavigationPolicyDownload, fastGetAttribute(downloadAttr));
     } else {
-        FrameLoadRequest frameRequest(document()->securityOrigin(), request, target());
+        FrameLoadRequest frameRequest(&document(), request, target());
         frameRequest.setTriggeringEvent(event);
         if (hasRel(RelationNoReferrer))
             frameRequest.setShouldSendReferrer(NeverSendReferrer);
-        frame->loader()->load(frameRequest);
+        frame->loader().load(frameRequest);
     }
-
-    sendPings(completedURL);
 }
 
 HTMLAnchorElement::EventType HTMLAnchorElement::eventType(Event* event)
@@ -616,7 +452,7 @@ bool HTMLAnchorElement::treatLinkAsLiveForEventType(EventType eventType) const
     if (!rendererIsEditable())
         return true;
 
-    Settings* settings = document()->settings();
+    Settings* settings = document().settings();
     if (!settings)
         return true;
 
@@ -643,12 +479,12 @@ bool HTMLAnchorElement::treatLinkAsLiveForEventType(EventType eventType) const
 
 bool isEnterKeyKeydownEvent(Event* event)
 {
-    return event->type() == eventNames().keydownEvent && event->isKeyboardEvent() && toKeyboardEvent(event)->keyIdentifier() == "Enter";
+    return event->type() == EventTypeNames::keydown && event->isKeyboardEvent() && toKeyboardEvent(event)->keyIdentifier() == "Enter";
 }
 
 bool isLinkClick(Event* event)
 {
-    return event->type() == eventNames().clickEvent && (!event->isMouseEvent() || toMouseEvent(event)->button() != RightButton);
+    return event->type() == EventTypeNames::click && (!event->isMouseEvent() || toMouseEvent(event)->button() != RightButton);
 }
 
 bool HTMLAnchorElement::willRespondToMouseClickEvents()
@@ -721,15 +557,15 @@ void HTMLAnchorElement::PrefetchEventHandler::handleEvent(Event* event)
     if (!shouldPrefetch(m_anchorElement->href()))
         return;
 
-    if (event->type() == eventNames().mouseoverEvent)
+    if (event->type() == EventTypeNames::mouseover)
         handleMouseOver(event);
-    else if (event->type() == eventNames().mouseoutEvent)
+    else if (event->type() == EventTypeNames::mouseout)
         handleMouseOut(event);
-    else if (event->type() == eventNames().mousedownEvent && event->isMouseEvent() && toMouseEvent(event)->button() == LeftButton)
+    else if (event->type() == EventTypeNames::mousedown && event->isMouseEvent() && toMouseEvent(event)->button() == LeftButton)
         handleLeftMouseDown(event);
-    else if (event->type() == eventNames().gesturetapdownEvent)
-        handleGestureTapDown(event);
-    else if (event->type() == eventNames().gesturetapunconfirmedEvent)
+    else if (event->type() == EventTypeNames::gestureshowpress)
+        handleGestureShowPress(event);
+    else if (event->type() == EventTypeNames::gesturetapunconfirmed)
         handleGestureTapUnconfirmed(event);
     else if (isLinkClick(event))
         handleClick(event);
@@ -740,9 +576,9 @@ void HTMLAnchorElement::PrefetchEventHandler::handleMouseOver(Event* event)
     if (m_mouseOverTimestamp == 0.0) {
         m_mouseOverTimestamp = event->timeStamp();
 
-        HistogramSupport::histogramEnumeration("MouseEventPrefetch.MouseOvers", 0, 2);
+        blink::Platform::current()->histogramEnumeration("MouseEventPrefetch.MouseOvers", 0, 2);
 
-        prefetch(WebKit::WebPreconnectMotivationLinkMouseOver);
+        prefetch(blink::WebPreconnectMotivationLinkMouseOver);
     }
 }
 
@@ -750,7 +586,7 @@ void HTMLAnchorElement::PrefetchEventHandler::handleMouseOut(Event* event)
 {
     if (m_mouseOverTimestamp > 0.0) {
         double mouseOverDuration = convertDOMTimeStampToSeconds(event->timeStamp() - m_mouseOverTimestamp);
-        HistogramSupport::histogramCustomCounts("MouseEventPrefetch.MouseOverDuration_NoClick", mouseOverDuration * 1000, 0, 10000, 100);
+        blink::Platform::current()->histogramCustomCounts("MouseEventPrefetch.MouseOverDuration_NoClick", mouseOverDuration * 1000, 0, 10000, 100);
 
         m_mouseOverTimestamp = 0.0;
     }
@@ -760,27 +596,27 @@ void HTMLAnchorElement::PrefetchEventHandler::handleLeftMouseDown(Event* event)
 {
     m_mouseDownTimestamp = event->timeStamp();
 
-    HistogramSupport::histogramEnumeration("MouseEventPrefetch.MouseDowns", 0, 2);
+    blink::Platform::current()->histogramEnumeration("MouseEventPrefetch.MouseDowns", 0, 2);
 
-    prefetch(WebKit::WebPreconnectMotivationLinkMouseDown);
+    prefetch(blink::WebPreconnectMotivationLinkMouseDown);
 }
 
 void HTMLAnchorElement::PrefetchEventHandler::handleGestureTapUnconfirmed(Event* event)
 {
     m_hadTapUnconfirmed = true;
 
-    HistogramSupport::histogramEnumeration("MouseEventPrefetch.TapUnconfirmeds", 0, 2);
+    blink::Platform::current()->histogramEnumeration("MouseEventPrefetch.TapUnconfirmeds", 0, 2);
 
-    prefetch(WebKit::WebPreconnectMotivationLinkTapUnconfirmed);
+    prefetch(blink::WebPreconnectMotivationLinkTapUnconfirmed);
 }
 
-void HTMLAnchorElement::PrefetchEventHandler::handleGestureTapDown(Event* event)
+void HTMLAnchorElement::PrefetchEventHandler::handleGestureShowPress(Event* event)
 {
     m_tapDownTimestamp = event->timeStamp();
 
-    HistogramSupport::histogramEnumeration("MouseEventPrefetch.TapDowns", 0, 2);
+    blink::Platform::current()->histogramEnumeration("MouseEventPrefetch.TapDowns", 0, 2);
 
-    prefetch(WebKit::WebPreconnectMotivationLinkTapDown);
+    prefetch(blink::WebPreconnectMotivationLinkTapDown);
 }
 
 void HTMLAnchorElement::PrefetchEventHandler::handleClick(Event* event)
@@ -789,27 +625,27 @@ void HTMLAnchorElement::PrefetchEventHandler::handleClick(Event* event)
     if (capturedMouseOver) {
         double mouseOverDuration = convertDOMTimeStampToSeconds(event->timeStamp() - m_mouseOverTimestamp);
 
-        HistogramSupport::histogramCustomCounts("MouseEventPrefetch.MouseOverDuration_Click", mouseOverDuration * 1000, 0, 10000, 100);
+        blink::Platform::current()->histogramCustomCounts("MouseEventPrefetch.MouseOverDuration_Click", mouseOverDuration * 1000, 0, 10000, 100);
     }
 
     bool capturedMouseDown = (m_mouseDownTimestamp > 0.0);
-    HistogramSupport::histogramEnumeration("MouseEventPrefetch.MouseDownFollowedByClick", capturedMouseDown, 2);
+    blink::Platform::current()->histogramEnumeration("MouseEventPrefetch.MouseDownFollowedByClick", capturedMouseDown, 2);
 
     if (capturedMouseDown) {
         double mouseDownDuration = convertDOMTimeStampToSeconds(event->timeStamp() - m_mouseDownTimestamp);
 
-        HistogramSupport::histogramCustomCounts("MouseEventPrefetch.MouseDownDuration_Click", mouseDownDuration * 1000, 0, 10000, 100);
+        blink::Platform::current()->histogramCustomCounts("MouseEventPrefetch.MouseDownDuration_Click", mouseDownDuration * 1000, 0, 10000, 100);
     }
 
     bool capturedTapDown = (m_tapDownTimestamp > 0.0);
     if (capturedTapDown) {
         double tapDownDuration = convertDOMTimeStampToSeconds(event->timeStamp() - m_tapDownTimestamp);
 
-        HistogramSupport::histogramCustomCounts("MouseEventPrefetch.TapDownDuration_Click", tapDownDuration * 1000, 0, 10000, 100);
+        blink::Platform::current()->histogramCustomCounts("MouseEventPrefetch.TapDownDuration_Click", tapDownDuration * 1000, 0, 10000, 100);
     }
 
     int flags = (m_hadTapUnconfirmed ? 2 : 0) | (capturedTapDown ? 1 : 0);
-    HistogramSupport::histogramEnumeration("MouseEventPrefetch.PreTapEventsFollowedByClick", flags, 4);
+    blink::Platform::current()->histogramEnumeration("MouseEventPrefetch.PreTapEventsFollowedByClick", flags, 4);
 }
 
 bool HTMLAnchorElement::PrefetchEventHandler::shouldPrefetch(const KURL& url)
@@ -817,23 +653,21 @@ bool HTMLAnchorElement::PrefetchEventHandler::shouldPrefetch(const KURL& url)
     if (m_hadHREFChanged)
         return false;
 
-    if (m_anchorElement->hasEventListeners(eventNames().clickEvent))
+    if (m_anchorElement->hasEventListeners(EventTypeNames::click))
         return false;
 
     if (!url.protocolIsInHTTPFamily())
         return false;
 
-    Document* document = m_anchorElement->document();
-    if (!document)
+    Document& document = m_anchorElement->document();
+
+    if (!document.securityOrigin()->canDisplay(url))
         return false;
 
-    if (!document->securityOrigin()->canDisplay(url))
+    if (url.hasFragmentIdentifier() && equalIgnoringFragmentIdentifier(document.url(), url))
         return false;
 
-    if (url.hasFragmentIdentifier() && equalIgnoringFragmentIdentifier(document->url(), url))
-        return false;
-
-    Frame* frame = document->frame();
+    Frame* frame = document.frame();
     if (!frame)
         return false;
 
@@ -844,7 +678,7 @@ bool HTMLAnchorElement::PrefetchEventHandler::shouldPrefetch(const KURL& url)
     return true;
 }
 
-void HTMLAnchorElement::PrefetchEventHandler::prefetch(WebKit::WebPreconnectMotivation motivation)
+void HTMLAnchorElement::PrefetchEventHandler::prefetch(blink::WebPreconnectMotivation motivation)
 {
     const KURL& url = m_anchorElement->href();
 
@@ -852,11 +686,16 @@ void HTMLAnchorElement::PrefetchEventHandler::prefetch(WebKit::WebPreconnectMoti
         return;
 
     // The precision of current MouseOver trigger is too low to actually trigger preconnects.
-    if (motivation == WebKit::WebPreconnectMotivationLinkMouseOver)
+    if (motivation == blink::WebPreconnectMotivationLinkMouseOver)
         return;
 
     preconnectToURL(url, motivation);
     m_hasIssuedPreconnect = true;
+}
+
+bool HTMLAnchorElement::isInteractiveContent() const
+{
+    return isLink();
 }
 
 }

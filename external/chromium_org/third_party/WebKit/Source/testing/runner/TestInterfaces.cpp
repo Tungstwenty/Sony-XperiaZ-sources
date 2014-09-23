@@ -30,7 +30,7 @@
 
 #include "TestInterfaces.h"
 
-#include "AccessibilityControllerChromium.h"
+#include "AccessibilityController.h"
 #include "EventSender.h"
 #include "GamepadController.h"
 #include "TestRunner.h"
@@ -44,24 +44,20 @@
 #include "public/web/WebView.h"
 #include <string>
 
-using namespace WebKit;
+using namespace blink;
 using namespace std;
 
 namespace WebTestRunner {
 
 TestInterfaces::TestInterfaces()
     : m_accessibilityController(new AccessibilityController())
-    , m_eventSender(new EventSender())
+    , m_eventSender(new EventSender(this))
     , m_gamepadController(new GamepadController())
     , m_textInputController(new TextInputController())
     , m_testRunner(new TestRunner(this))
     , m_delegate(0)
 {
-    WebKit::setLayoutTestMode(true);
-
-    WebRuntimeFeatures::enableStableFeatures(true);
-    WebRuntimeFeatures::enableExperimentalFeatures(true);
-    WebRuntimeFeatures::enableTestOnlyFeatures(true);
+    blink::setLayoutTestMode(true);
 
     // NOTE: please don't put feature specific enable flags here,
     // instead add them to RuntimeEnabledFeatures.in
@@ -146,6 +142,11 @@ void TestInterfaces::configureForTestWithURL(const WebURL& testURL, bool generat
     }
     if (spec.find("/inspector/") != string::npos)
         m_testRunner->showDevTools();
+    if (spec.find("/viewsource/") != string::npos) {
+        m_testRunner->setShouldEnableViewSource(true);
+        m_testRunner->setShouldGeneratePixelResults(false);
+        m_testRunner->setShouldDumpAsMarkup(true);
+    }
 }
 
 void TestInterfaces::windowOpened(WebTestProxyBase* proxy)
@@ -157,7 +158,7 @@ void TestInterfaces::windowClosed(WebTestProxyBase* proxy)
 {
     vector<WebTestProxyBase*>::iterator pos = find(m_windowList.begin(), m_windowList.end(), proxy);
     if (pos == m_windowList.end()) {
-        WEBKIT_ASSERT_NOT_REACHED();
+        BLINK_ASSERT_NOT_REACHED();
         return;
     }
     m_windowList.erase(pos);
@@ -195,8 +196,10 @@ const vector<WebTestProxyBase*>& TestInterfaces::windowList()
 
 WebThemeEngine* TestInterfaces::themeEngine()
 {
-#if defined(USE_DEFAULT_RENDER_THEME) || !(defined(WIN32) || defined(__APPLE__))
-    return 0;
+#if defined(USE_DEFAULT_RENDER_THEME) || !(defined(WIN32) || defined(__APPLE__) || defined(ANDROID))
+    if (!m_themeEngine.get())
+        m_themeEngine.reset(new WebTestThemeEngineMock());
+    return m_themeEngine.get();
 #elif defined(WIN32)
     if (!m_themeEngine.get())
         m_themeEngine.reset(new WebTestThemeEngineWin());
@@ -205,6 +208,8 @@ WebThemeEngine* TestInterfaces::themeEngine()
     if (!m_themeEngine.get())
         m_themeEngine.reset(new WebTestThemeEngineMac());
     return m_themeEngine.get();
+#else
+    return 0;
 #endif
 }
 

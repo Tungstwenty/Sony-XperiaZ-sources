@@ -26,7 +26,7 @@
 #include "config.h"
 #include "core/svg/animation/SMILTimeContainer.h"
 
-#include "core/dom/NodeTraversal.h"
+#include "core/dom/ElementTraversal.h"
 #include "core/svg/SVGSVGElement.h"
 #include "core/svg/animation/SVGSMILElement.h"
 #include "wtf/CurrentTime.h"
@@ -93,7 +93,7 @@ void SMILTimeContainer::unschedule(SVGSMILElement* animation, SVGElement* target
     AnimationsVector* scheduled = m_scheduledAnimations.get(key);
     ASSERT(scheduled);
     size_t idx = scheduled->find(animation);
-    ASSERT(idx != notFound);
+    ASSERT(idx != kNotFound);
     scheduled->remove(idx);
 }
 
@@ -228,8 +228,8 @@ void SMILTimeContainer::timerFired(Timer<SMILTimeContainer>*)
 void SMILTimeContainer::updateDocumentOrderIndexes()
 {
     unsigned timingElementCount = 0;
-    for (Element* element = m_ownerSVGElement; element; element = ElementTraversal::next(element, m_ownerSVGElement)) {
-        if (SVGSMILElement::isSMILElement(element))
+    for (Element* element = m_ownerSVGElement; element; element = ElementTraversal::next(*element, m_ownerSVGElement)) {
+        if (isSVGSMILElement(*element))
             toSVGSMILElement(element)->setDocumentOrderIndex(timingElementCount++);
     }
     m_documentOrderIndexesDirty = false;
@@ -289,6 +289,7 @@ void SMILTimeContainer::updateAnimations(SMILTime elapsed, bool seekToTime)
             ASSERT(animation->hasValidAttributeName());
 
             // Results are accumulated to the first animation that animates and contributes to a particular element/attribute pair.
+            // FIXME: we should ensure that resultElement is of an appropriate type.
             if (!resultElement) {
                 if (!animation->hasValidAttributeType())
                     continue;

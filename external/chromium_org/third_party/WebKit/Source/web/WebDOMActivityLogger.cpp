@@ -32,13 +32,15 @@
 #include "WebDOMActivityLogger.h"
 
 #include "bindings/v8/DOMWrapperWorld.h"
+#include "bindings/v8/V8Binding.h"
 #include "bindings/v8/V8DOMActivityLogger.h"
+#include "core/dom/Document.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/text/WTFString.h"
 
 using namespace WebCore;
 
-namespace WebKit {
+namespace blink {
 
 class DOMActivityLoggerContainer : public V8DOMActivityLogger {
 public:
@@ -47,9 +49,15 @@ public:
     {
     }
 
-    virtual void log(const String& apiName, int argc, const v8::Handle<v8::Value>* argv, const String& extraInfo)
+    virtual void log(const String& apiName, int argc, const v8::Handle<v8::Value>* argv, const String& extraInfo) OVERRIDE
     {
-        m_domActivityLogger->log(WebString(apiName), argc, argv, WebString(extraInfo));
+        KURL url;
+        String title;
+        if (Document* document = currentDocument()) {
+            url = document->url();
+            title = document->title();
+        }
+        m_domActivityLogger->log(WebString(apiName), argc, argv, WebString(extraInfo), WebURL(url), WebString(title));
     }
 
 private:
@@ -67,4 +75,4 @@ void setDOMActivityLogger(int worldId, WebDOMActivityLogger* logger)
     DOMWrapperWorld::setActivityLogger(worldId, adoptPtr(new DOMActivityLoggerContainer(adoptPtr(logger))));
 }
 
-} // namespace WebKit
+} // namespace blink

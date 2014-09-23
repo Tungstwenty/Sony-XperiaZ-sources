@@ -25,6 +25,7 @@
 #include "config.h"
 #include "core/rendering/RenderLayerModelObject.h"
 
+#include "core/frame/Frame.h"
 #include "core/rendering/RenderLayer.h"
 #include "core/rendering/RenderView.h"
 
@@ -33,13 +34,9 @@ using namespace std;
 namespace WebCore {
 
 bool RenderLayerModelObject::s_wasFloating = false;
-bool RenderLayerModelObject::s_hadLayer = false;
-bool RenderLayerModelObject::s_hadTransform = false;
-bool RenderLayerModelObject::s_layerWasSelfPainting = false;
 
 RenderLayerModelObject::RenderLayerModelObject(ContainerNode* node)
     : RenderObject(node)
-    , m_layer(0)
 {
 }
 
@@ -52,18 +49,14 @@ RenderLayerModelObject::~RenderLayerModelObject()
 
 void RenderLayerModelObject::destroyLayer()
 {
-    ASSERT(!hasLayer()); // Callers should have already called setHasLayer(false)
-    ASSERT(m_layer);
-    delete m_layer;
-    m_layer = 0;
+    setHasLayer(false);
+    m_layer = nullptr;
 }
 
-void RenderLayerModelObject::ensureLayer()
+void RenderLayerModelObject::createLayer()
 {
-    if (m_layer)
-        return;
-
-    m_layer = new RenderLayer(this);
+    ASSERT(!m_layer);
+    m_layer = adoptPtr(new RenderLayer(this));
     setHasLayer(true);
     m_layer->insertOnlyThisLayer();
 }
@@ -71,6 +64,11 @@ void RenderLayerModelObject::ensureLayer()
 bool RenderLayerModelObject::hasSelfPaintingLayer() const
 {
     return m_layer && m_layer->isSelfPaintingLayer();
+}
+
+ScrollableArea* RenderLayerModelObject::scrollableArea() const
+{
+    return m_layer ? m_layer->scrollableArea() : 0;
 }
 
 void RenderLayerModelObject::willBeDestroyed()
@@ -85,17 +83,14 @@ void RenderLayerModelObject::willBeDestroyed()
         }
     }
 
-    // RenderObject::willBeDestroyed calls back to destroyLayer() for layer destruction
     RenderObject::willBeDestroyed();
+
+    destroyLayer();
 }
 
 void RenderLayerModelObject::styleWillChange(StyleDifference diff, const RenderStyle* newStyle)
 {
     s_wasFloating = isFloating();
-    s_hadLayer = hasLayer();
-    s_hadTransform = hasTransform();
-    if (s_hadLayer)
-        s_layerWasSelfPainting = layer()->isSelfPaintingLayer();
 
     // If our z-index changes value or our visibility changes,
     // we need to dirty our stacking context's z-order list.
@@ -105,9 +100,9 @@ void RenderLayerModelObject::styleWillChange(StyleDifference diff, const RenderS
             // Do a repaint with the old style first, e.g., for example if we go from
             // having an outline to not having an outline.
             if (diff == StyleDifferenceRepaintLayer) {
-                layer()->repaintIncludingDescendants();
+                layer()->repainter().repaintIncludingDescendants();
                 if (!(oldStyle->clip() == newStyle->clip()))
-                    layer()->clearClipRectsIncludingDescendants();
+                    layer()->clipper().clearClipRectsIncludingDescendants();
             } else if (diff == StyleDifferenceRepaint || newStyle->outlineSize() < oldStyle->outlineSize())
                 repaint();
         }
@@ -125,7 +120,7 @@ void RenderLayerModelObject::styleWillChange(StyleDifference diff, const RenderS
                     || oldStyle->transform() != newStyle->transform()
                     || oldStyle->filter() != newStyle->filter()
                     )
-                layer()->repaintIncludingDescendants();
+                layer()->repainter().repaintIncludingDescendants();
             } else if (newStyle->hasTransform() || newStyle->opacity() < 1 || newStyle->hasFilter()) {
                 // If we don't have a layer yet, but we are going to get one because of transform or opacity,
                 //  then we need to repaint the old position of the object.
@@ -139,6 +134,10 @@ void RenderLayerModelObject::styleWillChange(StyleDifference diff, const RenderS
 
 void RenderLayerModelObject::styleDidChange(StyleDifference diff, const RenderStyle* oldStyle)
 {
+    bool hadTransform = hasTransform();
+    bool hadLayer = hasLayer();
+    bool layerWasSelfPainting = hadLayer && layer()->isSelfPaintingLayer();
+
     RenderObject::styleDidChange(diff, oldStyle);
     updateFromStyle();
 
@@ -146,9 +145,9 @@ void RenderLayerModelObject::styleDidChange(StyleDifference diff, const RenderSt
         if (!layer() && layerCreationAllowedForSubtree()) {
             if (s_wasFloating && isFloating())
                 setChildNeedsLayout();
-            ensureLayer();
+            createLayer();
             if (parent() && !needsLayout() && containingBlock()) {
-                layer()->setRepaintStatus(NeedsFullRepaint);
+                layer()->repainter().setRepaintStatus(NeedsFullRepaint);
                 // There is only one layer to update, it is not worth using |cachedOffset| since
                 // we are not sure the value will be used.
                 layer()->updateLayerPositions(0);
@@ -160,13 +159,13 @@ void RenderLayerModelObject::styleDidChange(StyleDifference diff, const RenderSt
         layer()->removeOnlyThisLayer(); // calls destroyLayer() which clears m_layer
         if (s_wasFloating && isFloating())
             setChildNeedsLayout();
-        if (s_hadTransform)
+        if (hadTransform)
             setNeedsLayoutAndPrefWidthsRecalc();
     }
 
     if (layer()) {
         layer()->styleChanged(diff, oldStyle);
-        if (s_hadLayer && layer()->isSelfPaintingLayer() != s_layerWasSelfPainting)
+        if (hadLayer && layer()->isSelfPaintingLayer() != layerWasSelfPainting)
             setChildNeedsLayout();
     }
 
@@ -198,6 +197,21 @@ void RenderLayerModelObject::addLayerHitTestRects(LayerHitTestRects& rects, cons
     } else {
         RenderObject::addLayerHitTestRects(rects, currentLayer, layerOffset, containerRect);
     }
+}
+
+CompositedLayerMappingPtr RenderLayerModelObject::compositedLayerMapping() const
+{
+    return m_layer ? m_layer->compositedLayerMapping() : 0;
+}
+
+bool RenderLayerModelObject::hasCompositedLayerMapping() const
+{
+    return m_layer ? m_layer->hasCompositedLayerMapping() : false;
+}
+
+CompositedLayerMapping* RenderLayerModelObject::groupedMapping() const
+{
+    return m_layer ? m_layer->groupedMapping() : 0;
 }
 
 } // namespace WebCore

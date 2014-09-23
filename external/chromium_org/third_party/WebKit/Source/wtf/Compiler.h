@@ -205,6 +205,14 @@
 #define WARN_UNUSED_RETURN
 #endif
 
+/* ALLOW_UNUSED */
+
+#if COMPILER(GCC)
+#define ALLOW_UNUSED __attribute__((unused))
+#else
+#define ALLOW_UNUSED
+#endif
+
 /* OVERRIDE and FINAL */
 
 #if COMPILER_SUPPORTS(CXX_OVERRIDE_CONTROL)
@@ -219,6 +227,14 @@
 #else
 #define OVERRIDE
 #define FINAL
+#endif
+
+/* WTF_DELETED_FUNCTION */
+
+#if COMPILER_SUPPORTS(CXX_DELETED_FUNCTIONS)
+#define WTF_DELETED_FUNCTION = delete
+#else
+#define WTF_DELETED_FUNCTION
 #endif
 
 /* REFERENCED_FROM_ASM */
@@ -244,6 +260,18 @@
 /* ABI */
 #if defined(__ARM_EABI__) || defined(__EABI__)
 #define WTF_COMPILER_SUPPORTS_EABI 1
+#endif
+
+/* WTF_PRETTY_FUNCTION */
+
+#if COMPILER(GCC)
+#define WTF_COMPILER_SUPPORTS_PRETTY_FUNCTION 1
+#define WTF_PRETTY_FUNCTION __PRETTY_FUNCTION__
+#elif COMPILER(MSVC)
+#define WTF_COMPILER_SUPPORTS_PRETTY_FUNCTION 1
+#define WTF_PRETTY_FUNCTION __FUNCDNAME__
+#else
+#define WTF_PRETTY_FUNCTION __FUNCTION__
 #endif
 
 #endif /* WTF_Compiler_h */

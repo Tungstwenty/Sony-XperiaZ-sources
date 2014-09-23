@@ -46,7 +46,7 @@ static Node* enclosingListChild(Node* node, Node* listNode)
     return listChild;
 }
 
-PassRefPtr<HTMLElement> InsertListCommand::insertList(Document* document, Type type)
+PassRefPtr<HTMLElement> InsertListCommand::insertList(Document& document, Type type)
 {
     RefPtr<InsertListCommand> insertCommand = create(document, type);
     insertCommand->apply();
@@ -99,7 +99,7 @@ bool InsertListCommand::selectionHasListOfType(const VisibleSelection& selection
     return true;
 }
 
-InsertListCommand::InsertListCommand(Document* document, Type type)
+InsertListCommand::InsertListCommand(Document& document, Type type)
     : CompositeEditCommand(document), m_type(type)
 {
 }
@@ -134,6 +134,8 @@ void InsertListCommand::doApply()
         VisiblePosition startOfLastParagraph = startOfParagraph(endOfSelection, CanSkipOverEditingBoundary);
 
         if (startOfParagraph(startOfSelection, CanSkipOverEditingBoundary) != startOfLastParagraph) {
+            RefPtr<ContainerNode> scope;
+            int indexForEndOfSelection = indexForVisiblePosition(endOfSelection, scope);
             bool forceCreateList = !selectionHasListOfType(selection, listTag);
 
             RefPtr<Range> currentSelection = endingSelection().firstRange();
@@ -144,7 +146,7 @@ void InsertListCommand::doApply()
                 // infinite loop and because there is no more work to be done.
                 // FIXME(<rdar://problem/5983974>): The endingSelection() may be incorrect here.  Compute
                 // the new location of endOfSelection and use it as the end of the new selection.
-                if (!startOfLastParagraph.deepEquivalent().anchorNode()->inDocument())
+                if (!startOfLastParagraph.deepEquivalent().inDocument())
                     return;
                 setEndingSelection(startOfCurrentParagraph);
 
@@ -153,8 +155,6 @@ void InsertListCommand::doApply()
                 // FIXME: This is an inefficient way to keep selection alive because indexForVisiblePosition walks from
                 // the beginning of the document to the endOfSelection everytime this code is executed.
                 // But not using index is hard because there are so many ways we can lose selection inside doApplyForSingleParagraph.
-                RefPtr<ContainerNode> scope;
-                int indexForEndOfSelection = indexForVisiblePosition(endOfSelection, scope);
                 doApplyForSingleParagraph(forceCreateList, listTag, currentSelection.get());
                 if (endOfSelection.isNull() || endOfSelection.isOrphan() || startOfLastParagraph.isNull() || startOfLastParagraph.isOrphan()) {
                     endOfSelection = visiblePositionForIndex(indexForEndOfSelection, scope.get());
@@ -178,7 +178,11 @@ void InsertListCommand::doApply()
             setEndingSelection(endOfSelection);
             doApplyForSingleParagraph(forceCreateList, listTag, currentSelection.get());
             // Fetch the end of the selection, for the reason mentioned above.
-            endOfSelection = endingSelection().visibleEnd();
+            if (endOfSelection.isNull() || endOfSelection.isOrphan()) {
+                endOfSelection = visiblePositionForIndex(indexForEndOfSelection, scope.get());
+                if (endOfSelection.isNull())
+                    return;
+            }
             setEndingSelection(VisibleSelection(startOfSelection, endOfSelection, endingSelection().isDirectional()));
             return;
         }
@@ -378,7 +382,7 @@ PassRefPtr<HTMLElement> InsertListCommand::listifyParagraph(const VisiblePositio
         // Layout is necessary since start's node's inline renderers may have been destroyed by the insertion
         // The end of the content may have changed after the insertion and layout so update it as well.
         if (insertionPos == start.deepEquivalent()) {
-            listElement->document()->updateLayoutIgnorePendingStylesheets();
+            listElement->document().updateLayoutIgnorePendingStylesheets();
             start = startOfParagraph(originalStart, CanSkipOverEditingBoundary);
             end = endOfParagraph(start, CanSkipOverEditingBoundary);
         }

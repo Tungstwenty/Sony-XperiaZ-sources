@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005, 2006, 2007, 2008, 2009, 2010 Apple Inc. All rights reserved.
+ *  Copyright (C) 2005, 2006, 2007, 2008, 2009, 2010, 2013 Apple Inc. All rights reserved.
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Library General Public
@@ -24,7 +24,6 @@
 #define WTF_RefPtr_h
 
 #include <algorithm>
-#include "wtf/FastAllocBase.h"
 #include "wtf/HashTableDeletedValueType.h"
 #include "wtf/PassRefPtr.h"
 
@@ -33,10 +32,10 @@ namespace WTF {
     template<typename T> class PassRefPtr;
 
     template<typename T> class RefPtr {
-        WTF_MAKE_FAST_ALLOCATED;
     public:
         ALWAYS_INLINE RefPtr() : m_ptr(0) { }
         ALWAYS_INLINE RefPtr(T* ptr) : m_ptr(ptr) { refIfNotNull(ptr); }
+        ALWAYS_INLINE explicit RefPtr(T& ref) : m_ptr(&ref) { m_ptr->ref(); }
         ALWAYS_INLINE RefPtr(const RefPtr& o) : m_ptr(o.m_ptr) { refIfNotNull(m_ptr); }
         template<typename U> RefPtr(const RefPtr<U>& o, EnsurePtrConvertibleArgDecl(U, T)) : m_ptr(o.get()) { refIfNotNull(m_ptr); }
 
@@ -69,8 +68,8 @@ namespace WTF {
 #if !COMPILER_SUPPORTS(CXX_NULLPTR)
         RefPtr& operator=(std::nullptr_t) { clear(); return *this; }
 #endif
-        template<typename U> EnsurePtrConvertibleType(RefPtr<T>&, U, T) operator=(const RefPtr<U>&);
-        template<typename U> EnsurePtrConvertibleType(RefPtr<T>&, U, T) operator=(const PassRefPtr<U>&);
+        template<typename U> RefPtr<T>& operator=(const RefPtr<U>&);
+        template<typename U> RefPtr<T>& operator=(const PassRefPtr<U>&);
 
         void swap(RefPtr&);
 
@@ -92,52 +91,42 @@ namespace WTF {
         derefIfNotNull(ptr);
     }
 
-    template<typename T> inline RefPtr<T>& RefPtr<T>::operator=(const RefPtr<T>& o)
+    template<typename T> inline RefPtr<T>& RefPtr<T>::operator=(const RefPtr& o)
     {
-        T* optr = o.get();
-        refIfNotNull(optr);
-        T* ptr = m_ptr;
-        m_ptr = optr;
-        derefIfNotNull(ptr);
+        RefPtr ptr = o;
+        swap(ptr);
         return *this;
     }
 
-    template<typename T> template<typename U> inline EnsurePtrConvertibleType(RefPtr<T>&, U, T) RefPtr<T>::operator=(const RefPtr<U>& o)
+    template<typename T> template<typename U> inline RefPtr<T>& RefPtr<T>::operator=(const RefPtr<U>& o)
     {
-        T* optr = o.get();
-        refIfNotNull(optr);
-        T* ptr = m_ptr;
-        m_ptr = optr;
-        derefIfNotNull(ptr);
+        RefPtr ptr = o;
+        swap(ptr);
         return *this;
     }
 
     template<typename T> inline RefPtr<T>& RefPtr<T>::operator=(T* optr)
     {
-        refIfNotNull(optr);
-        T* ptr = m_ptr;
-        m_ptr = optr;
-        derefIfNotNull(ptr);
+        RefPtr ptr = optr;
+        swap(ptr);
         return *this;
     }
 
     template<typename T> inline RefPtr<T>& RefPtr<T>::operator=(const PassRefPtr<T>& o)
     {
-        T* ptr = m_ptr;
-        m_ptr = o.leakRef();
-        derefIfNotNull(ptr);
+        RefPtr ptr = o;
+        swap(ptr);
         return *this;
     }
 
-    template<typename T> template<typename U> inline EnsurePtrConvertibleType(RefPtr<T>&, U, T) RefPtr<T>::operator=(const PassRefPtr<U>& o)
+    template<typename T> template<typename U> inline RefPtr<T>& RefPtr<T>::operator=(const PassRefPtr<U>& o)
     {
-        T* ptr = m_ptr;
-        m_ptr = o.leakRef();
-        derefIfNotNull(ptr);
+        RefPtr ptr = o;
+        swap(ptr);
         return *this;
     }
 
-    template<class T> inline void RefPtr<T>::swap(RefPtr<T>& o)
+    template<class T> inline void RefPtr<T>::swap(RefPtr& o)
     {
         std::swap(m_ptr, o.m_ptr);
     }
@@ -182,11 +171,6 @@ namespace WTF {
         return RefPtr<T>(static_cast<T*>(p.get()));
     }
 
-    template<typename T> inline RefPtr<T> const_pointer_cast(const RefPtr<T>& p)
-    {
-        return RefPtr<T>(const_cast<T*>(p.get()));
-    }
-
     template<typename T> inline T* getPtr(const RefPtr<T>& p)
     {
         return p.get();
@@ -196,6 +180,5 @@ namespace WTF {
 
 using WTF::RefPtr;
 using WTF::static_pointer_cast;
-using WTF::const_pointer_cast;
 
 #endif // WTF_RefPtr_h

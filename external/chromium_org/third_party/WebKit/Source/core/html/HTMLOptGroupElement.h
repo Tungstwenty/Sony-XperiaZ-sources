@@ -32,7 +32,7 @@ class HTMLSelectElement;
 
 class HTMLOptGroupElement FINAL : public HTMLElement {
 public:
-    static PassRefPtr<HTMLOptGroupElement> create(const QualifiedName&, Document*);
+    static PassRefPtr<HTMLOptGroupElement> create(Document&);
 
     virtual bool isDisabledFormControl() const OVERRIDE;
     HTMLSelectElement* ownerSelectElement() const;
@@ -40,12 +40,12 @@ public:
     String groupLabelText() const;
 
 private:
-    HTMLOptGroupElement(const QualifiedName&, Document*);
+    explicit HTMLOptGroupElement(Document&);
 
     virtual const AtomicString& formControlType() const;
     virtual bool rendererIsFocusable() const OVERRIDE;
     virtual void parseAttribute(const QualifiedName&, const AtomicString&) OVERRIDE;
-    virtual bool rendererIsNeeded(const NodeRenderingContext&) { return false; }
+    virtual bool rendererIsNeeded(const RenderStyle&) { return false; }
     virtual void attach(const AttachContext& = AttachContext()) OVERRIDE;
     virtual void detach(const AttachContext& = AttachContext()) OVERRIDE;
 
@@ -73,11 +73,12 @@ inline bool isHTMLOptGroupElement(const Element* element)
     return element->hasTagName(HTMLNames::optgroupTag);
 }
 
-inline HTMLOptGroupElement* toHTMLOptGroupElement(Node* node)
+inline bool isHTMLOptGroupElement(const Element& element)
 {
-    ASSERT_WITH_SECURITY_IMPLICATION(!node || isHTMLOptGroupElement(node));
-    return static_cast<HTMLOptGroupElement*>(node);
+    return element.hasTagName(HTMLNames::optgroupTag);
 }
+
+DEFINE_NODE_TYPE_CASTS(HTMLOptGroupElement, hasTagName(HTMLNames::optgroupTag));
 
 } //namespace
 

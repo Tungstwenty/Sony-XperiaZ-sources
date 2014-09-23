@@ -94,7 +94,7 @@ PassRefPtr<CSSValueList> CSSValueList::copy()
     return newList.release();
 }
 
-String CSSValueList::customCssText(CssTextFormattingFlags formattingFlag) const
+String CSSValueList::customCSSText(CSSTextFormattingFlags formattingFlag) const
 {
     StringBuilder result;
     String separator;
@@ -117,7 +117,7 @@ String CSSValueList::customCssText(CssTextFormattingFlags formattingFlag) const
         if (!result.isEmpty())
             result.append(separator);
         if (formattingFlag == AlwaysQuoteCSSString && m_values[i]->isPrimitiveValue())
-            result.append(toCSSPrimitiveValue(m_values[i].get())->customCssText(AlwaysQuoteCSSString));
+            result.append(toCSSPrimitiveValue(m_values[i].get())->customCSSText(AlwaysQuoteCSSString));
         else
             result.append(m_values[i]->cssText());
     }
@@ -127,7 +127,9 @@ String CSSValueList::customCssText(CssTextFormattingFlags formattingFlag) const
 
 bool CSSValueList::equals(const CSSValueList& other) const
 {
-    return m_valueListSeparator == other.m_valueListSeparator && compareCSSValueVector<CSSValue>(m_values, other.m_values);
+    // FIXME: the explicit Vector conversion copies into a temporary and is
+    // wasteful.
+    return m_valueListSeparator == other.m_valueListSeparator && compareCSSValueVector<CSSValue>(Vector<RefPtr<CSSValue> >(m_values), Vector<RefPtr<CSSValue> >(other.m_values));
 }
 
 bool CSSValueList::equals(const CSSValue& other) const

@@ -59,14 +59,32 @@ static PassRefPtr<CSSValue> strokeDashArrayToCSSValueList(const Vector<SVGLength
     return list.release();
 }
 
-PassRefPtr<SVGPaint> CSSComputedStyleDeclaration::adjustSVGPaintForCurrentColor(PassRefPtr<SVGPaint> newPaint, RenderStyle* style) const
+static PassRefPtr<CSSValue> paintOrderToCSSValueList(EPaintOrder paintorder)
+{
+    RefPtr<CSSValueList> list = CSSValueList::createSpaceSeparated();
+    do {
+        EPaintOrderType paintOrderType = (EPaintOrderType)(paintorder & ((1 << kPaintOrderBitwidth) - 1));
+        switch (paintOrderType) {
+        case PT_FILL:
+        case PT_STROKE:
+        case PT_MARKERS:
+            list->append(CSSPrimitiveValue::create(paintOrderType));
+            break;
+        case PT_NONE:
+        default:
+            ASSERT_NOT_REACHED();
+            break;
+        }
+    } while (paintorder >>= kPaintOrderBitwidth);
+
+    return list.release();
+}
+
+PassRefPtr<SVGPaint> CSSComputedStyleDeclaration::adjustSVGPaintForCurrentColor(PassRefPtr<SVGPaint> newPaint, RenderStyle& style) const
 {
     RefPtr<SVGPaint> paint = newPaint;
-    if (paint->paintType() == SVGPaint::SVG_PAINTTYPE_CURRENTCOLOR || paint->paintType() == SVGPaint::SVG_PAINTTYPE_URI_CURRENTCOLOR) {
-        // SVG handles currentColor itself, style->color() is guaranteed not to be currentColor.
-        ASSERT(!style->color().isCurrentColor());
-        paint->setColor(style->color().color());
-    }
+    if (paint->paintType() == SVGPaint::SVG_PAINTTYPE_CURRENTCOLOR || paint->paintType() == SVGPaint::SVG_PAINTTYPE_URI_CURRENTCOLOR)
+        paint->setColor(style.color());
     return paint.release();
 }
 
@@ -78,7 +96,7 @@ PassRefPtr<CSSValue> CSSComputedStyleDeclaration::getSVGPropertyCSSValue(CSSProp
 
     // Make sure our layout is up to date before we allow a query on these attributes.
     if (updateLayout)
-        node->document()->updateLayout();
+        node->document().updateLayout();
 
     RenderStyle* style = node->computedStyle();
     if (!style)
@@ -136,13 +154,13 @@ PassRefPtr<CSSValue> CSSComputedStyleDeclaration::getSVGPropertyCSSValue(CSSProp
                 return CSSPrimitiveValue::create(svgStyle->filterResource(), CSSPrimitiveValue::CSS_URI);
             return CSSPrimitiveValue::createIdentifier(CSSValueNone);
         case CSSPropertyFloodColor:
-            return currentColorOrValidColor(style, svgStyle->floodColor());
+            return currentColorOrValidColor(*style, svgStyle->floodColor());
         case CSSPropertyLightingColor:
-            return currentColorOrValidColor(style, svgStyle->lightingColor());
+            return currentColorOrValidColor(*style, svgStyle->lightingColor());
         case CSSPropertyStopColor:
-            return currentColorOrValidColor(style, svgStyle->stopColor());
+            return currentColorOrValidColor(*style, svgStyle->stopColor());
         case CSSPropertyFill:
-            return adjustSVGPaintForCurrentColor(SVGPaint::create(svgStyle->fillPaintType(), svgStyle->fillPaintUri(), svgStyle->fillPaintColor()), style);
+            return adjustSVGPaintForCurrentColor(SVGPaint::create(svgStyle->fillPaintType(), svgStyle->fillPaintUri(), svgStyle->fillPaintColor()), *style);
         case CSSPropertyKerning:
             return SVGLength::toCSSPrimitiveValue(svgStyle->kerning());
         case CSSPropertyMarkerEnd:
@@ -158,7 +176,7 @@ PassRefPtr<CSSValue> CSSComputedStyleDeclaration::getSVGPropertyCSSValue(CSSProp
                 return CSSPrimitiveValue::create(svgStyle->markerStartResource(), CSSPrimitiveValue::CSS_URI);
             return CSSPrimitiveValue::createIdentifier(CSSValueNone);
         case CSSPropertyStroke:
-            return adjustSVGPaintForCurrentColor(SVGPaint::create(svgStyle->strokePaintType(), svgStyle->strokePaintUri(), svgStyle->strokePaintColor()), style);
+            return adjustSVGPaintForCurrentColor(SVGPaint::create(svgStyle->strokePaintType(), svgStyle->strokePaintUri(), svgStyle->strokePaintColor()), *style);
         case CSSPropertyStrokeDasharray:
             return strokeDashArrayToCSSValueList(svgStyle->strokeDashArray());
         case CSSPropertyStrokeDashoffset:
@@ -192,6 +210,8 @@ PassRefPtr<CSSValue> CSSComputedStyleDeclaration::getSVGPropertyCSSValue(CSSProp
 
             return 0;
         }
+        case CSSPropertyPaintOrder:
+            return paintOrderToCSSValueList(svgStyle->paintOrder());
         case CSSPropertyVectorEffect:
             return CSSPrimitiveValue::create(svgStyle->vectorEffect());
         case CSSPropertyMaskType:
@@ -206,7 +226,7 @@ PassRefPtr<CSSValue> CSSComputedStyleDeclaration::getSVGPropertyCSSValue(CSSProp
         // in either this switch statement or the one in CSSComputedStyleDelcaration::getPropertyCSSValue
         ASSERT_WITH_MESSAGE(0, "unimplemented propertyID: %d", propertyID);
     }
-    LOG_ERROR("unimplemented propertyID: %d", propertyID);
+    WTF_LOG_ERROR("unimplemented propertyID: %d", propertyID);
     return 0;
 }
 

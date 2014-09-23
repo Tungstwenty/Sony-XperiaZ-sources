@@ -29,39 +29,38 @@
 #include "CSSPropertyNames.h"
 #include "HTMLNames.h"
 #include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ScriptController.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/html/HTMLImageLoader.h"
 #include "core/html/parser/HTMLParserIdioms.h"
-#include "core/page/Settings.h"
+#include "core/frame/Settings.h"
 #include "core/rendering/RenderImage.h"
 #include "core/rendering/RenderVideo.h"
+#include "platform/UserGestureIndicator.h"
 
 namespace WebCore {
 
 using namespace HTMLNames;
 
-inline HTMLVideoElement::HTMLVideoElement(const QualifiedName& tagName, Document* document, bool createdByParser)
-    : HTMLMediaElement(tagName, document, createdByParser)
+inline HTMLVideoElement::HTMLVideoElement(Document& document, bool createdByParser)
+    : HTMLMediaElement(videoTag, document, createdByParser)
 {
-    ASSERT(hasTagName(videoTag));
     ScriptWrappable::init(this);
-    if (document->settings())
-        m_defaultPosterURL = document->settings()->defaultVideoPosterURL();
+    if (document.settings())
+        m_defaultPosterURL = document.settings()->defaultVideoPosterURL();
 }
 
-PassRefPtr<HTMLVideoElement> HTMLVideoElement::create(const QualifiedName& tagName, Document* document, bool createdByParser)
+PassRefPtr<HTMLVideoElement> HTMLVideoElement::create(Document& document, bool createdByParser)
 {
-    RefPtr<HTMLVideoElement> videoElement(adoptRef(new HTMLVideoElement(tagName, document, createdByParser)));
+    RefPtr<HTMLVideoElement> videoElement(adoptRef(new HTMLVideoElement(document, createdByParser)));
     videoElement->suspendIfNeeded();
     return videoElement.release();
 }
 
-bool HTMLVideoElement::rendererIsNeeded(const NodeRenderingContext& context)
+bool HTMLVideoElement::rendererIsNeeded(const RenderStyle& style)
 {
-    return HTMLElement::rendererIsNeeded(context);
+    return HTMLElement::rendererIsNeeded(style);
 }
 
 RenderObject* HTMLVideoElement::createRenderer(RenderStyle*)
@@ -120,8 +119,7 @@ void HTMLVideoElement::parseAttribute(const QualifiedName& name, const AtomicStr
 
 bool HTMLVideoElement::supportsFullscreen() const
 {
-    Page* page = document() ? document()->page() : 0;
-    if (!page)
+    if (!document().page())
         return false;
 
     if (!player() || !player()->supportsFullscreen())
@@ -144,26 +142,12 @@ unsigned HTMLVideoElement::videoHeight() const
     return player()->naturalSize().height();
 }
 
-unsigned HTMLVideoElement::width() const
-{
-    bool ok;
-    unsigned w = getAttribute(widthAttr).string().toUInt(&ok);
-    return ok ? w : 0;
-}
-
-unsigned HTMLVideoElement::height() const
-{
-    bool ok;
-    unsigned h = getAttribute(heightAttr).string().toUInt(&ok);
-    return ok ? h : 0;
-}
-
 bool HTMLVideoElement::isURLAttribute(const Attribute& attribute) const
 {
     return attribute.name() == posterAttr || HTMLMediaElement::isURLAttribute(attribute);
 }
 
-const AtomicString& HTMLVideoElement::imageSourceURL() const
+const AtomicString HTMLVideoElement::imageSourceURL() const
 {
     const AtomicString& url = getAttribute(posterAttr);
     if (!stripLeadingAndTrailingHTMLSpaces(url).isEmpty())
@@ -202,7 +186,7 @@ void HTMLVideoElement::paintCurrentFrameInContext(GraphicsContext* context, cons
     MediaPlayer* player = HTMLMediaElement::player();
     if (!player)
         return;
-    player->paintCurrentFrameInContext(context, destRect);
+    player->paint(context, destRect);
 }
 
 bool HTMLVideoElement::copyVideoTextureToPlatformTexture(GraphicsContext3D* context, Platform3DObject texture, GC3Dint level, GC3Denum type, GC3Denum internalFormat, bool premultiplyAlpha, bool flipY)
@@ -220,15 +204,19 @@ bool HTMLVideoElement::hasAvailableVideoFrame() const
     return player()->hasVideo() && player()->readyState() >= MediaPlayer::HaveCurrentData;
 }
 
-void HTMLVideoElement::webkitEnterFullscreen(ExceptionState& es)
+void HTMLVideoElement::webkitEnterFullscreen(ExceptionState& exceptionState)
 {
     if (isFullscreen())
         return;
 
     // Generate an exception if this isn't called in response to a user gesture, or if the
     // element does not support fullscreen.
-    if ((userGestureRequiredForFullscreen() && !ScriptController::processingUserGesture()) || !supportsFullscreen()) {
-        es.throwDOMException(InvalidStateError);
+    if (userGestureRequiredForFullscreen() && !UserGestureIndicator::processingUserGesture()) {
+        exceptionState.throwDOMException(InvalidStateError, "This element may only enter fullscreen mode in response to a user gesture ('click', for example).");
+        return;
+    }
+    if (!supportsFullscreen()) {
+        exceptionState.throwDOMException(InvalidStateError, "This element does not support fullscreen mode.");
         return;
     }
 
@@ -251,7 +239,7 @@ bool HTMLVideoElement::webkitDisplayingFullscreen()
     return isFullscreen();
 }
 
-void HTMLVideoElement::didMoveToNewDocument(Document* oldDocument)
+void HTMLVideoElement::didMoveToNewDocument(Document& oldDocument)
 {
     if (m_imageLoader)
         m_imageLoader->elementDidMoveToNewDocument();
@@ -279,7 +267,7 @@ KURL HTMLVideoElement::posterImageURL() const
     String url = stripLeadingAndTrailingHTMLSpaces(imageSourceURL());
     if (url.isEmpty())
         return KURL();
-    return document()->completeURL(url);
+    return document().completeURL(url);
 }
 
 }

@@ -38,7 +38,7 @@ namespace WebCore {
 class MIDIAccess;
 }
 
-namespace WebKit {
+namespace blink {
 
 class WebSecurityOrigin;
 
@@ -52,16 +52,18 @@ public:
     WebMIDIPermissionRequest(const WebMIDIPermissionRequest& o) { assign(o); }
     ~WebMIDIPermissionRequest() { reset(); };
 
-    WEBKIT_EXPORT WebSecurityOrigin securityOrigin() const;
-    WEBKIT_EXPORT void setIsAllowed(bool);
+    BLINK_EXPORT WebSecurityOrigin securityOrigin() const;
+    BLINK_EXPORT void setIsAllowed(bool);
 
-    WEBKIT_EXPORT void reset();
-    WEBKIT_EXPORT void assign(const WebMIDIPermissionRequest&);
-    WEBKIT_EXPORT bool equals(const WebMIDIPermissionRequest&) const;
+    BLINK_EXPORT void reset();
+    BLINK_EXPORT void assign(const WebMIDIPermissionRequest&);
+    BLINK_EXPORT bool equals(const WebMIDIPermissionRequest&) const;
 
-#if WEBKIT_IMPLEMENTATION
+#if BLINK_IMPLEMENTATION
     explicit WebMIDIPermissionRequest(const PassRefPtr<WebCore::MIDIAccess>&);
     explicit WebMIDIPermissionRequest(WebCore::MIDIAccess*);
+
+    WebCore::MIDIAccess* midiAccess() const { return m_private.get(); }
 #endif
 
 private:
@@ -78,6 +80,6 @@ inline bool operator!=(const WebMIDIPermissionRequest& a, const WebMIDIPermissio
     return !(a == b);
 }
 
-} // namespace WebKit
+} // namespace blink
 
 #endif // WebMIDIPermissionRequest_h

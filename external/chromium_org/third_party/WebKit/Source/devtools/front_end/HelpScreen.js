@@ -42,7 +42,6 @@ WebInspector.HelpScreen = function(title)
     this.element.className = "help-window-outer";
     this.element.addEventListener("keydown", this._onKeyDown.bind(this), false);
     this.element.tabIndex = 0;
-    this.element.addEventListener("focus", this._onBlur.bind(this), false);
 
     if (title) {
         var mainWindow = this.element.createChild("div", "help-window-main");
@@ -54,9 +53,22 @@ WebInspector.HelpScreen = function(title)
 }
 
 /**
- * @type {WebInspector.HelpScreen}
+ * @type {?WebInspector.HelpScreen}
  */
 WebInspector.HelpScreen._visibleScreen = null;
+
+/**
+ * @return {boolean}
+ */
+WebInspector.HelpScreen.isVisible = function()
+{
+    return !!WebInspector.HelpScreen._visibleScreen;
+}
+
+WebInspector.HelpScreen.focus = function()
+{
+    WebInspector.HelpScreen._visibleScreen.element.focus();
+}
 
 WebInspector.HelpScreen.prototype = {
     _createCloseButton: function()
@@ -76,7 +88,7 @@ WebInspector.HelpScreen.prototype = {
         if (visibleHelpScreen)
             visibleHelpScreen.hide();
         WebInspector.HelpScreen._visibleScreen = this;
-        this.show(document.body);
+        this.show(WebInspector.inspectorView.devtoolsElement());
         this.focus();
     },
 
@@ -112,13 +124,6 @@ WebInspector.HelpScreen.prototype = {
         }
     },
 
-    _onBlur: function(event)
-    {
-        // Pretend we're modal, grab focus back if we're still shown.
-        if (this.isShowing() && !this.element.isSelfOrAncestor(event.target))
-            WebInspector.setCurrentFocusElement(this.element);
-    },
-
     __proto__: WebInspector.View.prototype
 }
 
@@ -132,7 +137,7 @@ WebInspector.HelpScreenUntilReload = function(title, message)
 {
     WebInspector.HelpScreen.call(this, title);
     var p = this.contentElement.createChild("p");
-    p.addStyleClass("help-section");
+    p.classList.add("help-section");
     p.textContent = message;
     WebInspector.debuggerModel.addEventListener(WebInspector.DebuggerModel.Events.GlobalObjectCleared, this.hide, this);
 }

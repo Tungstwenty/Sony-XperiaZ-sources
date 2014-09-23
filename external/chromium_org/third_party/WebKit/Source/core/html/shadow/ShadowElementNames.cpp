@@ -53,15 +53,63 @@ const AtomicString& clearButton()
     return name;
 }
 
+const AtomicString& editingViewPort()
+{
+    DEFINE_STATIC_LOCAL(AtomicString, name, ("editing-view-port", AtomicString::ConstructFromLiteral));
+    return name;
+}
+
+const AtomicString& innerEditor()
+{
+    DEFINE_STATIC_LOCAL(AtomicString, name, ("inner-editor", AtomicString::ConstructFromLiteral));
+    return name;
+}
+
+const AtomicString& passwordGenerator()
+{
+    DEFINE_STATIC_LOCAL(AtomicString, name, ("password-generator", AtomicString::ConstructFromLiteral));
+    return name;
+}
+
 const AtomicString& pickerIndicator()
 {
     DEFINE_STATIC_LOCAL(AtomicString, name, ("picker", AtomicString::ConstructFromLiteral));
     return name;
 }
 
+const AtomicString& placeholder()
+{
+    DEFINE_STATIC_LOCAL(AtomicString, name, ("placeholder", AtomicString::ConstructFromLiteral));
+    return name;
+}
+
 const AtomicString& searchDecoration()
 {
     DEFINE_STATIC_LOCAL(AtomicString, name, ("decoration", AtomicString::ConstructFromLiteral));
+    return name;
+}
+
+const AtomicString& sliderThumb()
+{
+    DEFINE_STATIC_LOCAL(AtomicString, name, ("thumb", AtomicString::ConstructFromLiteral));
+    return name;
+}
+
+const AtomicString& sliderTrack()
+{
+    DEFINE_STATIC_LOCAL(AtomicString, name, ("track", AtomicString::ConstructFromLiteral));
+    return name;
+}
+
+const AtomicString& speechButton()
+{
+    DEFINE_STATIC_LOCAL(AtomicString, name, ("speech", AtomicString::ConstructFromLiteral));
+    return name;
+}
+
+const AtomicString& textFieldContainer()
+{
+    DEFINE_STATIC_LOCAL(AtomicString, name, ("text-field-container", AtomicString::ConstructFromLiteral));
     return name;
 }
 

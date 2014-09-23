@@ -25,9 +25,9 @@
 #include "FetchInitiatorTypeNames.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/dom/Document.h"
-#include "core/loader/cache/CSSStyleSheetResource.h"
-#include "core/loader/cache/FetchRequest.h"
-#include "core/loader/cache/ResourceFetcher.h"
+#include "core/fetch/CSSStyleSheetResource.h"
+#include "core/fetch/FetchRequest.h"
+#include "core/fetch/ResourceFetcher.h"
 
 namespace WebCore {
 
@@ -62,10 +62,10 @@ void StyleRuleImport::setCSSStyleSheet(const String& href, const KURL& baseURL, 
     if (m_styleSheet)
         m_styleSheet->clearOwnerRule();
 
-    CSSParserContext context = m_parentStyleSheet ? m_parentStyleSheet->parserContext() : CSSStrictMode;
-    context.charset = charset;
+    CSSParserContext context = m_parentStyleSheet ? m_parentStyleSheet->parserContext() : HTMLStandardMode;
+    context.setCharset(charset);
     if (!baseURL.isNull())
-        context.baseURL = baseURL;
+        context.setBaseURL(baseURL);
 
     m_styleSheet = StyleSheetContents::create(this, href, context);
 
@@ -115,10 +115,7 @@ void StyleRuleImport::requestStyleSheet()
     }
 
     FetchRequest request(ResourceRequest(absURL), FetchInitiatorTypeNames::css, m_parentStyleSheet->charset());
-    if (m_parentStyleSheet->isUserStyleSheet())
-        m_resource = fetcher->requestUserCSSStyleSheet(request);
-    else
-        m_resource = fetcher->requestCSSStyleSheet(request);
+    m_resource = fetcher->fetchCSSStyleSheet(request);
     if (m_resource) {
         // if the import rule is issued dynamically, the sheet may be
         // removed from the pending sheet count, so let the doc know

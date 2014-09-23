@@ -1,5 +1,6 @@
 /*
  * Copyright 2007, The Android Open Source Project
+ * Copyright (C) 2014, Sony Mobile Communications AB
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -101,7 +102,7 @@ PassRefPtr<Image> ImageBuffer::copyImage() const
     if (!canvas)
       return 0;
 
-    SkDevice* device = canvas->getDevice();
+    SkBaseDevice* device = canvas->getDevice();
     const SkBitmap& orig = device->accessBitmap(false);
 
     SkBitmap copy;

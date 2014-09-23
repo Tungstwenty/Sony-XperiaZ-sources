@@ -32,6 +32,7 @@
 
 #include "PopupContainer.h"
 #include "PopupMenuChromium.h"
+#include "RuntimeEnabledFeatures.h"
 #include "URLTestHelpers.h"
 #include "WebDocument.h"
 #include "WebElement.h"
@@ -40,33 +41,32 @@
 #include "WebFrameImpl.h"
 #include "WebInputEvent.h"
 #include "WebPopupMenuImpl.h"
-#include "WebScreenInfo.h"
 #include "WebSettings.h"
 #include "WebView.h"
 #include "WebViewClient.h"
 #include "WebViewImpl.h"
 #include "core/dom/Element.h"
+#include "core/frame/FrameView.h"
 #include "core/html/HTMLSelectElement.h"
 #include "core/page/EventHandler.h"
-#include "core/page/FrameView.h"
-#include "RuntimeEnabledFeatures.h"
-#include "core/platform/PlatformMouseEvent.h"
-#include "core/platform/PopupMenu.h"
-#include "core/platform/PopupMenuClient.h"
-#include "core/platform/chromium/KeyboardCodes.h"
-#include "core/platform/graphics/Color.h"
-#include "v8.h"
-#include <gtest/gtest.h>
+#include "platform/KeyboardCodes.h"
+#include "platform/PlatformMouseEvent.h"
+#include "platform/PopupMenuClient.h"
+#include "platform/PopupMenu.h"
+#include "platform/graphics/Color.h"
 #include "public/platform/Platform.h"
+#include "public/platform/WebScreenInfo.h"
 #include "public/platform/WebString.h"
-#include "public/platform/WebUnitTestSupport.h"
 #include "public/platform/WebURL.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/WebURLResponse.h"
+#include "public/platform/WebUnitTestSupport.h"
+#include "v8.h"
+#include <gtest/gtest.h>
 
 using namespace WebCore;
-using namespace WebKit;
-using WebKit::URLTestHelpers::toKURL;
+using namespace blink;
+using blink::URLTestHelpers::toKURL;
 
 namespace {
 
@@ -185,9 +185,9 @@ public:
 protected:
     virtual void SetUp()
     {
-        m_webView = static_cast<WebViewImpl*>(WebView::create(&m_webviewClient));
+        m_webView = toWebViewImpl(WebView::create(&m_webviewClient));
         m_webView->initializeMainFrame(&m_webFrameClient);
-        m_popupMenu = adoptRef(new PopupMenuChromium(*static_cast<WebFrameImpl*>(m_webView->mainFrame())->frame(), &m_popupMenuClient));
+        m_popupMenu = adoptRef(new PopupMenuChromium(*toWebFrameImpl(m_webView->mainFrame())->frame(), &m_popupMenuClient));
     }
 
     virtual void TearDown()
@@ -407,7 +407,7 @@ TEST_F(SelectPopupMenuTest, DISABLED_SelectItemEventFire)
     loadFrame(m_webView->mainFrame(), "select_event.html");
     serveRequests();
 
-    m_popupMenuClient.setFocusedNode(static_cast<WebFrameImpl*>(m_webView->mainFrame())->frameView()->frame()->document()->focusedElement());
+    m_popupMenuClient.setFocusedNode(toWebFrameImpl(m_webView->mainFrame())->frameView()->frame().document()->focusedElement());
 
     showPopup();
 
@@ -452,7 +452,7 @@ TEST_F(SelectPopupMenuTest, FLAKY_SelectItemKeyEvent)
     loadFrame(m_webView->mainFrame(), "select_event.html");
     serveRequests();
 
-    m_popupMenuClient.setFocusedNode(static_cast<WebFrameImpl*>(m_webView->mainFrame())->frameView()->frame()->document()->focusedElement());
+    m_popupMenuClient.setFocusedNode(toWebFrameImpl(m_webView->mainFrame())->frameView()->frame().document()->focusedElement());
 
     showPopup();
 
@@ -474,7 +474,7 @@ TEST_F(SelectPopupMenuTest, SelectItemRemoveSelectOnChange)
     loadFrame(m_webView->mainFrame(), "select_event_remove_on_change.html");
     serveRequests();
 
-    m_popupMenuClient.setFocusedNode(static_cast<WebFrameImpl*>(m_webView->mainFrame())->frameView()->frame()->document()->focusedElement());
+    m_popupMenuClient.setFocusedNode(toWebFrameImpl(m_webView->mainFrame())->frameView()->frame().document()->focusedElement());
 
     showPopup();
 
@@ -496,7 +496,7 @@ TEST_F(SelectPopupMenuTest, SelectItemRemoveSelectOnClick)
     loadFrame(m_webView->mainFrame(), "select_event_remove_on_click.html");
     serveRequests();
 
-    m_popupMenuClient.setFocusedNode(static_cast<WebFrameImpl*>(m_webView->mainFrame())->frameView()->frame()->document()->focusedElement());
+    m_popupMenuClient.setFocusedNode(toWebFrameImpl(m_webView->mainFrame())->frameView()->frame().document()->focusedElement());
 
     showPopup();
 

@@ -21,25 +21,28 @@
 
 #include "core/rendering/svg/RenderSVGResourceContainer.h"
 
+#include "core/rendering/LayoutRectRecorder.h"
 #include "core/rendering/RenderLayer.h"
 #include "core/rendering/RenderView.h"
-#include "core/rendering/svg/RenderSVGRoot.h"
 #include "core/rendering/svg/SVGRenderingContext.h"
 #include "core/rendering/svg/SVGResourcesCache.h"
 #include "core/svg/SVGGraphicsElement.h"
 
+#include "wtf/TemporaryChange.h"
+
 namespace WebCore {
 
-static inline SVGDocumentExtensions* svgExtensionsFromNode(Node* node)
+static inline SVGDocumentExtensions* svgExtensionsFromElement(SVGElement* element)
 {
-    ASSERT(node);
-    ASSERT(node->document());
-    return node->document()->accessSVGExtensions();
+    ASSERT(element);
+    return element->document().accessSVGExtensions();
 }
 
 RenderSVGResourceContainer::RenderSVGResourceContainer(SVGElement* node)
     : RenderSVGHiddenContainer(node)
+    , m_isInLayout(false)
     , m_id(node->getIdAttribute())
+    , m_invalidationMask(0)
     , m_registered(false)
     , m_isInvalidating(false)
 {
@@ -48,17 +51,23 @@ RenderSVGResourceContainer::RenderSVGResourceContainer(SVGElement* node)
 RenderSVGResourceContainer::~RenderSVGResourceContainer()
 {
     if (m_registered)
-        svgExtensionsFromNode(node())->removeResource(m_id);
+        svgExtensionsFromElement(element())->removeResource(m_id);
 }
 
 void RenderSVGResourceContainer::layout()
 {
-    StackStats::LayoutCheckPoint layoutCheckPoint;
-    // Invalidate all resources if our layout changed.
-    if (everHadLayout() && selfNeedsLayout())
-        RenderSVGRoot::addResourceForClientInvalidation(this);
+    // FIXME: Investigate a way to detect and break resource layout dependency cycles early.
+    // Then we can remove this method altogether, and fall back onto RenderSVGHiddenContainer::layout().
+    ASSERT(needsLayout());
+    if (m_isInLayout)
+        return;
+
+    LayoutRectRecorder recorder(*this);
+    TemporaryChange<bool> inLayoutChange(m_isInLayout, true);
 
     RenderSVGHiddenContainer::layout();
+
+    clearInvalidationMask();
 }
 
 void RenderSVGResourceContainer::willBeDestroyed()
@@ -83,9 +92,9 @@ void RenderSVGResourceContainer::idChanged()
     removeAllClientsFromCache();
 
     // Remove old id, that is guaranteed to be present in cache.
-    SVGDocumentExtensions* extensions = svgExtensionsFromNode(node());
+    SVGDocumentExtensions* extensions = svgExtensionsFromElement(element());
     extensions->removeResource(m_id);
-    m_id = toElement(node())->getIdAttribute();
+    m_id = element()->getIdAttribute();
 
     registerResource();
 }
@@ -95,6 +104,10 @@ void RenderSVGResourceContainer::markAllClientsForInvalidation(InvalidationMode 
     if ((m_clients.isEmpty() && m_clientLayers.isEmpty()) || m_isInvalidating)
         return;
 
+    if (m_invalidationMask & mode)
+        return;
+
+    m_invalidationMask |= mode;
     m_isInvalidating = true;
     bool needsLayout = mode == LayoutAndBoundariesInvalidation;
     bool markForInvalidation = mode != ParentOnlyInvalidation;
@@ -103,7 +116,7 @@ void RenderSVGResourceContainer::markAllClientsForInvalidation(InvalidationMode 
     for (HashSet<RenderObject*>::iterator it = m_clients.begin(); it != end; ++it) {
         RenderObject* client = *it;
         if (client->isSVGResourceContainer()) {
-            client->toRenderSVGResourceContainer()->removeAllClientsFromCache(markForInvalidation);
+            toRenderSVGResourceContainer(client)->removeAllClientsFromCache(markForInvalidation);
             continue;
         }
 
@@ -136,8 +149,12 @@ void RenderSVGResourceContainer::markClientForInvalidation(RenderObject* client,
         client->setNeedsBoundariesUpdate();
         break;
     case RepaintInvalidation:
-        if (client->view())
-            client->repaint();
+        if (client->view()) {
+            if (RuntimeEnabledFeatures::repaintAfterLayoutEnabled() && frameView()->isInLayout())
+                client->setShouldDoFullRepaintAfterLayout(true);
+            else
+                client->repaint();
+        }
         break;
     case ParentOnlyInvalidation:
         break;
@@ -148,6 +165,7 @@ void RenderSVGResourceContainer::addClient(RenderObject* client)
 {
     ASSERT(client);
     m_clients.add(client);
+    clearInvalidationMask();
 }
 
 void RenderSVGResourceContainer::removeClient(RenderObject* client)
@@ -157,10 +175,20 @@ void RenderSVGResourceContainer::removeClient(RenderObject* client)
     m_clients.remove(client);
 }
 
+void RenderSVGResourceContainer::addClientRenderLayer(Node* node)
+{
+    ASSERT(node);
+    if (!node->renderer() || !node->renderer()->hasLayer())
+        return;
+    m_clientLayers.add(toRenderLayerModelObject(node->renderer())->layer());
+    clearInvalidationMask();
+}
+
 void RenderSVGResourceContainer::addClientRenderLayer(RenderLayer* client)
 {
     ASSERT(client);
     m_clientLayers.add(client);
+    clearInvalidationMask();
 }
 
 void RenderSVGResourceContainer::removeClientRenderLayer(RenderLayer* client)
@@ -169,9 +197,20 @@ void RenderSVGResourceContainer::removeClientRenderLayer(RenderLayer* client)
     m_clientLayers.remove(client);
 }
 
+void RenderSVGResourceContainer::invalidateCacheAndMarkForLayout(SubtreeLayoutScope* layoutScope)
+{
+    if (selfNeedsLayout())
+        return;
+
+    setNeedsLayout(MarkContainingBlockChain, layoutScope);
+
+    if (everHadLayout())
+        removeAllClientsFromCache();
+}
+
 void RenderSVGResourceContainer::registerResource()
 {
-    SVGDocumentExtensions* extensions = svgExtensionsFromNode(node());
+    SVGDocumentExtensions* extensions = svgExtensionsFromElement(element());
     if (!extensions->hasPendingResource(m_id)) {
         extensions->addResource(m_id, this);
         return;
@@ -219,7 +258,7 @@ AffineTransform RenderSVGResourceContainer::transformOnNonScalingStroke(RenderOb
         return resourceTransform;
 
     SVGGraphicsElement* element = toSVGGraphicsElement(object->node());
-    AffineTransform transform = element->getScreenCTM(SVGLocatable::DisallowStyleUpdate);
+    AffineTransform transform = element->getScreenCTM(SVGGraphicsElement::DisallowStyleUpdate);
     transform *= resourceTransform;
     return transform;
 }

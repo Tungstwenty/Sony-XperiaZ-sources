@@ -29,9 +29,8 @@
 #include "core/html/parser/CSSPreloadScanner.h"
 
 #include "FetchInitiatorTypeNames.h"
-#include "core/html/parser/HTMLIdentifier.h"
 #include "core/html/parser/HTMLParserIdioms.h"
-#include "core/platform/text/SegmentedString.h"
+#include "platform/text/SegmentedString.h"
 
 namespace WebCore {
 
@@ -66,16 +65,15 @@ void CSSPreloadScanner::scan(const HTMLToken::DataVector& data, const SegmentedS
     scanCommon(data.data(), data.data() + data.size(), source, requests);
 }
 
-void CSSPreloadScanner::scan(const HTMLIdentifier& identifier,  const SegmentedString& source, PreloadRequestStream& requests)
+void CSSPreloadScanner::scan(const String& tagName,  const SegmentedString& source, PreloadRequestStream& requests)
 {
-    const StringImpl* data = identifier.asStringImpl();
-    if (data->is8Bit()) {
-        const LChar* begin = data->characters8();
-        scanCommon(begin, begin + data->length(), source, requests);
+    if (tagName.is8Bit()) {
+        const LChar* begin = tagName.characters8();
+        scanCommon(begin, begin + tagName.length(), source, requests);
         return;
     }
-    const UChar* begin = data->characters16();
-    scanCommon(begin, begin + data->length(), source, requests);
+    const UChar* begin = tagName.characters16();
+    scanCommon(begin, begin + tagName.length(), source, requests);
 }
 
 inline void CSSPreloadScanner::tokenize(UChar c, const SegmentedString& source)
@@ -84,7 +82,7 @@ inline void CSSPreloadScanner::tokenize(UChar c, const SegmentedString& source)
     // Searching for other types of resources is probably low payoff.
     switch (m_state) {
     case Initial:
-        if (isHTMLSpace(c))
+        if (isHTMLSpace<UChar>(c))
             break;
         if (c == '@')
             m_state = RuleStart;
@@ -121,7 +119,7 @@ inline void CSSPreloadScanner::tokenize(UChar c, const SegmentedString& source)
             m_state = Initial;
         break;
     case Rule:
-        if (isHTMLSpace(c))
+        if (isHTMLSpace<UChar>(c))
             m_state = AfterRule;
         else if (c == ';')
             m_state = Initial;
@@ -129,7 +127,7 @@ inline void CSSPreloadScanner::tokenize(UChar c, const SegmentedString& source)
             m_rule.append(c);
         break;
     case AfterRule:
-        if (isHTMLSpace(c))
+        if (isHTMLSpace<UChar>(c))
             break;
         if (c == ';')
             m_state = Initial;
@@ -141,7 +139,7 @@ inline void CSSPreloadScanner::tokenize(UChar c, const SegmentedString& source)
         }
         break;
     case RuleValue:
-        if (isHTMLSpace(c))
+        if (isHTMLSpace<UChar>(c))
             m_state = AfterRuleValue;
         else if (c == ';')
             emitRule(source);
@@ -149,7 +147,7 @@ inline void CSSPreloadScanner::tokenize(UChar c, const SegmentedString& source)
             m_ruleValue.append(c);
         break;
     case AfterRuleValue:
-        if (isHTMLSpace(c))
+        if (isHTMLSpace<UChar>(c))
             break;
         if (c == ';')
             emitRule(source);
@@ -171,11 +169,11 @@ static String parseCSSStringOrURL(const String& string)
     size_t offset = 0;
     size_t reducedLength = string.length();
 
-    while (reducedLength && isHTMLSpace(string[offset])) {
+    while (reducedLength && isHTMLSpace<UChar>(string[offset])) {
         ++offset;
         --reducedLength;
     }
-    while (reducedLength && isHTMLSpace(string[offset + reducedLength - 1]))
+    while (reducedLength && isHTMLSpace<UChar>(string[offset + reducedLength - 1]))
         --reducedLength;
 
     if (reducedLength >= 5
@@ -188,11 +186,11 @@ static String parseCSSStringOrURL(const String& string)
         reducedLength -= 5;
     }
 
-    while (reducedLength && isHTMLSpace(string[offset])) {
+    while (reducedLength && isHTMLSpace<UChar>(string[offset])) {
         ++offset;
         --reducedLength;
     }
-    while (reducedLength && isHTMLSpace(string[offset + reducedLength - 1]))
+    while (reducedLength && isHTMLSpace<UChar>(string[offset + reducedLength - 1]))
         --reducedLength;
 
     if (reducedLength < 2 || string[offset] != string[offset + reducedLength - 1] || !(string[offset] == '\'' || string[offset] == '"'))
@@ -200,11 +198,11 @@ static String parseCSSStringOrURL(const String& string)
     offset++;
     reducedLength -= 2;
 
-    while (reducedLength && isHTMLSpace(string[offset])) {
+    while (reducedLength && isHTMLSpace<UChar>(string[offset])) {
         ++offset;
         --reducedLength;
     }
-    while (reducedLength && isHTMLSpace(string[offset + reducedLength - 1]))
+    while (reducedLength && isHTMLSpace<UChar>(string[offset + reducedLength - 1]))
         --reducedLength;
 
     return string.substring(offset, reducedLength);

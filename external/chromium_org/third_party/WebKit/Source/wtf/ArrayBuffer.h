@@ -27,7 +27,6 @@
 #define ArrayBuffer_h
 
 #include "wtf/ArrayBufferContents.h"
-#include "wtf/ArrayBufferDeallocationObserver.h"
 #include "wtf/HashSet.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
@@ -64,7 +63,6 @@ public:
     bool transfer(ArrayBufferContents&, Vector<RefPtr<ArrayBufferView> >& neuteredViews);
     bool isNeutered() { return m_isNeutered; }
 
-    bool hasDeallocationObserver() { return m_contents.hasDeallocationObserver(); }
     void setDeallocationObserver(ArrayBufferDeallocationObserver* observer) { m_contents.setDeallocationObserver(observer); }
 
     ~ArrayBuffer() { }

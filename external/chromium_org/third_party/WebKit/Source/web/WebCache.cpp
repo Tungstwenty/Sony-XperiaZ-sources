@@ -31,11 +31,11 @@
 #include "config.h"
 #include "WebCache.h"
 
-#include "core/loader/cache/MemoryCache.h"
+#include "core/fetch/MemoryCache.h"
 
 using WebCore::MemoryCache;
 
-namespace WebKit {
+namespace blink {
 
 // A helper method for coverting a MemoryCache::TypeStatistic to a
 // WebCache::ResourceTypeStat.
@@ -94,4 +94,4 @@ void WebCache::getResourceTypeStats(ResourceTypeStats* result)
         memset(result, 0, sizeof(WebCache::ResourceTypeStats));
 }
 
-}  // namespace WebKit
+}  // namespace blink

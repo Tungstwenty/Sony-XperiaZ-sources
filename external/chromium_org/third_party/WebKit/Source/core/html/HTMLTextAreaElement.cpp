@@ -30,21 +30,23 @@
 #include "HTMLNames.h"
 #include "bindings/v8/ExceptionState.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "core/dom/BeforeTextInsertedEvent.h"
 #include "core/dom/Document.h"
-#include "core/dom/Event.h"
-#include "core/dom/EventNames.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/Text.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/editing/FrameSelection.h"
+#include "core/editing/SpellChecker.h"
 #include "core/editing/TextIterator.h"
-#include "core/html/FormController.h"
+#include "core/events/BeforeTextInsertedEvent.h"
+#include "core/events/Event.h"
+#include "core/events/ThreadLocalEventNames.h"
 #include "core/html/FormDataList.h"
+#include "core/html/forms/FormController.h"
+#include "core/html/shadow/ShadowElementNames.h"
 #include "core/html/shadow/TextControlInnerElements.h"
-#include "core/page/Frame.h"
-#include "core/platform/LocalizedStrings.h"
+#include "core/frame/Frame.h"
 #include "core/rendering/RenderTextControlMultiLine.h"
+#include "platform/text/PlatformLocale.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/text/StringBuilder.h"
 
@@ -57,11 +59,6 @@ static const int defaultCols = 20;
 
 // On submission, LF characters are converted into CRLF.
 // This function returns number of characters considering this.
-static inline unsigned computeLengthForSubmission(const String& text, unsigned numberOfLineBreaks)
-{
-    return text.length() + numberOfLineBreaks;
-}
-
 static unsigned numberOfLineBreaks(const String& text)
 {
     unsigned length = text.length();
@@ -78,30 +75,27 @@ static inline unsigned computeLengthForSubmission(const String& text)
     return text.length() + numberOfLineBreaks(text);
 }
 
-HTMLTextAreaElement::HTMLTextAreaElement(const QualifiedName& tagName, Document* document, HTMLFormElement* form)
-    : HTMLTextFormControlElement(tagName, document, form)
+HTMLTextAreaElement::HTMLTextAreaElement(Document& document, HTMLFormElement* form)
+    : HTMLTextFormControlElement(textareaTag, document, form)
     , m_rows(defaultRows)
     , m_cols(defaultCols)
     , m_wrap(SoftWrap)
-    , m_placeholder(0)
     , m_isDirty(false)
-    , m_wasModifiedByUser(false)
 {
-    ASSERT(hasTagName(textareaTag));
     setFormControlValueMatchesRenderer(true);
     ScriptWrappable::init(this);
 }
 
-PassRefPtr<HTMLTextAreaElement> HTMLTextAreaElement::create(const QualifiedName& tagName, Document* document, HTMLFormElement* form)
+PassRefPtr<HTMLTextAreaElement> HTMLTextAreaElement::create(Document& document, HTMLFormElement* form)
 {
-    RefPtr<HTMLTextAreaElement> textArea = adoptRef(new HTMLTextAreaElement(tagName, document, form));
+    RefPtr<HTMLTextAreaElement> textArea = adoptRef(new HTMLTextAreaElement(document, form));
     textArea->ensureUserAgentShadowRoot();
     return textArea.release();
 }
 
-void HTMLTextAreaElement::didAddUserAgentShadowRoot(ShadowRoot* root)
+void HTMLTextAreaElement::didAddUserAgentShadowRoot(ShadowRoot& root)
 {
-    root->appendChild(TextControlInnerTextElement::create(document()), ASSERT_NO_EXCEPTION);
+    root.appendChild(TextControlInnerTextElement::create(document()));
 }
 
 const AtomicString& HTMLTextAreaElement::formControlType() const
@@ -210,7 +204,7 @@ bool HTMLTextAreaElement::appendFormData(FormDataList& encoding, bool)
     if (name().isEmpty())
         return false;
 
-    document()->updateLayout();
+    document().updateLayout();
 
     const String& text = (m_wrap == HardWrap) ? valueWithHardLineBreaks() : value();
     encoding.appendData(name(), text);
@@ -221,7 +215,7 @@ bool HTMLTextAreaElement::appendFormData(FormDataList& encoding, bool)
     return true;
 }
 
-void HTMLTextAreaElement::reset()
+void HTMLTextAreaElement::resetImpl()
 {
     setNonDirtyValue(defaultValue());
 }
@@ -252,18 +246,24 @@ void HTMLTextAreaElement::updateFocusAppearance(bool restorePreviousSelection)
     } else
         restoreCachedSelection();
 
-    if (document()->frame())
-        document()->frame()->selection()->revealSelection();
+    if (document().frame())
+        document().frame()->selection().revealSelection();
 }
 
 void HTMLTextAreaElement::defaultEventHandler(Event* event)
 {
-    if (renderer() && (event->isMouseEvent() || event->isDragEvent() || event->hasInterface(eventNames().interfaceForWheelEvent) || event->type() == eventNames().blurEvent))
+    if (renderer() && (event->isMouseEvent() || event->isDragEvent() || event->hasInterface(EventNames::WheelEvent) || event->type() == EventTypeNames::blur))
         forwardEvent(event);
     else if (renderer() && event->isBeforeTextInsertedEvent())
         handleBeforeTextInsertedEvent(static_cast<BeforeTextInsertedEvent*>(event));
 
     HTMLTextFormControlElement::defaultEventHandler(event);
+}
+
+void HTMLTextAreaElement::handleFocusEvent(Element*, FocusDirection)
+{
+    if (Frame* frame = document().frame())
+        frame->spellChecker().didBeginEditing(this);
 }
 
 void HTMLTextAreaElement::subtreeHasChanged()
@@ -298,7 +298,7 @@ void HTMLTextAreaElement::handleBeforeTextInsertedEvent(BeforeTextInsertedEvent*
     // If the text field has no focus, we don't need to take account of the
     // selection length. The selection is the source of text drag-and-drop in
     // that case, and nothing in the text field will be removed.
-    unsigned selectionLength = focused() ? computeLengthForSubmission(plainText(document()->frame()->selection()->selection().toNormalizedRange().get())) : 0;
+    unsigned selectionLength = focused() ? computeLengthForSubmission(plainText(document().frame()->selection().selection().toNormalizedRange().get())) : 0;
     ASSERT(currentLength >= selectionLength);
     unsigned baseLength = currentLength - selectionLength;
     unsigned appendableLength = unsignedMaxLength > baseLength ? unsignedMaxLength - baseLength : 0;
@@ -310,13 +310,6 @@ String HTMLTextAreaElement::sanitizeUserInputValue(const String& proposedValue, 
     if (maxLength > 0 && U16_IS_LEAD(proposedValue[maxLength - 1]))
         --maxLength;
     return proposedValue.left(maxLength);
-}
-
-HTMLElement* HTMLTextAreaElement::innerTextElement() const
-{
-    Node* node = userAgentShadowRoot()->firstChild();
-    ASSERT(!node || node->hasTagName(divTag));
-    return toHTMLElement(node);
 }
 
 void HTMLTextAreaElement::rendererWillBeDestroyed()
@@ -334,7 +327,6 @@ void HTMLTextAreaElement::updateValue() const
     const_cast<HTMLTextAreaElement*>(this)->setFormControlValueMatchesRenderer(true);
     const_cast<HTMLTextAreaElement*>(this)->notifyFormStateChanged();
     m_isDirty = true;
-    m_wasModifiedByUser = true;
     const_cast<HTMLTextAreaElement*>(this)->updatePlaceholderVisibility(false);
 }
 
@@ -360,7 +352,6 @@ void HTMLTextAreaElement::setNonDirtyValue(const String& value)
 
 void HTMLTextAreaElement::setValueCommon(const String& newValue)
 {
-    m_wasModifiedByUser = false;
     // Code elsewhere normalizes line endings added by the user via the keyboard or pasting.
     // We normalize line endings coming from JavaScript here.
     String normalizedValue = newValue.isNull() ? "" : newValue;
@@ -380,7 +371,7 @@ void HTMLTextAreaElement::setValueCommon(const String& newValue)
     setFormControlValueMatchesRenderer(true);
 
     // Set the caret to the end of the text value.
-    if (document()->focusedElement() == this) {
+    if (document().focusedElement() == this) {
         unsigned endOfString = m_value.length();
         setSelectionRange(endOfString, endOfString);
     }
@@ -421,7 +412,7 @@ void HTMLTextAreaElement::setDefaultValue(const String& defaultValue)
     value.replace("\r\n", "\n");
     value.replace('\r', '\n');
 
-    insertBefore(document()->createTextNode(value), firstChild(), IGNORE_EXCEPTION);
+    insertBefore(document().createTextNode(value), firstChild(), IGNORE_EXCEPTION);
 
     if (!m_isDirty)
         setNonDirtyValue(value);
@@ -434,12 +425,12 @@ int HTMLTextAreaElement::maxLength() const
     return ok && value >= 0 ? value : -1;
 }
 
-void HTMLTextAreaElement::setMaxLength(int newValue, ExceptionState& es)
+void HTMLTextAreaElement::setMaxLength(int newValue, ExceptionState& exceptionState)
 {
     if (newValue < 0)
-        es.throwDOMException(IndexSizeError);
+        exceptionState.throwDOMException(IndexSizeError, "The value provided (" + String::number(newValue) + ") is not positive or 0.");
     else
-        setAttribute(maxlengthAttr, String::number(newValue));
+        setIntegralAttribute(maxlengthAttr, newValue);
 }
 
 String HTMLTextAreaElement::validationMessage() const
@@ -451,10 +442,10 @@ String HTMLTextAreaElement::validationMessage() const
         return customValidationMessage();
 
     if (valueMissing())
-        return validationMessageValueMissingText();
+        return locale().queryString(blink::WebLocalizedString::ValidationValueMissing);
 
     if (tooLong())
-        return validationMessageTooLongText(computeLengthForSubmission(value()), maxLength());
+        return locale().validationMessageTooLongText(computeLengthForSubmission(value()), maxLength());
 
     return String();
 }
@@ -473,7 +464,7 @@ bool HTMLTextAreaElement::tooLong(const String& value, NeedsToCheckDirtyFlag che
 {
     // Return false for the default value or value set by script even if it is
     // longer than maxLength.
-    if (check == CheckDirtyFlag && !m_wasModifiedByUser)
+    if (check == CheckDirtyFlag && !lastChangeWasUserEdit())
         return false;
 
     int max = maxLength();
@@ -494,28 +485,17 @@ void HTMLTextAreaElement::accessKeyAction(bool)
 
 void HTMLTextAreaElement::setCols(int cols)
 {
-    setAttribute(colsAttr, String::number(cols));
+    setIntegralAttribute(colsAttr, cols);
 }
 
 void HTMLTextAreaElement::setRows(int rows)
 {
-    setAttribute(rowsAttr, String::number(rows));
+    setIntegralAttribute(rowsAttr, rows);
 }
 
 bool HTMLTextAreaElement::shouldUseInputMethod()
 {
     return true;
-}
-
-HTMLElement* HTMLTextAreaElement::placeholderElement() const
-{
-    return m_placeholder;
-}
-
-void HTMLTextAreaElement::attach(const AttachContext& context)
-{
-    HTMLTextFormControlElement::attach(context);
-    fixPlaceholderRenderer(m_placeholder, innerTextElement());
 }
 
 bool HTMLTextAreaElement::matchesReadOnlyPseudoClass() const
@@ -530,22 +510,26 @@ bool HTMLTextAreaElement::matchesReadWritePseudoClass() const
 
 void HTMLTextAreaElement::updatePlaceholderText()
 {
+    HTMLElement* placeholder = placeholderElement();
     String placeholderText = strippedPlaceholder();
     if (placeholderText.isEmpty()) {
-        if (m_placeholder) {
-            userAgentShadowRoot()->removeChild(m_placeholder, ASSERT_NO_EXCEPTION);
-            m_placeholder = 0;
-        }
+        if (placeholder)
+            userAgentShadowRoot()->removeChild(placeholder);
         return;
     }
-    if (!m_placeholder) {
-        RefPtr<HTMLDivElement> placeholder = HTMLDivElement::create(document());
-        m_placeholder = placeholder.get();
-        m_placeholder->setPart(AtomicString("-webkit-input-placeholder", AtomicString::ConstructFromLiteral));
-        userAgentShadowRoot()->insertBefore(m_placeholder, innerTextElement()->nextSibling(), ASSERT_NO_EXCEPTION);
+    if (!placeholder) {
+        RefPtr<HTMLDivElement> newElement = HTMLDivElement::create(document());
+        placeholder = newElement.get();
+        placeholder->setPseudo(AtomicString("-webkit-input-placeholder", AtomicString::ConstructFromLiteral));
+        placeholder->setAttribute(idAttr, ShadowElementNames::placeholder());
+        userAgentShadowRoot()->insertBefore(placeholder, innerTextElement()->nextSibling());
     }
-    m_placeholder->setInnerText(placeholderText, ASSERT_NO_EXCEPTION);
-    fixPlaceholderRenderer(m_placeholder, innerTextElement());
+    placeholder->setTextContent(placeholderText);
+}
+
+bool HTMLTextAreaElement::isInteractiveContent() const
+{
+    return true;
 }
 
 }

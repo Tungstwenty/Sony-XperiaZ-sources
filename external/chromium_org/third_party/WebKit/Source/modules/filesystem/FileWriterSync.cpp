@@ -35,26 +35,25 @@
 #include "bindings/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/fileapi/Blob.h"
-#include "core/fileapi/FileError.h"
-#include "modules/filesystem/AsyncFileWriter.h"
+#include "public/platform/WebFileWriter.h"
+#include "public/platform/WebURL.h"
 
 namespace WebCore {
 
-void FileWriterSync::write(Blob* data, ExceptionState& es)
+void FileWriterSync::write(Blob* data, ExceptionState& exceptionState)
 {
     ASSERT(writer());
     ASSERT(m_complete);
     if (!data) {
-        es.throwDOMException(TypeMismatchError, FileError::typeMismatchErrorMessage);
+        exceptionState.throwDOMException(TypeMismatchError, FileError::typeMismatchErrorMessage);
         return;
     }
 
     prepareForWrite();
-    writer()->write(position(), data);
-    writer()->waitForOperationToComplete();
+    writer()->write(position(), data->uuid());
     ASSERT(m_complete);
     if (m_error) {
-        FileError::throwDOMException(es, m_error);
+        FileError::throwDOMException(exceptionState, m_error);
         return;
     }
     setPosition(position() + data->size());
@@ -62,27 +61,26 @@ void FileWriterSync::write(Blob* data, ExceptionState& es)
         setLength(position());
 }
 
-void FileWriterSync::seek(long long position, ExceptionState& es)
+void FileWriterSync::seek(long long position, ExceptionState& exceptionState)
 {
     ASSERT(writer());
     ASSERT(m_complete);
     seekInternal(position);
 }
 
-void FileWriterSync::truncate(long long offset, ExceptionState& es)
+void FileWriterSync::truncate(long long offset, ExceptionState& exceptionState)
 {
     ASSERT(writer());
     ASSERT(m_complete);
     if (offset < 0) {
-        es.throwDOMException(InvalidStateError, FileError::invalidStateErrorMessage);
+        exceptionState.throwDOMException(InvalidStateError, FileError::invalidStateErrorMessage);
         return;
     }
     prepareForWrite();
     writer()->truncate(offset);
-    writer()->waitForOperationToComplete();
     ASSERT(m_complete);
     if (m_error) {
-        FileError::throwDOMException(es, m_error);
+        FileError::throwDOMException(exceptionState, m_error);
         return;
     }
     if (offset < position())
@@ -110,10 +108,10 @@ void FileWriterSync::didTruncate()
 #endif
 }
 
-void FileWriterSync::didFail(FileError::ErrorCode error)
+void FileWriterSync::didFail(blink::WebFileError error)
 {
     ASSERT(m_error == FileError::OK);
-    m_error = error;
+    m_error = static_cast<FileError::ErrorCode>(error);
     ASSERT(!m_complete);
 #ifndef NDEBUG
     m_complete = true;

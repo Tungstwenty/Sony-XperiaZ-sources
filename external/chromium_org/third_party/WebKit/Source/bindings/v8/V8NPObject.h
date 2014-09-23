@@ -54,13 +54,17 @@ void npObjectInvokeDefaultHandler(const v8::FunctionCallbackInfo<v8::Value>&);
 // Get a wrapper for a NPObject.
 // If the object is already wrapped, the pre-existing wrapper will be returned. If the object is not wrapped, wrap it, and
 // give V8 a weak reference to the wrapper which will cleanup when there are no more JS references to the object.
-v8::Local<v8::Object> createV8ObjectForNPObject(NPObject*, NPObject* root);
+v8::Local<v8::Object> createV8ObjectForNPObject(NPObject*, NPObject* root, v8::Isolate*);
 
 // Tell V8 to forcibly remove an object.
 // This is used at plugin teardown so that the caller can aggressively unload the plugin library. After calling this
 // function, the persistent handle to the wrapper will be gone, and the wrapped NPObject will be removed so that it
 // cannot be referred to.
 void forgetV8ObjectForNPObject(NPObject*);
+
+// De-associate an NPObject with the current JS wrapper, but preserve the backward connection from the wrapper to NPObject.
+// This allows to have a single NPObject to be called from several wrappers, so each context can have its own wrapper.
+void dropV8WrapperForNPObject(NPObject*);
 
 } // namespace WebCore
 

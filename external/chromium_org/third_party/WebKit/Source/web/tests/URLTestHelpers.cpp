@@ -32,12 +32,11 @@
 #include "URLTestHelpers.h"
 
 #include "public/platform/Platform.h"
-#include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
 #include "public/platform/WebURLResponse.h"
 #include "public/platform/WebUnitTestSupport.h"
 
-namespace WebKit {
+namespace blink {
 namespace URLTestHelpers {
 
 void registerMockedURLFromBaseURL(const WebString& baseURL, const WebString& fileName, const WebString& mimeType)
@@ -69,4 +68,4 @@ void registerMockedURLLoad(const WebURL& fullURL, const WebString& fileName, con
 }
 
 } // namespace URLTestHelpers
-} // namespace WebKit
+} // namespace blink

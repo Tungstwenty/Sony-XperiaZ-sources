@@ -21,6 +21,7 @@
 #ifndef SVGClipPathElement_h
 #define SVGClipPathElement_h
 
+#include "SVGNames.h"
 #include "core/svg/SVGAnimatedBoolean.h"
 #include "core/svg/SVGAnimatedEnumeration.h"
 #include "core/svg/SVGExternalResourcesRequired.h"
@@ -34,10 +35,10 @@ class RenderObject;
 class SVGClipPathElement FINAL : public SVGGraphicsElement,
                                  public SVGExternalResourcesRequired {
 public:
-    static PassRefPtr<SVGClipPathElement> create(const QualifiedName&, Document*);
+    static PassRefPtr<SVGClipPathElement> create(Document&);
 
 private:
-    SVGClipPathElement(const QualifiedName&, Document*);
+    explicit SVGClipPathElement(Document&);
 
     virtual bool isValid() const { return SVGTests::isValid(); }
     virtual bool needsPendingResourceHandling() const { return false; }
@@ -54,6 +55,8 @@ private:
         DECLARE_ANIMATED_BOOLEAN(ExternalResourcesRequired, externalResourcesRequired)
     END_DECLARE_ANIMATED_PROPERTIES
 };
+
+DEFINE_NODE_TYPE_CASTS(SVGClipPathElement, hasTagName(SVGNames::clipPathTag));
 
 }
 

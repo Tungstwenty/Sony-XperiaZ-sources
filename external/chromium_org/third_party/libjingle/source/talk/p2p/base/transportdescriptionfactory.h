@@ -37,8 +37,9 @@ class SSLIdentity;
 namespace cricket {
 
 struct TransportOptions {
-  TransportOptions() : ice_restart(false) {}
+  TransportOptions() : ice_restart(false), prefer_passive_role(false) {}
   bool ice_restart;
+  bool prefer_passive_role;
 };
 
 // Creates transport descriptions according to the supplied configuration.
@@ -58,8 +59,6 @@ class TransportDescriptionFactory {
   void set_secure(SecurePolicy s) { secure_ = s; }
   // Specifies the identity to use (only used when secure is not SEC_DISABLED).
   void set_identity(talk_base::SSLIdentity* identity) { identity_ = identity; }
-  // Specifies the algorithm to use when creating an identity digest.
-  void set_digest_algorithm(const std::string& alg) { digest_alg_ = alg; }
 
   // Creates a transport description suitable for use in an offer.
   TransportDescription* CreateOffer(const TransportOptions& options,
@@ -71,12 +70,12 @@ class TransportDescriptionFactory {
       const TransportDescription* current_description) const;
 
  private:
-  bool CreateIdentityDigest(TransportDescription* description) const;
+  bool SetSecurityInfo(TransportDescription* description,
+                       ConnectionRole role) const;
 
   TransportProtocol protocol_;
   SecurePolicy secure_;
   talk_base::SSLIdentity* identity_;
-  std::string digest_alg_;
 };
 
 }  // namespace cricket

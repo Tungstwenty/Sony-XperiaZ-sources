@@ -26,12 +26,14 @@
 #include "core/rendering/RenderListMarker.h"
 
 #include "core/dom/Document.h"
-#include "core/loader/cache/ImageResource.h"
-#include "core/platform/graphics/Font.h"
-#include "core/platform/graphics/GraphicsContextStateSaver.h"
+#include "core/fetch/ImageResource.h"
+#include "core/rendering/GraphicsContextAnnotator.h"
+#include "core/rendering/LayoutRectRecorder.h"
 #include "core/rendering/RenderLayer.h"
 #include "core/rendering/RenderListItem.h"
 #include "core/rendering/RenderView.h"
+#include "platform/fonts/Font.h"
+#include "platform/graphics/GraphicsContextStateSaver.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/unicode/CharacterNames.h"
 
@@ -1070,9 +1072,9 @@ RenderListMarker::~RenderListMarker()
 
 RenderListMarker* RenderListMarker::createAnonymous(RenderListItem* item)
 {
-    Document* document = item->document();
+    Document& document = item->document();
     RenderListMarker* renderer = new RenderListMarker(item);
-    renderer->setDocumentForAnonymous(document);
+    renderer->setDocumentForAnonymous(&document);
     return renderer;
 }
 
@@ -1264,7 +1266,7 @@ void RenderListMarker::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffse
         return;
 
     const Font& font = style()->font();
-    TextRun textRun = RenderBlock::constructTextRun(this, font, m_text, style());
+    TextRun textRun = RenderBlockFlow::constructTextRun(this, font, m_text, style());
 
     GraphicsContextStateSaver stateSaver(*context, false);
     if (!style()->isHorizontalWritingMode()) {
@@ -1303,13 +1305,13 @@ void RenderListMarker::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffse
             context->drawText(font, textRunPaintInfo, textOrigin);
 
             UChar suffixSpace[2] = { suffix, ' ' };
-            TextRun suffixRun = RenderBlock::constructTextRun(this, font, suffixSpace, 2, style());
+            TextRun suffixRun = RenderBlockFlow::constructTextRun(this, font, suffixSpace, 2, style());
             TextRunPaintInfo suffixRunInfo(suffixRun);
             suffixRunInfo.bounds = marker;
             context->drawText(font, suffixRunInfo, textOrigin + IntSize(font.width(textRun), 0));
         } else {
             UChar spaceSuffix[2] = { ' ', suffix };
-            TextRun suffixRun = RenderBlock::constructTextRun(this, font, spaceSuffix, 2, style());
+            TextRun suffixRun = RenderBlockFlow::constructTextRun(this, font, spaceSuffix, 2, style());
             TextRunPaintInfo suffixRunInfo(suffixRun);
             suffixRunInfo.bounds = marker;
             context->drawText(font, suffixRunInfo, textOrigin);
@@ -1321,9 +1323,9 @@ void RenderListMarker::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffse
 
 void RenderListMarker::layout()
 {
-    StackStats::LayoutCheckPoint layoutCheckPoint;
     ASSERT(needsLayout());
 
+    LayoutRectRecorder recorder(*this);
     if (isImage()) {
         updateMarginsAndContent();
         setWidth(m_image->imageSize(this, style()->effectiveZoom()).width());
@@ -1480,7 +1482,7 @@ void RenderListMarker::computePreferredLogicalWidths()
     if (isImage()) {
         LayoutSize imageSize = m_image->imageSize(this, style()->effectiveZoom());
         m_minPreferredLogicalWidth = m_maxPreferredLogicalWidth = style()->isHorizontalWritingMode() ? imageSize.width() : imageSize.height();
-        setPreferredLogicalWidthsDirty(false);
+        clearPreferredLogicalWidthsDirty();
         updateMargins();
         return;
     }
@@ -1581,7 +1583,7 @@ void RenderListMarker::computePreferredLogicalWidths()
             else {
                 LayoutUnit itemWidth = font.width(m_text);
                 UChar suffixSpace[2] = { listMarkerSuffix(type, m_listItem->value()), ' ' };
-                LayoutUnit suffixSpaceWidth = font.width(RenderBlock::constructTextRun(this, font, suffixSpace, 2, style()));
+                LayoutUnit suffixSpaceWidth = font.width(RenderBlockFlow::constructTextRun(this, font, suffixSpace, 2, style()));
                 logicalWidth = itemWidth + suffixSpaceWidth;
             }
             break;
@@ -1590,7 +1592,7 @@ void RenderListMarker::computePreferredLogicalWidths()
     m_minPreferredLogicalWidth = logicalWidth;
     m_maxPreferredLogicalWidth = logicalWidth;
 
-    setPreferredLogicalWidthsDirty(false);
+    clearPreferredLogicalWidthsDirty();
 
     updateMargins();
 }
@@ -1602,7 +1604,7 @@ void RenderListMarker::updateMargins()
     LayoutUnit marginStart = 0;
     LayoutUnit marginEnd = 0;
 
-    if (isInside() && !m_listItem->isFloating()) {
+    if (isInside()) {
         if (isImage())
             marginEnd = cMarkerPadding;
         else switch (style()->listStyleType()) {
@@ -1807,7 +1809,7 @@ IntRect RenderListMarker::getRelativeMarkerRect()
             const Font& font = style()->font();
             int itemWidth = font.width(m_text);
             UChar suffixSpace[2] = { listMarkerSuffix(type, m_listItem->value()), ' ' };
-            int suffixSpaceWidth = font.width(RenderBlock::constructTextRun(this, font, suffixSpace, 2, style()));
+            int suffixSpaceWidth = font.width(RenderBlockFlow::constructTextRun(this, font, suffixSpace, 2, style()));
             relativeRect = IntRect(0, 0, itemWidth + suffixSpaceWidth, font.fontMetrics().height());
     }
 

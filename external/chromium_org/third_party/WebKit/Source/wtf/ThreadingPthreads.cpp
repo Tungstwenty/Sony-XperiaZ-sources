@@ -37,13 +37,11 @@
 #include "wtf/HashMap.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
-#include "wtf/RandomNumberSeed.h"
-#include "wtf/StackStats.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/ThreadFunctionInvocation.h"
 #include "wtf/ThreadIdentifierDataPthreads.h"
 #include "wtf/ThreadSpecific.h"
-#include "wtf/UnusedParam.h"
+#include "wtf/ThreadingPrimitives.h"
 #include "wtf/WTFThreadData.h"
 #include "wtf/dtoa.h"
 #include "wtf/dtoa/cached-powers.h"
@@ -55,7 +53,7 @@
 #include <sys/time.h>
 #endif
 
-#if OS(DARWIN)
+#if OS(MACOSX)
 #include <objc/objc-auto.h>
 #endif
 
@@ -115,15 +113,12 @@ void initializeThreading()
     // This should only be called once.
     ASSERT(!atomicallyInitializedStaticMutex);
 
-    WTF::double_conversion::initialize();
     // StringImpl::empty() does not construct its static string in a threadsafe fashion,
     // so ensure it has been initialized from here.
     StringImpl::empty();
     atomicallyInitializedStaticMutex = new Mutex;
     threadMapMutex();
-    initializeRandomNumberGenerator();
     ThreadIdentifierData::initializeOnce();
-    StackStats::initialize();
     wtfThreadData();
     s_dtoaP5Mutex = new Mutex;
     initializeDates();
@@ -186,13 +181,12 @@ ThreadIdentifier createThreadInternal(ThreadFunction entryPoint, void* data, con
     OwnPtr<ThreadFunctionInvocation> invocation = adoptPtr(new ThreadFunctionInvocation(entryPoint, data));
     pthread_t threadHandle;
     if (pthread_create(&threadHandle, 0, wtfThreadEntryPoint, invocation.get())) {
-        LOG_ERROR("Failed to create pthread at entry point %p with data %p", wtfThreadEntryPoint, invocation.get());
+        WTF_LOG_ERROR("Failed to create pthread at entry point %p with data %p", wtfThreadEntryPoint, invocation.get());
         return 0;
     }
 
     // Balanced by adoptPtr() in wtfThreadEntryPoint.
-    ThreadFunctionInvocation* leakedInvocation = invocation.leakPtr();
-    UNUSED_PARAM(leakedInvocation);
+    ThreadFunctionInvocation* ALLOW_UNUSED leakedInvocation = invocation.leakPtr();
 
     return establishIdentifierForPthreadHandle(threadHandle);
 }
@@ -201,11 +195,9 @@ void initializeCurrentThreadInternal(const char* threadName)
 {
 #if HAVE(PTHREAD_SETNAME_NP)
     pthread_setname_np(threadName);
-#else
-    UNUSED_PARAM(threadName);
 #endif
 
-#if OS(DARWIN)
+#if OS(MACOSX)
     // All threads that potentially use APIs above the BSD layer must be registered with the Objective-C
     // garbage collector in case API implementations use garbage-collected memory.
     objc_registerThreadWithCollector();
@@ -231,9 +223,9 @@ int waitForThreadCompletion(ThreadIdentifier threadID)
     int joinResult = pthread_join(pthreadHandle, 0);
 
     if (joinResult == EDEADLK)
-        LOG_ERROR("ThreadIdentifier %u was found to be deadlocked trying to quit", threadID);
+        WTF_LOG_ERROR("ThreadIdentifier %u was found to be deadlocked trying to quit", threadID);
     else if (joinResult)
-        LOG_ERROR("ThreadIdentifier %u was unable to be joined.\n", threadID);
+        WTF_LOG_ERROR("ThreadIdentifier %u was unable to be joined.\n", threadID);
 
     MutexLocker locker(threadMapMutex());
     PthreadState* state = threadMap().get(threadID);
@@ -260,7 +252,7 @@ void detachThread(ThreadIdentifier threadID)
 
     int detachResult = pthread_detach(pthreadHandle);
     if (detachResult)
-        LOG_ERROR("ThreadIdentifier %u was unable to be detached\n", threadID);
+        WTF_LOG_ERROR("ThreadIdentifier %u was unable to be detached\n", threadID);
 
     PthreadState* state = threadMap().get(threadID);
     ASSERT(state);

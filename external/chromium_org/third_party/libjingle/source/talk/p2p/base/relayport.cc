@@ -67,7 +67,7 @@ class RelayConnection : public sigslot::has_slots<> {
   bool CheckResponse(StunMessage* msg);
 
   // Sends data to the relay server.
-  int Send(const void* pv, size_t cb);
+  int Send(const void* pv, size_t cb, talk_base::DiffServCodePoint dscp);
 
   // Sends a STUN allocate request message to the relay server.
   void SendAllocateRequest(RelayEntry* entry, int delay);
@@ -123,7 +123,8 @@ class RelayEntry : public talk_base::MessageHandler,
   // Sends a packet to the given destination address using the socket of this
   // entry.  This will wrap the packet in STUN if necessary.
   int SendTo(const void* data, size_t size,
-    const talk_base::SocketAddress& addr);
+             const talk_base::SocketAddress& addr,
+             talk_base::DiffServCodePoint dscp);
 
   // Schedules a keep-alive allocate request.
   void ScheduleKeepAlive();
@@ -154,16 +155,18 @@ class RelayEntry : public talk_base::MessageHandler,
   void OnSocketClose(talk_base::AsyncPacketSocket* socket, int error);
 
   // Called when a packet is received on this socket.
-  void OnReadPacket(talk_base::AsyncPacketSocket* socket,
-                    const char* data, size_t size,
-                    const talk_base::SocketAddress& remote_addr);
-
+  void OnReadPacket(
+    talk_base::AsyncPacketSocket* socket,
+    const char* data, size_t size,
+    const talk_base::SocketAddress& remote_addr,
+    const talk_base::PacketTime& packet_time);
   // Called when the socket is currently able to send.
   void OnReadyToSend(talk_base::AsyncPacketSocket* socket);
 
   // Sends the given data on the socket to the server with no wrapping.  This
   // returns the number of bytes written or -1 if an error occurred.
-  int SendPacket(const void* data, size_t size);
+  int SendPacket(const void* data, size_t size,
+                 talk_base::DiffServCodePoint dscp);
 };
 
 // Handles an allocate request for a particular RelayEntry.
@@ -300,7 +303,9 @@ Connection* RelayPort::CreateConnection(const Candidate& address,
 }
 
 int RelayPort::SendTo(const void* data, size_t size,
-                      const talk_base::SocketAddress& addr, bool payload) {
+                      const talk_base::SocketAddress& addr,
+                      talk_base::DiffServCodePoint dscp,
+                      bool payload) {
   // Try to find an entry for this specific address.  Note that the first entry
   // created was not given an address initially, so it can be set to the first
   // address that comes along.
@@ -341,7 +346,7 @@ int RelayPort::SendTo(const void* data, size_t size,
   }
 
   // Send the actual contents to the server using the usual mechanism.
-  int sent = entry->SendTo(data, size, addr);
+  int sent = entry->SendTo(data, size, addr, dscp);
   if (sent <= 0) {
     ASSERT(sent < 0);
     error_ = entry->GetError();
@@ -354,6 +359,14 @@ int RelayPort::SendTo(const void* data, size_t size,
 
 int RelayPort::SetOption(talk_base::Socket::Option opt, int value) {
   int result = 0;
+  // DSCP option is not passed to the socket.
+  // TODO(mallinath) - After we have the support on socket,
+  // remove this specialization.
+  if (opt == talk_base::Socket::OPT_DSCP) {
+    SetDefaultDscpValue(static_cast<talk_base::DiffServCodePoint>(value));
+    return result;
+  }
+
   for (size_t i = 0; i < entries_.size(); ++i) {
     if (entries_[i]->SetSocketOption(opt, value) < 0) {
       result = -1;
@@ -381,9 +394,11 @@ int RelayPort::GetError() {
 
 void RelayPort::OnReadPacket(
     const char* data, size_t size,
-    const talk_base::SocketAddress& remote_addr, ProtocolType proto) {
+    const talk_base::SocketAddress& remote_addr,
+    ProtocolType proto,
+    const talk_base::PacketTime& packet_time) {
   if (Connection* conn = GetConnection(remote_addr)) {
-    conn->OnReadPacket(data, size);
+    conn->OnReadPacket(data, size, packet_time);
   } else {
     Port::OnReadPacket(data, size, remote_addr, proto);
   }
@@ -418,7 +433,9 @@ bool RelayConnection::CheckResponse(StunMessage* msg) {
 
 void RelayConnection::OnSendPacket(const void* data, size_t size,
                                    StunRequest* req) {
-  int sent = socket_->SendTo(data, size, GetAddress());
+  // TODO(mallinath) Find a way to get DSCP value from Port.
+  int sent = socket_->SendTo(
+      data, size, GetAddress(), talk_base::DSCP_NO_CHANGE);
   if (sent <= 0) {
     LOG(LS_VERBOSE) << "OnSendPacket: failed sending to " << GetAddress() <<
         std::strerror(socket_->GetError());
@@ -426,8 +443,9 @@ void RelayConnection::OnSendPacket(const void* data, size_t size,
   }
 }
 
-int RelayConnection::Send(const void* pv, size_t cb) {
-  return socket_->SendTo(pv, cb, GetAddress());
+int RelayConnection::Send(const void* pv, size_t cb,
+                          talk_base::DiffServCodePoint dscp) {
+  return socket_->SendTo(pv, cb, GetAddress(), dscp);
 }
 
 void RelayConnection::SendAllocateRequest(RelayEntry* entry, int delay) {
@@ -546,11 +564,12 @@ void RelayEntry::OnConnect(const talk_base::SocketAddress& mapped_addr,
 }
 
 int RelayEntry::SendTo(const void* data, size_t size,
-                       const talk_base::SocketAddress& addr) {
+                       const talk_base::SocketAddress& addr,
+                       talk_base::DiffServCodePoint dscp) {
   // If this connection is locked to the address given, then we can send the
   // packet with no wrapper.
   if (locked_ && (ext_addr_ == addr))
-    return SendPacket(data, size);
+    return SendPacket(data, size, dscp);
 
   // Otherwise, we must wrap the given data in a STUN SEND request so that we
   // can communicate the destination address to the server.
@@ -598,7 +617,7 @@ int RelayEntry::SendTo(const void* data, size_t size,
   talk_base::ByteBuffer buf;
   request.Write(&buf);
 
-  return SendPacket(buf.Data(), buf.Length());
+  return SendPacket(buf.Data(), buf.Length(), dscp);
 }
 
 void RelayEntry::ScheduleKeepAlive() {
@@ -666,9 +685,11 @@ void RelayEntry::OnSocketClose(talk_base::AsyncPacketSocket* socket,
   HandleConnectFailure(socket);
 }
 
-void RelayEntry::OnReadPacket(talk_base::AsyncPacketSocket* socket,
-                              const char* data, size_t size,
-                              const talk_base::SocketAddress& remote_addr) {
+void RelayEntry::OnReadPacket(
+    talk_base::AsyncPacketSocket* socket,
+    const char* data, size_t size,
+    const talk_base::SocketAddress& remote_addr,
+    const talk_base::PacketTime& packet_time) {
   // ASSERT(remote_addr == port_->server_addr());
   // TODO: are we worried about this?
 
@@ -682,7 +703,7 @@ void RelayEntry::OnReadPacket(talk_base::AsyncPacketSocket* socket,
   // by the server,  The actual remote address is the one we recorded.
   if (!port_->HasMagicCookie(data, size)) {
     if (locked_) {
-      port_->OnReadPacket(data, size, ext_addr_, PROTO_UDP);
+      port_->OnReadPacket(data, size, ext_addr_, PROTO_UDP, packet_time);
     } else {
       LOG(WARNING) << "Dropping packet: entry not locked";
     }
@@ -735,7 +756,7 @@ void RelayEntry::OnReadPacket(talk_base::AsyncPacketSocket* socket,
 
   // Process the actual data and remote address in the normal manner.
   port_->OnReadPacket(data_attr->bytes(), data_attr->length(), remote_addr2,
-                      PROTO_UDP);
+                      PROTO_UDP, packet_time);
 }
 
 void RelayEntry::OnReadyToSend(talk_base::AsyncPacketSocket* socket) {
@@ -744,12 +765,13 @@ void RelayEntry::OnReadyToSend(talk_base::AsyncPacketSocket* socket) {
   }
 }
 
-int RelayEntry::SendPacket(const void* data, size_t size) {
+int RelayEntry::SendPacket(const void* data, size_t size,
+                           talk_base::DiffServCodePoint dscp) {
   int sent = 0;
   if (current_connection_) {
     // We are connected, no need to send packets anywere else than to
     // the current connection.
-    sent = current_connection_->Send(data, size);
+    sent = current_connection_->Send(data, size, dscp);
   }
   return sent;
 }

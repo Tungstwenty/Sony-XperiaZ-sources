@@ -26,8 +26,6 @@
 #include "config.h"
 #include "modules/notifications/NotificationController.h"
 
-#if ENABLE(NOTIFICATIONS) || ENABLE(LEGACY_NOTIFICATIONS)
-
 #include "modules/notifications/NotificationClient.h"
 #include "wtf/PassOwnPtr.h"
 
@@ -40,8 +38,6 @@ NotificationController::NotificationController(NotificationClient* client)
 
 NotificationController::~NotificationController()
 {
-    if (m_client)
-        m_client->notificationControllerDestroyed();
 }
 
 PassOwnPtr<NotificationController> NotificationController::create(NotificationClient* client)
@@ -67,5 +63,3 @@ void provideNotification(Page* page, NotificationClient* client)
 }
 
 } // namespace WebCore
-
-#endif // ENABLE(NOTIFICATIONS) || ENABLE(LEGACY_NOTIFICATIONS)

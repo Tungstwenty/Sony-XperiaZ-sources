@@ -28,10 +28,10 @@
 
 #include "core/css/CSSImageGeneratorValue.h"
 #include "core/css/CSSPrimitiveValue.h"
-#include "core/loader/cache/ImageResource.h"
-#include "core/loader/cache/ImageResourceClient.h"
-#include "core/loader/cache/ResourcePtr.h"
-#include "core/platform/graphics/Image.h"
+#include "core/fetch/ImageResource.h"
+#include "core/fetch/ImageResourceClient.h"
+#include "core/fetch/ResourcePtr.h"
+#include "platform/graphics/Image.h"
 
 namespace WebCore {
 
@@ -50,7 +50,7 @@ public:
 
     ~CSSCrossfadeValue();
 
-    String customCssText() const;
+    String customCSSText() const;
 
     PassRefPtr<Image> image(RenderObject*, const IntSize&);
     bool isFixedSize() const { return true; }
@@ -103,6 +103,8 @@ private:
 
     CrossfadeSubimageObserverProxy m_crossfadeSubimageObserver;
 };
+
+DEFINE_CSS_VALUE_TYPE_CASTS(CSSCrossfadeValue, isCrossfadeValue());
 
 } // namespace WebCore
 

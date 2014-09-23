@@ -38,7 +38,7 @@
 #include "WebScriptSource.h"
 #include "WebSettings.h"
 #include "WebView.h"
-#include <gtest/gtest.h>
+#include "core/dom/Document.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebThread.h"
@@ -46,11 +46,14 @@
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/WebURLResponse.h"
 #include "public/platform/WebUnitTestSupport.h"
+#include "public/web/WebDocument.h"
+#include <gtest/gtest.h>
 
-using namespace WebKit;
-using WebKit::FrameTestHelpers::runPendingTasks;
-using WebKit::URLTestHelpers::toKURL;
-using WebKit::URLTestHelpers::registerMockedURLLoad;
+using namespace blink;
+using WebCore::Document;
+using blink::FrameTestHelpers::runPendingTasks;
+using blink::URLTestHelpers::toKURL;
+using blink::URLTestHelpers::registerMockedURLLoad;
 
 namespace {
 
@@ -115,6 +118,7 @@ protected:
     {
         // Create and initialize the WebView.
         m_webView = WebView::create(0);
+        m_mainFrame = WebFrame::create(&m_webFrameClient);
 
         // We want the images to load and JavaScript to be on.
         WebSettings* settings = m_webView->settings();
@@ -122,13 +126,14 @@ protected:
         settings->setLoadsImagesAutomatically(true);
         settings->setJavaScriptEnabled(true);
 
-        m_webView->initializeMainFrame(&m_webFrameClient);
+        m_webView->setMainFrame(m_mainFrame);
     }
 
     virtual void TearDown()
     {
         Platform::current()->unitTestSupport()->unregisterAllMockedURLs();
         m_webView->close();
+        m_mainFrame->close();
     }
 
     WebURL setUpCSSTestPage()
@@ -189,6 +194,7 @@ private:
     WebString m_pngMimeType;
     WebString m_svgMimeType;
     TestWebFrameClient m_webFrameClient;
+    WebFrame* m_mainFrame;
 };
 
 // Tests that a page with resources and sub-frame is reported with all its resources.
@@ -204,6 +210,12 @@ TEST_F(WebPageNewSerializeTest, PageWithFrames)
     registerMockedURLLoad(toKURL("http://www.test.com/blue_background.png"), WebString::fromUTF8("blue_background.png"), WebString::fromUTF8("pageserializer/"), pngMimeType());
 
     loadURLInTopFrame(topFrameURL);
+    // OBJECT/EMBED have some delay to start to load their content. The first
+    // serveAsynchronousMockedRequests call in loadURLInTopFrame() finishes
+    // before the start.
+    RefPtr<Document> document = static_cast<PassRefPtr<Document> >(m_webView->mainFrame()->document());
+    document->updateLayoutIgnorePendingStylesheets(Document::RunPostLayoutTasksSynchronously);
+    Platform::current()->unitTestSupport()->serveAsynchronousMockedRequests();
 
     WebVector<WebPageSerializer::Resource> resources;
     WebPageSerializer::serialize(m_webView, &resources);

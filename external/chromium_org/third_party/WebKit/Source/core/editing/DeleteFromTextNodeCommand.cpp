@@ -28,7 +28,6 @@
 
 #include "bindings/v8/ExceptionState.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "core/accessibility/AXObjectCache.h"
 #include "core/dom/Document.h"
 #include "core/dom/Text.h"
 
@@ -52,16 +51,12 @@ void DeleteFromTextNodeCommand::doApply()
     if (!m_node->isContentEditable(Node::UserSelectAllIsAlwaysNonEditable))
         return;
 
-    TrackExceptionState es;
-    m_text = m_node->substringData(m_offset, m_count, es);
-    if (es.hadException())
+    TrackExceptionState exceptionState;
+    m_text = m_node->substringData(m_offset, m_count, exceptionState);
+    if (exceptionState.hadException())
         return;
 
-    // Need to notify this before actually deleting the text
-    if (AXObjectCache* cache = document()->existingAXObjectCache())
-        cache->nodeTextChangeNotification(m_node.get(), AXObjectCache::AXTextDeleted, m_offset, m_text);
-
-    m_node->deleteData(m_offset, m_count, es);
+    m_node->deleteData(m_offset, m_count, exceptionState, CharacterData::DeprecatedRecalcStyleImmediatlelyForEditing);
 }
 
 void DeleteFromTextNodeCommand::doUnapply()
@@ -71,17 +66,7 @@ void DeleteFromTextNodeCommand::doUnapply()
     if (!m_node->rendererIsEditable())
         return;
 
-    m_node->insertData(m_offset, m_text, IGNORE_EXCEPTION);
-
-    if (AXObjectCache* cache = document()->existingAXObjectCache())
-        cache->nodeTextChangeNotification(m_node.get(), AXObjectCache::AXTextInserted, m_offset, m_text);
+    m_node->insertData(m_offset, m_text, IGNORE_EXCEPTION, CharacterData::DeprecatedRecalcStyleImmediatlelyForEditing);
 }
-
-#ifndef NDEBUG
-void DeleteFromTextNodeCommand::getNodesInCommand(HashSet<Node*>& nodes)
-{
-    addNodeAndDescendants(m_node.get(), nodes);
-}
-#endif
 
 } // namespace WebCore

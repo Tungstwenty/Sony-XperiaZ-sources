@@ -26,7 +26,7 @@
 #include <limits.h>
 #include "wtf/ASCIICType.h"
 #include "wtf/Forward.h"
-#include "wtf/StdLibExtras.h"
+#include "wtf/HashMap.h"
 #include "wtf/StringHasher.h"
 #include "wtf/Vector.h"
 #include "wtf/WTFExport.h"
@@ -42,6 +42,7 @@ typedef const struct __CFString * CFStringRef;
 
 namespace WTF {
 
+struct AlreadyHashed;
 struct CStringTranslator;
 template<typename CharacterType> struct HashAndCharactersTranslator;
 struct HashAndUTF8CharactersTranslator;
@@ -53,8 +54,11 @@ template<typename> class RetainPtr;
 
 enum TextCaseSensitivity { TextCaseSensitive, TextCaseInsensitive };
 
+enum StripBehavior { StripExtraWhiteSpace, DoNotStripWhiteSpace };
+
 typedef bool (*CharacterMatchFunctionPtr)(UChar);
 typedef bool (*IsWhiteSpaceFunctionPtr)(UChar);
+typedef HashMap<unsigned, StringImpl*, AlreadyHashed> StaticStringsTable;
 
 // Define STRING_STATS to turn on run time statistics of string sizes and memory usage
 #undef STRING_STATS
@@ -104,7 +108,6 @@ void removeStringForStats(StringImpl*);
 // https://docs.google.com/document/d/1kOCUlJdh2WJMJGDf-WoEQhmnjKLaOYRbiHz5TiGJl14/edit?usp=sharing
 class WTF_EXPORT StringImpl {
     WTF_MAKE_NONCOPYABLE(StringImpl);
-    WTF_MAKE_FAST_ALLOCATED;
     friend struct WTF::CStringTranslator;
     template<typename CharacterType> friend struct WTF::HashAndCharactersTranslator;
     friend struct WTF::HashAndUTF8CharactersTranslator;
@@ -114,16 +117,22 @@ class WTF_EXPORT StringImpl {
     friend struct WTF::UCharBufferTranslator;
 
 private:
+    // StringImpls are allocated out of the WTF buffer partition.
+    void* operator new(size_t);
+    void* operator new(size_t, void* ptr) { return ptr; };
+    void operator delete(void*);
+
     // Used to construct static strings, which have an special refCount that can never hit zero.
     // This means that the static string will never be destroyed, which is important because
     // static strings will be shared across threads & ref-counted in a non-threadsafe manner.
     enum ConstructEmptyStringTag { ConstructEmptyString };
     explicit StringImpl(ConstructEmptyStringTag)
-        : m_refCount(s_refCountFlagIsStaticString)
+        : m_refCount(1)
         , m_length(0)
         , m_hash(0)
         , m_isAtomic(false)
         , m_is8Bit(true)
+        , m_isStatic(true)
     {
         // Ensure that the hash is computed so that AtomicStringHash can call existingHash()
         // with impunity. The empty string is special because it is never entered into
@@ -135,22 +144,24 @@ private:
     // FIXME: there has to be a less hacky way to do this.
     enum Force8Bit { Force8BitConstructor };
     StringImpl(unsigned length, Force8Bit)
-        : m_refCount(s_refCountIncrement)
+        : m_refCount(1)
         , m_length(length)
         , m_hash(0)
         , m_isAtomic(false)
         , m_is8Bit(true)
+        , m_isStatic(false)
     {
         ASSERT(m_length);
         STRING_STATS_ADD_8BIT_STRING(m_length);
     }
 
     StringImpl(unsigned length)
-        : m_refCount(s_refCountIncrement)
+        : m_refCount(1)
         , m_length(length)
         , m_hash(0)
         , m_isAtomic(false)
         , m_is8Bit(false)
+        , m_isStatic(false)
     {
         ASSERT(m_length);
         STRING_STATS_ADD_16BIT_STRING(m_length);
@@ -158,11 +169,12 @@ private:
 
     enum StaticStringTag { StaticString };
     StringImpl(unsigned length, unsigned hash, StaticStringTag)
-        : m_refCount(s_refCountFlagIsStaticString)
+        : m_refCount(1)
         , m_length(length)
         , m_hash(hash)
         , m_isAtomic(false)
         , m_is8Bit(true)
+        , m_isStatic(true)
     {
     }
 
@@ -170,6 +182,9 @@ public:
     ~StringImpl();
 
     static StringImpl* createStatic(const char* string, unsigned length, unsigned hash);
+    static void freezeStaticStrings();
+    static const StaticStringsTable& allStaticStrings();
+    static unsigned highestStaticStringLength() { return m_highestStaticStringLength; }
 
     static PassRefPtr<StringImpl> create(const UChar*, unsigned length);
     static PassRefPtr<StringImpl> create(const LChar*, unsigned length);
@@ -215,7 +230,7 @@ public:
     bool isAtomic() const { return m_isAtomic; }
     void setIsAtomic(bool isAtomic) { m_isAtomic = isAtomic; }
 
-    bool isStatic() const { return m_refCount & s_refCountFlagIsStaticString; }
+    bool isStatic() const { return m_isStatic; }
 
 private:
     // The high bits of 'hash' are always empty, but we prefer to store our flags
@@ -234,6 +249,8 @@ private:
     {
         return m_hash;
     }
+
+    void destroyIfNotStatic();
 
 public:
     bool hasHash() const
@@ -256,22 +273,22 @@ public:
 
     inline bool hasOneRef() const
     {
-        return m_refCount == s_refCountIncrement;
+        return m_refCount == 1;
     }
 
     inline void ref()
     {
-        m_refCount += s_refCountIncrement;
+        ++m_refCount;
     }
 
     inline void deref()
     {
-        if (m_refCount == s_refCountIncrement) {
-            delete this;
+        if (hasOneRef()) {
+            destroyIfNotStatic();
             return;
         }
 
-        m_refCount -= s_refCountIncrement;
+        --m_refCount;
     }
 
     static StringImpl* empty();
@@ -349,6 +366,8 @@ public:
 
     PassRefPtr<StringImpl> lower();
     PassRefPtr<StringImpl> upper();
+    PassRefPtr<StringImpl> lower(const AtomicString& localeIdentifier);
+    PassRefPtr<StringImpl> upper(const AtomicString& localeIdentifier);
 
     PassRefPtr<StringImpl> fill(UChar);
     // FIXME: Do we need fill(char) or can we just do the right thing if UChar is ASCII?
@@ -356,8 +375,8 @@ public:
 
     PassRefPtr<StringImpl> stripWhiteSpace();
     PassRefPtr<StringImpl> stripWhiteSpace(IsWhiteSpaceFunctionPtr);
-    PassRefPtr<StringImpl> simplifyWhiteSpace();
-    PassRefPtr<StringImpl> simplifyWhiteSpace(IsWhiteSpaceFunctionPtr);
+    PassRefPtr<StringImpl> simplifyWhiteSpace(StripBehavior stripBehavior = StripExtraWhiteSpace);
+    PassRefPtr<StringImpl> simplifyWhiteSpace(IsWhiteSpaceFunctionPtr, StripBehavior stripBehavior = StripExtraWhiteSpace);
 
     PassRefPtr<StringImpl> removeCharacters(CharacterMatchFunctionPtr);
     template <typename CharType>
@@ -402,8 +421,7 @@ public:
     PassRefPtr<StringImpl> replace(UChar, const UChar*, unsigned replacementLength);
     PassRefPtr<StringImpl> replace(StringImpl*, StringImpl*);
     PassRefPtr<StringImpl> replace(unsigned index, unsigned len, StringImpl*);
-
-    WTF::Unicode::Direction defaultWritingDirection(bool* hasStrongDirectionality = 0);
+    PassRefPtr<StringImpl> upconvertedString();
 
 #if USE(CF)
     RetainPtr<CFStringRef> createCFString();
@@ -421,16 +439,14 @@ private:
     static const unsigned s_copyCharsInlineCutOff = 20;
 
     template <class UCharPredicate> PassRefPtr<StringImpl> stripMatchedCharacters(UCharPredicate);
-    template <typename CharType, class UCharPredicate> PassRefPtr<StringImpl> simplifyMatchedCharactersToSpace(UCharPredicate);
+    template <typename CharType, class UCharPredicate> PassRefPtr<StringImpl> simplifyMatchedCharactersToSpace(UCharPredicate, StripBehavior);
     NEVER_INLINE unsigned hashSlowCase() const;
-
-    // The bottom bit in the ref count indicates a static (immortal) string.
-    static const unsigned s_refCountFlagIsStaticString = 0x1;
-    static const unsigned s_refCountIncrement = 0x2; // This allows us to ref / deref without disturbing the static string flag.
 
 #ifdef STRING_STATS
     static StringStats m_stringStats;
 #endif
+
+    static unsigned m_highestStaticStringLength;
 
 #ifndef NDEBUG
     void assertHashIsCorrect()
@@ -444,8 +460,9 @@ private:
     unsigned m_refCount;
     unsigned m_length;
     mutable unsigned m_hash : 24;
-    mutable unsigned m_isAtomic : 1;
-    mutable unsigned m_is8Bit : 1;
+    unsigned m_isAtomic : 1;
+    unsigned m_is8Bit : 1;
+    unsigned m_isStatic : 1;
 };
 
 template <>
@@ -504,7 +521,7 @@ inline size_t find(const CharacterType* characters, unsigned length, CharacterTy
             return index;
         ++index;
     }
-    return notFound;
+    return kNotFound;
 }
 
 ALWAYS_INLINE size_t find(const UChar* characters, unsigned length, LChar matchCharacter, unsigned index = 0)
@@ -515,7 +532,7 @@ ALWAYS_INLINE size_t find(const UChar* characters, unsigned length, LChar matchC
 inline size_t find(const LChar* characters, unsigned length, UChar matchCharacter, unsigned index = 0)
 {
     if (matchCharacter & ~0xFF)
-        return notFound;
+        return kNotFound;
     return find(characters, length, static_cast<LChar>(matchCharacter), index);
 }
 
@@ -526,7 +543,7 @@ inline size_t find(const LChar* characters, unsigned length, CharacterMatchFunct
             return index;
         ++index;
     }
-    return notFound;
+    return kNotFound;
 }
 
 inline size_t find(const UChar* characters, unsigned length, CharacterMatchFunctionPtr matchFunction, unsigned index = 0)
@@ -536,7 +553,7 @@ inline size_t find(const UChar* characters, unsigned length, CharacterMatchFunct
             return index;
         ++index;
     }
-    return notFound;
+    return kNotFound;
 }
 
 template<typename CharacterType>
@@ -567,20 +584,20 @@ inline size_t findNextLineStart(const CharacterType* characters, unsigned length
                 return index;
         }
     }
-    return notFound;
+    return kNotFound;
 }
 
 template<typename CharacterType>
 inline size_t reverseFindLineTerminator(const CharacterType* characters, unsigned length, unsigned index = UINT_MAX)
 {
     if (!length)
-        return notFound;
+        return kNotFound;
     if (index >= length)
         index = length - 1;
     CharacterType c = characters[index];
     while ((c != '\n') && (c != '\r')) {
         if (!index--)
-            return notFound;
+            return kNotFound;
         c = characters[index];
     }
     return index;
@@ -590,12 +607,12 @@ template<typename CharacterType>
 inline size_t reverseFind(const CharacterType* characters, unsigned length, CharacterType matchCharacter, unsigned index = UINT_MAX)
 {
     if (!length)
-        return notFound;
+        return kNotFound;
     if (index >= length)
         index = length - 1;
     while (characters[index] != matchCharacter) {
         if (!index--)
-            return notFound;
+            return kNotFound;
     }
     return index;
 }
@@ -608,7 +625,7 @@ ALWAYS_INLINE size_t reverseFind(const UChar* characters, unsigned length, LChar
 inline size_t reverseFind(const LChar* characters, unsigned length, UChar matchCharacter, unsigned index = UINT_MAX)
 {
     if (matchCharacter & ~0xFF)
-        return notFound;
+        return kNotFound;
     return reverseFind(characters, length, static_cast<LChar>(matchCharacter), index);
 }
 

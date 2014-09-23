@@ -28,12 +28,12 @@
 
 /**
  * @constructor
- * @param {Element} listNode
+ * @param {!Element} listNode
  * @param {boolean=} nonFocusable
  */
 function TreeOutline(listNode, nonFocusable)
 {
-    /** @type {!Array.<TreeElement>} */
+    /** @type {!Array.<!TreeElement>} */
     this.children = [];
     this.selectedTreeElement = null;
     this._childrenListNode = listNode;
@@ -45,15 +45,15 @@ function TreeOutline(listNode, nonFocusable)
     this.expanded = true;
     this.selected = false;
     this.treeOutline = this;
-    /** @type {function(TreeElement,TreeElement):number|null} */
+    /** @type {?function(!TreeElement, !TreeElement):number} */
     this.comparator = null;
 
     this.setFocusable(!nonFocusable);
     this._childrenListNode.addEventListener("keydown", this._treeKeyDown.bind(this), true);
 
-    /** @type {!Map.<Object, !Array.<!TreeElement>>} */
+    /** @type {!Map.<!Object, !Array.<!TreeElement>>} */
     this._treeElementsMap = new Map();
-    /** @type {!Map.<Object, boolean>} */
+    /** @type {!Map.<!Object, boolean>} */
     this._expandedStateMap = new Map();
 }
 
@@ -66,7 +66,7 @@ TreeOutline.prototype.setFocusable = function(focusable)
 }
 
 /**
- * @param {TreeElement} child
+ * @param {!TreeElement} child
  */
 TreeOutline.prototype.appendChild = function(child)
 {
@@ -79,8 +79,8 @@ TreeOutline.prototype.appendChild = function(child)
 }
 
 /**
- * @param {TreeElement} child
- * @param {TreeElement} beforeChild
+ * @param {!TreeElement} child
+ * @param {!TreeElement} beforeChild
  */
 TreeOutline.prototype.insertBeforeChild = function(child, beforeChild)
 {
@@ -98,7 +98,7 @@ TreeOutline.prototype.insertBeforeChild = function(child, beforeChild)
 }
 
 /**
- * @param {TreeElement} child
+ * @param {!TreeElement} child
  * @param {number} index
  */
 TreeOutline.prototype.insertChild = function(child, index)
@@ -188,7 +188,7 @@ TreeOutline.prototype.removeChildAtIndex = function(childIndex)
 }
 
 /**
- * @param {TreeElement} child
+ * @param {!TreeElement} child
  */
 TreeOutline.prototype.removeChild = function(child)
 {
@@ -224,13 +224,13 @@ TreeOutline.prototype.removeChildren = function()
 }
 
 /**
- * @param {TreeElement} element
+ * @param {!TreeElement} element
  */
 TreeOutline.prototype._rememberTreeElement = function(element)
 {
     if (!this._treeElementsMap.get(element.representedObject))
         this._treeElementsMap.put(element.representedObject, []);
-        
+
     // check if the element is already known
     var elements = this._treeElementsMap.get(element.representedObject);
     if (elements.indexOf(element) !== -1)
@@ -241,7 +241,7 @@ TreeOutline.prototype._rememberTreeElement = function(element)
 }
 
 /**
- * @param {TreeElement} element
+ * @param {!TreeElement} element
  */
 TreeOutline.prototype._forgetTreeElement = function(element)
 {
@@ -254,7 +254,7 @@ TreeOutline.prototype._forgetTreeElement = function(element)
 }
 
 /**
- * @param {TreeElement} parentElement
+ * @param {!TreeElement} parentElement
  */
 TreeOutline.prototype._forgetChildrenRecursive = function(parentElement)
 {
@@ -265,6 +265,10 @@ TreeOutline.prototype._forgetChildrenRecursive = function(parentElement)
     }
 }
 
+/**
+ * @param {?Object} representedObject
+ * @return {?TreeElement}
+ */
 TreeOutline.prototype.getCachedTreeElement = function(representedObject)
 {
     if (!representedObject)
@@ -276,6 +280,10 @@ TreeOutline.prototype.getCachedTreeElement = function(representedObject)
     return null;
 }
 
+/**
+ * @param {?Object} representedObject
+ * @return {?TreeElement}
+ */
 TreeOutline.prototype.findTreeElement = function(representedObject, isAncestor, getParent)
 {
     if (!representedObject)
@@ -285,14 +293,14 @@ TreeOutline.prototype.findTreeElement = function(representedObject, isAncestor, 
     if (cachedElement)
         return cachedElement;
 
-    // Walk up the parent pointers from the desired representedObject 
+    // Walk up the parent pointers from the desired representedObject
     var ancestors = [];
     for (var currentObject = getParent(representedObject); currentObject;  currentObject = getParent(currentObject)) {
         ancestors.push(currentObject);
         if (this.getCachedTreeElement(currentObject))  // stop climbing as soon as we hit
             break;
     }
-        
+
     if (!currentObject)
         return null;
 
@@ -306,6 +314,11 @@ TreeOutline.prototype.findTreeElement = function(representedObject, isAncestor, 
     return this.getCachedTreeElement(representedObject);
 }
 
+/**
+ * @param {number} x
+ * @param {number} y
+ * @return {?TreeElement}
+ */
 TreeOutline.prototype.treeElementFromPoint = function(x, y)
 {
     var node = this._childrenListNode.ownerDocument.elementFromPoint(x, y);
@@ -424,7 +437,8 @@ TreeOutline.prototype.revealAndSelect = function(omitFocus)
 
 /**
  * @constructor
- * @param {Object=} representedObject
+ * @param {string|!Node} title
+ * @param {?Object=} representedObject
  * @param {boolean=} hasChildren
  */
 function TreeElement(title, representedObject, hasChildren)
@@ -432,6 +446,7 @@ function TreeElement(title, representedObject, hasChildren)
     this._title = title;
     this.representedObject = (representedObject || {});
 
+    this.root = false;
     this._hidden = false;
     this._selectable = true;
     this.expanded = false;
@@ -666,7 +681,7 @@ TreeElement.prototype.collapse = function()
         this._childrenListNode.classList.remove("expanded");
 
     this.expanded = false;
-    
+
     if (this.treeOutline)
         this.treeOutline._expandedStateMap.put(this.representedObject, false);
 
@@ -770,7 +785,7 @@ TreeElement.prototype.reveal = function()
         currentAncestor = currentAncestor.parent;
     }
 
-    this.onreveal(this);
+    this.onreveal();
 }
 
 TreeElement.prototype.revealed = function()
@@ -806,7 +821,7 @@ TreeElement.prototype.select = function(omitFocus, selectedByUser)
 
     this.selected = true;
 
-    if(!omitFocus)
+    if (!omitFocus)
         this.treeOutline._childrenListNode.focus();
 
     // Focusing on another node may detach "this" from tree.
@@ -845,23 +860,48 @@ TreeElement.prototype.deselect = function(supressOnDeselect)
 
 // Overridden by subclasses.
 TreeElement.prototype.onpopulate = function() { }
-TreeElement.prototype.onenter = function() { }
-TreeElement.prototype.ondelete = function() { }
-TreeElement.prototype.onspace = function() { }
+
+/**
+ * @return {boolean}
+ */
+TreeElement.prototype.onenter = function() { return false; }
+
+/**
+ * @return {boolean}
+ */
+TreeElement.prototype.ondelete = function() { return false; }
+
+/**
+ * @return {boolean}
+ */
+TreeElement.prototype.onspace = function() { return false; }
+
 TreeElement.prototype.onattach = function() { }
+
 TreeElement.prototype.onexpand = function() { }
+
 TreeElement.prototype.oncollapse = function() { }
-TreeElement.prototype.ondblclick = function() { }
+
+/**
+ * @param {!MouseEvent} e
+ * @return {boolean}
+ */
+TreeElement.prototype.ondblclick = function(e) { return false; }
+
 TreeElement.prototype.onreveal = function() { }
-/** @param {boolean=} selectedByUser */
-TreeElement.prototype.onselect = function(selectedByUser) { }
+
+/**
+ * @param {boolean=} selectedByUser
+ * @return {boolean}
+ */
+TreeElement.prototype.onselect = function(selectedByUser) { return false; }
 
 /**
  * @param {boolean} skipUnrevealed
- * @param {(TreeOutline|TreeElement)=} stayWithin
+ * @param {(!TreeOutline|!TreeElement|null)=} stayWithin
  * @param {boolean=} dontPopulate
- * @param {Object=} info
- * @return {TreeElement}
+ * @param {!Object=} info
+ * @return {?TreeElement}
  */
 TreeElement.prototype.traverseNextTreeElement = function(skipUnrevealed, stayWithin, dontPopulate, info)
 {
@@ -901,7 +941,7 @@ TreeElement.prototype.traverseNextTreeElement = function(skipUnrevealed, stayWit
 /**
  * @param {boolean} skipUnrevealed
  * @param {boolean=} dontPopulate
- * @return {TreeElement}
+ * @return {?TreeElement}
  */
 TreeElement.prototype.traversePreviousTreeElement = function(skipUnrevealed, dontPopulate)
 {
@@ -926,7 +966,7 @@ TreeElement.prototype.traversePreviousTreeElement = function(skipUnrevealed, don
 
 TreeElement.prototype.isEventWithinDisclosureTriangle = function(event)
 {
-    // FIXME: We should not use getComputedStyle(). For that we need to get rid of using ::before for disclosure triangle. (http://webk.it/74446) 
+    // FIXME: We should not use getComputedStyle(). For that we need to get rid of using ::before for disclosure triangle. (http://webk.it/74446)
     var paddingLeftValue = window.getComputedStyle(this._listItemNode).getPropertyCSSValue("padding-left");
     var computedLeftPadding = paddingLeftValue ? paddingLeftValue.getFloatValue(CSSPrimitiveValue.CSS_PX) : 0;
     var left = this._listItemNode.totalOffsetLeft() + computedLeftPadding;

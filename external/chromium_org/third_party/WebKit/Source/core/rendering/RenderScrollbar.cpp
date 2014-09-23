@@ -27,8 +27,8 @@
 #include "core/rendering/RenderScrollbar.h"
 
 #include "core/css/PseudoStyleRequest.h"
-#include "core/page/Frame.h"
-#include "core/page/FrameView.h"
+#include "core/frame/Frame.h"
+#include "core/frame/FrameView.h"
 #include "core/rendering/RenderPart.h"
 #include "core/rendering/RenderScrollbarPart.h"
 #include "core/rendering/RenderScrollbarTheme.h"
@@ -87,7 +87,7 @@ RenderBox* RenderScrollbar::owningRenderer() const
     return m_owner && m_owner->renderer() ? m_owner->renderer()->enclosingBox() : 0;
 }
 
-void RenderScrollbar::setParent(ScrollView* parent)
+void RenderScrollbar::setParent(Widget* parent)
 {
     Scrollbar::setParent(parent);
     if (!parent) {
@@ -252,7 +252,7 @@ void RenderScrollbar::updateScrollbarPart(ScrollbarPart partType, bool destroy)
 
     RenderScrollbarPart* partRenderer = m_parts.get(partType);
     if (!partRenderer && needRenderer) {
-        partRenderer = RenderScrollbarPart::createAnonymous(owningRenderer()->document(), this, partType);
+        partRenderer = RenderScrollbarPart::createAnonymous(&owningRenderer()->document(), this, partType);
         m_parts.set(partType, partRenderer);
     } else if (partRenderer && !needRenderer) {
         m_parts.remove(partType);

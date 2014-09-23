@@ -38,7 +38,7 @@ class GraphicsContext;
 class GraphicsLayer;
 }
 
-namespace WebKit {
+namespace blink {
 class PageOverlay;
 class WebPageOverlay;
 class WebViewImpl;
@@ -66,13 +66,13 @@ private:
 
     explicit PageOverlayList(WebViewImpl*);
 
-    // Returns the index of the client found. Otherwise, returns WTF::notFound.
+    // Returns the index of the client found. Otherwise, returns WTF::kNotFound.
     size_t find(WebPageOverlay*);
 
     WebViewImpl* m_viewImpl;
     PageOverlays m_pageOverlays;
 };
 
-} // namespace WebKit
+} // namespace blink
 
 #endif // PageOverlayList_h

@@ -35,7 +35,7 @@
 #include "HTMLNames.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
 #include "core/css/StylePropertySet.h"
-#include "core/dom/MouseEvent.h"
+#include "core/events/MouseEvent.h"
 
 namespace WebCore {
 
@@ -53,7 +53,7 @@ HTMLMediaElement* toParentMediaElement(Node* node)
     if (!mediaNode || !mediaNode->isElementNode() || !toElement(mediaNode)->isMediaElement())
         return 0;
 
-    return static_cast<HTMLMediaElement*>(mediaNode);
+    return toHTMLMediaElement(mediaNode);
 }
 
 MediaControlElementType mediaControlElementType(Node* node)
@@ -102,16 +102,16 @@ void MediaControlElement::setDisplayType(MediaControlElementType displayType)
 
 // ----------------------------
 
-MediaControlDivElement::MediaControlDivElement(Document* document, MediaControlElementType displayType)
-    : HTMLDivElement(divTag, document)
+MediaControlDivElement::MediaControlDivElement(Document& document, MediaControlElementType displayType)
+    : HTMLDivElement(document)
     , MediaControlElement(displayType, this)
 {
 }
 
 // ----------------------------
 
-MediaControlInputElement::MediaControlInputElement(Document* document, MediaControlElementType displayType)
-    : HTMLInputElement(inputTag, document, 0, false)
+MediaControlInputElement::MediaControlInputElement(Document& document, MediaControlElementType displayType)
+    : HTMLInputElement(document, 0, false)
     , MediaControlElement(displayType, this)
 {
 }
@@ -123,7 +123,7 @@ bool MediaControlInputElement::isMouseFocusable() const
 
 // ----------------------------
 
-MediaControlTimeDisplayElement::MediaControlTimeDisplayElement(Document* document, MediaControlElementType displayType)
+MediaControlTimeDisplayElement::MediaControlTimeDisplayElement(Document& document, MediaControlElementType displayType)
     : MediaControlDivElement(document, displayType)
     , m_currentValue(0)
 {
@@ -136,14 +136,14 @@ void MediaControlTimeDisplayElement::setCurrentValue(double time)
 
 // ----------------------------
 
-MediaControlMuteButtonElement::MediaControlMuteButtonElement(Document* document, MediaControlElementType displayType)
+MediaControlMuteButtonElement::MediaControlMuteButtonElement(Document& document, MediaControlElementType displayType)
     : MediaControlInputElement(document, displayType)
 {
 }
 
 void MediaControlMuteButtonElement::defaultEventHandler(Event* event)
 {
-    if (event->type() == eventNames().clickEvent) {
+    if (event->type() == EventTypeNames::click) {
         mediaController()->setMuted(!mediaController()->muted());
         event->setDefaultHandled();
     }
@@ -163,7 +163,7 @@ void MediaControlMuteButtonElement::updateDisplayType()
 
 // ----------------------------
 
-MediaControlVolumeSliderElement::MediaControlVolumeSliderElement(Document* document)
+MediaControlVolumeSliderElement::MediaControlVolumeSliderElement(Document& document)
     : MediaControlInputElement(document, MediaVolumeSlider)
     , m_clearMutedOnUserInteraction(false)
 {
@@ -175,12 +175,12 @@ void MediaControlVolumeSliderElement::defaultEventHandler(Event* event)
     if (event->isMouseEvent() && toMouseEvent(event)->button())
         return;
 
-    if (!attached())
+    if (!inDocument() || !document().isActive())
         return;
 
     MediaControlInputElement::defaultEventHandler(event);
 
-    if (event->type() == eventNames().mouseoverEvent || event->type() == eventNames().mouseoutEvent || event->type() == eventNames().mousemoveEvent)
+    if (event->type() == EventTypeNames::mouseover || event->type() == EventTypeNames::mouseout || event->type() == EventTypeNames::mousemove)
         return;
 
     double volume = value().toDouble();
@@ -192,7 +192,7 @@ void MediaControlVolumeSliderElement::defaultEventHandler(Event* event)
 
 bool MediaControlVolumeSliderElement::willRespondToMouseMoveEvents()
 {
-    if (!attached())
+    if (!inDocument() || !document().isActive())
         return false;
 
     return MediaControlInputElement::willRespondToMouseMoveEvents();
@@ -200,7 +200,7 @@ bool MediaControlVolumeSliderElement::willRespondToMouseMoveEvents()
 
 bool MediaControlVolumeSliderElement::willRespondToMouseClickEvents()
 {
-    if (!attached())
+    if (!inDocument() || !document().isActive())
         return false;
 
     return MediaControlInputElement::willRespondToMouseClickEvents();

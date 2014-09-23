@@ -27,17 +27,17 @@
 #ifndef WorkerGlobalScopeNotifications_h
 #define WorkerGlobalScopeNotifications_h
 
-#if ENABLE(NOTIFICATIONS) || ENABLE(LEGACY_NOTIFICATIONS)
+#if ENABLE(LEGACY_NOTIFICATIONS)
 
-#include "core/platform/Supplementable.h"
+#include "core/workers/WorkerSupplementable.h"
 
 namespace WebCore {
 
 class NotificationCenter;
-class ScriptExecutionContext;
+class ExecutionContext;
 class WorkerGlobalScope;
 
-class WorkerGlobalScopeNotifications : public Supplement<ScriptExecutionContext> {
+class WorkerGlobalScopeNotifications : public WorkerSupplement {
 public:
     virtual ~WorkerGlobalScopeNotifications();
 
@@ -56,6 +56,6 @@ private:
 
 } // namespace WebCore
 
-#endif // ENABLE(NOTIFICATIONS) || ENABLE(LEGACY_NOTIFICATIONS)
-
 #endif // WorkerGlobalScopeNotifications_h
+
+#endif // ENABLE(LEGACY_NOTIFICATIONS)

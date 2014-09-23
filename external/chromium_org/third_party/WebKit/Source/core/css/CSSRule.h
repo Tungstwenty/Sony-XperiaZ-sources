@@ -28,9 +28,9 @@
 
 namespace WebCore {
 
+class CSSParserContext;
 class CSSStyleSheet;
 class StyleRuleBase;
-struct CSSParserContext;
 
 class CSSRule : public RefCounted<CSSRule> {
 public:
@@ -47,13 +47,14 @@ public:
         // 7 was VARIABLES_RULE; we now match other browsers with 7 as
         // KEYFRAMES_RULE:
         // <https://bugs.webkit.org/show_bug.cgi?id=71293>.
-        WEBKIT_KEYFRAMES_RULE,
-        WEBKIT_KEYFRAME_RULE,
+        KEYFRAMES_RULE,
+        WEBKIT_KEYFRAMES_RULE = KEYFRAMES_RULE,
+        KEYFRAME_RULE,
+        WEBKIT_KEYFRAME_RULE = KEYFRAME_RULE,
         SUPPORTS_RULE = 12,
         VIEWPORT_RULE = 15,
         WEBKIT_REGION_RULE = 16,
-        WEBKIT_FILTER_RULE = 17,
-        HOST_RULE = 1001,
+        WEBKIT_FILTER_RULE = 17
     };
 
     virtual Type type() const = 0;
@@ -82,7 +83,7 @@ public:
     CSSRule* parentRule() const { return m_parentIsRule ? m_parentRule : 0; }
 
     // NOTE: Just calls notImplemented().
-    void setCssText(const String&);
+    void setCSSText(const String&);
 
 protected:
     CSSRule(CSSStyleSheet* parent)
@@ -106,6 +107,9 @@ private:
         CSSStyleSheet* m_parentStyleSheet;
     };
 };
+
+#define DEFINE_CSS_RULE_TYPE_CASTS(ToType, TYPE_NAME) \
+    DEFINE_TYPE_CASTS(ToType, CSSRule, rule, rule->type() == CSSRule::TYPE_NAME, rule.type() == CSSRule::TYPE_NAME)
 
 } // namespace WebCore
 

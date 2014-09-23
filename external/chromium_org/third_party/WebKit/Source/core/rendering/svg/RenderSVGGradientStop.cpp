@@ -55,14 +55,12 @@ void RenderSVGGradientStop::styleDidChange(StyleDifference diff, const RenderSty
     if (!renderer)
         return;
 
-    ASSERT(renderer->isSVGResourceContainer());
-    RenderSVGResourceContainer* container = renderer->toRenderSVGResourceContainer();
+    RenderSVGResourceContainer* container = toRenderSVGResourceContainer(renderer);
     container->removeAllClientsFromCache();
 }
 
 void RenderSVGGradientStop::layout()
 {
-    StackStats::LayoutCheckPoint layoutCheckPoint;
     clearNeedsLayout();
 }
 

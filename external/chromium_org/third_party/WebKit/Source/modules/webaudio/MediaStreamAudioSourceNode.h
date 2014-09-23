@@ -27,8 +27,8 @@
 
 #if ENABLE(WEB_AUDIO)
 
-#include "core/platform/audio/AudioSourceProvider.h"
-#include "core/platform/audio/AudioSourceProviderClient.h"
+#include "platform/audio/AudioSourceProvider.h"
+#include "platform/audio/AudioSourceProviderClient.h"
 #include "modules/mediastream/MediaStream.h"
 #include "modules/webaudio/AudioSourceNode.h"
 #include "wtf/OwnPtr.h"
@@ -41,7 +41,7 @@ class AudioContext;
 
 class MediaStreamAudioSourceNode : public AudioSourceNode, public AudioSourceProviderClient {
 public:
-    static PassRefPtr<MediaStreamAudioSourceNode> create(AudioContext*, MediaStream*, AudioSourceProvider*);
+    static PassRefPtr<MediaStreamAudioSourceNode> create(AudioContext*, MediaStream*, MediaStreamTrack*, AudioSourceProvider*);
 
     virtual ~MediaStreamAudioSourceNode();
 
@@ -57,12 +57,13 @@ public:
     AudioSourceProvider* audioSourceProvider() const { return m_audioSourceProvider; }
 
 private:
-    MediaStreamAudioSourceNode(AudioContext*, MediaStream*, AudioSourceProvider*);
+    MediaStreamAudioSourceNode(AudioContext*, MediaStream*, MediaStreamTrack*, AudioSourceProvider*);
 
     // As an audio source, we will never propagate silence.
     virtual bool propagatesSilence() const OVERRIDE { return false; }
 
     RefPtr<MediaStream> m_mediaStream;
+    RefPtr<MediaStreamTrack> m_audioTrack;
     AudioSourceProvider* m_audioSourceProvider;
 
     Mutex m_processLock;

@@ -44,8 +44,8 @@ class SourceCodeCache BASE_EMBEDDED {
  public:
   explicit SourceCodeCache(Script::Type type): type_(type), cache_(NULL) { }
 
-  void Initialize(bool create_heap_objects) {
-    cache_ = create_heap_objects ? HEAP->empty_fixed_array() : NULL;
+  void Initialize(Isolate* isolate, bool create_heap_objects) {
+    cache_ = create_heap_objects ? isolate->heap()->empty_fixed_array() : NULL;
   }
 
   void Iterate(ObjectVisitor* v) {
@@ -104,9 +104,6 @@ class Bootstrapper {
 
   // Detach the environment from its outer global object.
   void DetachGlobal(Handle<Context> env);
-
-  // Reattach an outer global object to an environment.
-  void ReattachGlobal(Handle<Context> env, Handle<JSGlobalProxy> global_proxy);
 
   // Traverses the pointers for memory management.
   void Iterate(ObjectVisitor* v);

@@ -31,22 +31,20 @@
 #include "config.h"
 #include "WebNotification.h"
 
-#if ENABLE(NOTIFICATIONS) || ENABLE(LEGACY_NOTIFICATIONS)
-
 #include "WebTextDirection.h"
-#include "core/dom/Event.h"
-#include "core/dom/UserGestureIndicator.h"
+#include "core/events/Event.h"
 #include "core/page/WindowFocusAllowedIndicator.h"
-#include "modules/notifications/Notification.h"
+#include "modules/notifications/NotificationBase.h"
+#include "platform/UserGestureIndicator.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
 #include "wtf/PassRefPtr.h"
 
 using namespace WebCore;
 
-namespace WebKit {
+namespace blink {
 
-class WebNotificationPrivate : public Notification {
+class WebNotificationPrivate : public NotificationBase {
 };
 
 void WebNotification::reset()
@@ -104,62 +102,42 @@ WebString WebNotification::replaceId() const
     return m_private->tag();
 }
 
-void WebNotification::detachPresenter()
-{
-    m_private->detachPresenter();
-}
-
 void WebNotification::dispatchDisplayEvent()
 {
-#if ENABLE(LEGACY_NOTIFICATIONS)
-    dispatchEvent("display");
-#endif
-    dispatchEvent("show");
+    m_private->dispatchShowEvent();
 }
 
-void WebNotification::dispatchErrorEvent(const WebKit::WebString& /* errorMessage */)
+void WebNotification::dispatchErrorEvent(const blink::WebString& /* errorMessage */)
 {
     // FIXME: errorMessage not supported by WebCore yet
-    dispatchEvent(eventNames().errorEvent);
+    m_private->dispatchErrorEvent();
 }
 
 void WebNotification::dispatchCloseEvent(bool /* byUser */)
 {
     // FIXME: byUser flag not supported by WebCore yet
-    dispatchEvent(eventNames().closeEvent);
+    m_private->dispatchCloseEvent();
 }
 
 void WebNotification::dispatchClickEvent()
 {
-    UserGestureIndicator gestureIndicator(DefinitelyProcessingNewUserGesture);
-    WindowFocusAllowedIndicator windowFocusAllowed;
-    dispatchEvent(eventNames().clickEvent);
+    m_private->dispatchClickEvent();
 }
 
-void WebNotification::dispatchEvent(const WTF::AtomicString& type)
-{
-    // Do not dispatch if the context is gone.
-    if (!m_private->scriptExecutionContext())
-        return;
-
-    RefPtr<Event> event = Event::create(type, false, true);
-    m_private->dispatchEvent(event.release());
-}
-
-WebNotification::WebNotification(const WTF::PassRefPtr<Notification>& notification)
+WebNotification::WebNotification(const WTF::PassRefPtr<NotificationBase>& notification)
     : m_private(static_cast<WebNotificationPrivate*>(notification.leakRef()))
 {
 }
 
-WebNotification& WebNotification::operator=(const WTF::PassRefPtr<Notification>& notification)
+WebNotification& WebNotification::operator=(const WTF::PassRefPtr<NotificationBase>& notification)
 {
     assign(static_cast<WebNotificationPrivate*>(notification.leakRef()));
     return *this;
 }
 
-WebNotification::operator WTF::PassRefPtr<Notification>() const
+WebNotification::operator WTF::PassRefPtr<NotificationBase>() const
 {
-    return WTF::PassRefPtr<Notification>(const_cast<WebNotificationPrivate*>(m_private));
+    return WTF::PassRefPtr<NotificationBase>(const_cast<WebNotificationPrivate*>(m_private));
 }
 
 void WebNotification::assign(WebNotificationPrivate* p)
@@ -170,6 +148,4 @@ void WebNotification::assign(WebNotificationPrivate* p)
     m_private = p;
 }
 
-} // namespace WebKit
-
-#endif // ENABLE(NOTIFICATIONS) || ENABLE(LEGACY_NOTIFICATIONS)
+} // namespace blink

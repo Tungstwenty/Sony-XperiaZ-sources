@@ -21,20 +21,21 @@
 #ifndef SVGLineElement_h
 #define SVGLineElement_h
 
+#include "SVGNames.h"
 #include "core/svg/SVGAnimatedBoolean.h"
 #include "core/svg/SVGAnimatedLength.h"
 #include "core/svg/SVGExternalResourcesRequired.h"
-#include "core/svg/SVGGraphicsElement.h"
+#include "core/svg/SVGGeometryElement.h"
 
 namespace WebCore {
 
-class SVGLineElement FINAL : public SVGGraphicsElement,
+class SVGLineElement FINAL : public SVGGeometryElement,
                              public SVGExternalResourcesRequired {
 public:
-    static PassRefPtr<SVGLineElement> create(const QualifiedName&, Document*);
+    static PassRefPtr<SVGLineElement> create(Document&);
 
 private:
-    SVGLineElement(const QualifiedName&, Document*);
+    explicit SVGLineElement(Document&);
 
     virtual bool isValid() const { return SVGTests::isValid(); }
     virtual bool supportsFocus() const OVERRIDE { return hasFocusEventListeners(); }
@@ -55,6 +56,8 @@ private:
         DECLARE_ANIMATED_BOOLEAN(ExternalResourcesRequired, externalResourcesRequired)
     END_DECLARE_ANIMATED_PROPERTIES
 };
+
+DEFINE_NODE_TYPE_CASTS(SVGLineElement, hasTagName(SVGNames::lineTag));
 
 } // namespace WebCore
 

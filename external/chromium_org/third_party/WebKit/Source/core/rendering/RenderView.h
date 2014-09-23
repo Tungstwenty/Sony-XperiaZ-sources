@@ -22,10 +22,12 @@
 #ifndef RenderView_h
 #define RenderView_h
 
-#include "core/page/FrameView.h"
-#include "core/platform/PODFreeListArena.h"
+#include "core/frame/FrameView.h"
+#include "core/rendering/LayoutIndicator.h"
 #include "core/rendering/LayoutState.h"
-#include "core/rendering/RenderBlock.h"
+#include "core/rendering/RenderBlockFlow.h"
+#include "platform/PODFreeListArena.h"
+#include "platform/scroll/ScrollableArea.h"
 #include "wtf/OwnPtr.h"
 
 namespace WebCore {
@@ -33,14 +35,14 @@ namespace WebCore {
 class CustomFilterGlobalContext;
 class FlowThreadController;
 class RenderLayerCompositor;
-class RenderLazyBlock;
 class RenderQuote;
 class RenderWidget;
 
 // The root of the render tree, corresponding to the CSS initial containing block.
-// It's dimensions match that of the viewport, and it is always at position (0,0)
+// It's dimensions match that of the logical viewport (which may be different from
+// the visible viewport in fixed-layout mode), and it is always at position (0,0)
 // relative to the document (and so isn't necessarily in view).
-class RenderView FINAL : public RenderBlock {
+class RenderView FINAL : public RenderBlockFlow {
 public:
     explicit RenderView(Document*);
     virtual ~RenderView();
@@ -60,13 +62,18 @@ public:
     virtual void updateLogicalWidth() OVERRIDE;
     virtual void computeLogicalHeight(LayoutUnit logicalHeight, LayoutUnit logicalTop, LogicalExtentComputedValues&) const OVERRIDE;
 
+    virtual bool supportsPartialLayout() const OVERRIDE { return true; }
+
     virtual LayoutUnit availableLogicalHeight(AvailableLogicalHeightType) const OVERRIDE;
 
     // The same as the FrameView's layoutHeight/layoutWidth but with null check guards.
-    int viewHeight() const;
-    int viewWidth() const;
-    int viewLogicalWidth() const { return style()->isHorizontalWritingMode() ? viewWidth() : viewHeight(); }
-    int viewLogicalHeight() const;
+    int viewHeight(ScrollableArea::IncludeScrollbarsInRect scrollbarInclusion = ScrollableArea::ExcludeScrollbars) const;
+    int viewWidth(ScrollableArea::IncludeScrollbarsInRect scrollbarInclusion = ScrollableArea::ExcludeScrollbars) const;
+    int viewLogicalWidth(ScrollableArea::IncludeScrollbarsInRect scrollbarInclusion = ScrollableArea::ExcludeScrollbars) const
+    {
+        return style()->isHorizontalWritingMode() ? viewWidth(scrollbarInclusion) : viewHeight(scrollbarInclusion);
+    }
+    int viewLogicalHeight(ScrollableArea::IncludeScrollbarsInRect scrollbarInclusion = ScrollableArea::ExcludeScrollbars) const;
 
     float zoomFactor() const;
 
@@ -92,13 +99,14 @@ public:
     void selectionStartEnd(int& startPos, int& endPos) const;
     void repaintSelection() const;
 
-    bool printing() const;
-
     virtual void absoluteRects(Vector<IntRect>&, const LayoutPoint& accumulatedOffset) const;
     virtual void absoluteQuads(Vector<FloatQuad>&, bool* wasFixed) const;
 
     void setMaximalOutlineSize(int o);
     int maximalOutlineSize() const { return m_maximalOutlineSize; }
+
+    void setOldMaximalOutlineSize(int o) { m_oldMaximalOutlineSize = o; }
+    int oldMaximalOutlineSize() const { return m_oldMaximalOutlineSize; }
 
     virtual LayoutRect viewRect() const OVERRIDE;
 
@@ -180,14 +188,8 @@ public:
 
     IntervalArena* intervalArena();
 
-    IntSize viewportSize() const { return document()->viewportSize(); }
-
     void setRenderQuoteHead(RenderQuote* head) { m_renderQuoteHead = head; }
     RenderQuote* renderQuoteHead() const { return m_renderQuoteHead; }
-
-    void setFirstLazyBlock(RenderLazyBlock* block) { m_firstLazyBlock = block; }
-    RenderLazyBlock* firstLazyBlock() const { return m_firstLazyBlock; }
-    void markLazyBlocksForLayout();
 
     // FIXME: This is a work around because the current implementation of counters
     // requires walking the entire tree repeatedly and most pages don't actually use either
@@ -201,14 +203,18 @@ public:
 
     virtual bool backgroundIsKnownToBeOpaqueInRect(const LayoutRect& localRect) const OVERRIDE FINAL;
 
-protected:
+    LayoutUnit viewportPercentageWidth(float percentage) const;
+    LayoutUnit viewportPercentageHeight(float percentage) const;
+    LayoutUnit viewportPercentageMin(float percentage) const;
+    LayoutUnit viewportPercentageMax(float percentage) const;
+
+private:
     virtual void mapLocalToContainer(const RenderLayerModelObject* repaintContainer, TransformState&, MapCoordinatesFlags = ApplyContainerFlip, bool* wasFixed = 0) const OVERRIDE;
     virtual const RenderObject* pushMappingToContainer(const RenderLayerModelObject* ancestorToStopAt, RenderGeometryMap&) const OVERRIDE;
     virtual void mapAbsoluteToLocalPoint(MapCoordinatesFlags, TransformState&) const;
     virtual bool requiresColumns(int desiredColumnCount) const OVERRIDE;
     virtual void computeSelfHitTestRects(Vector<LayoutRect>&, const LayoutPoint& layerOffset) const OVERRIDE;
 
-private:
     bool initializeLayoutState(LayoutState&);
 
     virtual void calcColumnWidth() OVERRIDE;
@@ -221,10 +227,11 @@ private:
     {
         // We push LayoutState even if layoutState is disabled because it stores layoutDelta too.
         if (!doingFullRepaint() || m_layoutState->isPaginated() || renderer->hasColumns() || renderer->flowThreadContainingBlock()
-            || m_layoutState->lineGrid() || (renderer->style()->lineGrid() != RenderStyle::initialLineGrid() && renderer->isBlockFlow())
+            || m_layoutState->lineGrid() || (renderer->style()->lineGrid() != RenderStyle::initialLineGrid() && renderer->isRenderBlockFlow())
             || (renderer->isRenderBlock() && toRenderBlock(renderer)->shapeInsideInfo())
-            || (m_layoutState->shapeInsideInfo() && renderer->isRenderBlock() && !toRenderBlock(renderer)->allowsShapeInsideInfoSharing())
+            || (m_layoutState->shapeInsideInfo() && renderer->isRenderBlock() && !toRenderBlock(renderer)->allowsShapeInsideInfoSharing(m_layoutState->shapeInsideInfo()->owner()))
             ) {
+            pushLayoutStateForCurrentFlowThread(renderer);
             m_layoutState = new LayoutState(m_layoutState, renderer, offset, pageHeight, pageHeightChanged, colInfo);
             return true;
         }
@@ -236,6 +243,7 @@ private:
         LayoutState* state = m_layoutState;
         m_layoutState = state->m_next;
         delete state;
+        popLayoutStateForCurrentFlowThread();
     }
 
     // Suspends the LayoutState optimization. Used under transforms that cannot be represented by
@@ -252,27 +260,33 @@ private:
     void checkLayoutState(const LayoutState&);
 #endif
 
+    void positionDialog(RenderBox*);
+    void positionDialogs();
+
     size_t getRetainedWidgets(Vector<RenderWidget*>&);
     void releaseWidgets(Vector<RenderWidget*>&);
+
+    void pushLayoutStateForCurrentFlowThread(const RenderObject*);
+    void popLayoutStateForCurrentFlowThread();
 
     friend class LayoutStateMaintainer;
     friend class LayoutStateDisabler;
 
-protected:
+    bool shouldUsePrintingLayout() const;
+
     FrameView* m_frameView;
 
     RenderObject* m_selectionStart;
     RenderObject* m_selectionEnd;
+
     int m_selectionStartPos;
     int m_selectionEndPos;
 
     int m_maximalOutlineSize; // Used to apply a fudge factor to dirty-rect checks on blocks/tables.
+    int m_oldMaximalOutlineSize; // The fudge factor from the previous layout.
 
     typedef HashSet<RenderWidget*> RenderWidgetSet;
     RenderWidgetSet m_widgets;
-
-private:
-    bool shouldUsePrintingLayout() const;
 
     LayoutUnit m_pageLogicalHeight;
     bool m_pageLogicalHeightChanged;
@@ -283,30 +297,11 @@ private:
     OwnPtr<FlowThreadController> m_flowThreadController;
     RefPtr<IntervalArena> m_intervalArena;
 
-    RenderLazyBlock* m_firstLazyBlock;
     RenderQuote* m_renderQuoteHead;
     unsigned m_renderCounterCount;
 };
 
-inline RenderView* toRenderView(RenderObject* object)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!object || object->isRenderView());
-    return static_cast<RenderView*>(object);
-}
-
-inline const RenderView* toRenderView(const RenderObject* object)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!object || object->isRenderView());
-    return static_cast<const RenderView*>(object);
-}
-
-// This will catch anyone doing an unnecessary cast.
-void toRenderView(const RenderView*);
-
-ALWAYS_INLINE RenderView* Document::renderView() const
-{
-    return toRenderView(renderer());
-}
+DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderView, isRenderView());
 
 // Stack-based class to assist with LayoutState push/pop
 class LayoutStateMaintainer {

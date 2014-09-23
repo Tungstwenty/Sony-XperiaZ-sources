@@ -43,7 +43,7 @@ class DOMWindow;
 
 static const int npObjectInternalFieldCount = v8DefaultWrapperInternalFieldCount + 0;
 
-WrapperTypeInfo* npObjectTypeInfo();
+const WrapperTypeInfo* npObjectTypeInfo();
 
 // A V8NPObject is a NPObject which carries additional V8-specific information.
 // It is created with npCreateV8ScriptObject() and deallocated via the deallocate
@@ -64,13 +64,13 @@ struct PrivateIdentifier {
     bool isString;
 };
 
-NPObject* npCreateV8ScriptObject(NPP, v8::Handle<v8::Object>, DOMWindow*);
+NPObject* npCreateV8ScriptObject(NPP, v8::Handle<v8::Object>, DOMWindow*, v8::Isolate*);
 
 NPObject* v8ObjectToNPObject(v8::Handle<v8::Object>);
 
 V8NPObject* npObjectToV8NPObject(NPObject*);
 
-void disposeUnderlyingV8Object(NPObject*);
+void disposeUnderlyingV8Object(NPObject*, v8::Isolate*);
 
 } // namespace WebCore
 

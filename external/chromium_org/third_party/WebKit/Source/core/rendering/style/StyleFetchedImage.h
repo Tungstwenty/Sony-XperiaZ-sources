@@ -24,8 +24,8 @@
 #ifndef StyleFetchedImage_h
 #define StyleFetchedImage_h
 
-#include "core/loader/cache/ImageResourceClient.h"
-#include "core/loader/cache/ResourcePtr.h"
+#include "core/fetch/ImageResourceClient.h"
+#include "core/fetch/ResourcePtr.h"
 #include "core/rendering/style/StyleImage.h"
 
 namespace WebCore {
@@ -62,6 +62,8 @@ private:
 
     ResourcePtr<ImageResource> m_image;
 };
+
+DEFINE_STYLE_IMAGE_TYPE_CASTS(StyleFetchedImage, isImageResource());
 
 }
 #endif

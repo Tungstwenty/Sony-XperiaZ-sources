@@ -51,7 +51,7 @@ WebInspector.KeyboardShortcut.Modifiers = {
     }
 };
 
-/** @typedef {{code: number, name: (string|Object.<string, string>)}} */
+/** @typedef {!{code: number, name: (string|!Object.<string, string>)}} */
 WebInspector.KeyboardShortcut.Key;
 
 /** @type {!Object.<string, !WebInspector.KeyboardShortcut.Key>} */
@@ -90,17 +90,24 @@ WebInspector.KeyboardShortcut.Keys = {
     Period: { code: 190, name: "." },
     Slash: { code: 191, name: "/" },
     Apostrophe: { code: 192, name: "`" },
+    Backslash: { code: 220, name: "\\" },
     SingleQuote: { code: 222, name: "\'" },
     H: { code: 72, name: "H" },
     Ctrl: { code: 17, name: "Ctrl" },
     Meta: { code: 91, name: "Meta" },
+    Tilde: { code: 192, name: "Tilde" },
+    get CtrlOrMeta()
+    {
+        // "default" command/ctrl key for platform, Command on Mac, Ctrl on other platforms
+        return WebInspector.isMac() ? this.Meta : this.Ctrl;
+    },
 };
 
 /**
  * Creates a number encoding keyCode in the lower 8 bits and modifiers mask in the higher 8 bits.
  * It is useful for matching pressed keys.
  *
- * @param {number|string} keyCode The Code of the key, or a character "a-z" which is converted to a keyCode value.
+ * @param {number|string} keyCode The code of the key, or a character "a-z" which is converted to a keyCode value.
  * @param {number=} modifiers Optional list of modifiers passed as additional paramerters.
  * @return {number}
  */
@@ -113,7 +120,7 @@ WebInspector.KeyboardShortcut.makeKey = function(keyCode, modifiers)
 }
 
 /**
- * @param {KeyboardEvent} keyboardEvent
+ * @param {?KeyboardEvent} keyboardEvent
  * @return {number}
  */
 WebInspector.KeyboardShortcut.makeKeyFromEvent = function(keyboardEvent)
@@ -131,7 +138,7 @@ WebInspector.KeyboardShortcut.makeKeyFromEvent = function(keyboardEvent)
 }
 
 /**
- * @param {KeyboardEvent} event
+ * @param {?KeyboardEvent} event
  * @return {boolean}
  */
 WebInspector.KeyboardShortcut.eventHasCtrlOrMeta = function(event)
@@ -140,7 +147,7 @@ WebInspector.KeyboardShortcut.eventHasCtrlOrMeta = function(event)
 }
 
 /**
- * @param {Event} event
+ * @param {?Event} event
  * @return {boolean}
  */
 WebInspector.KeyboardShortcut.hasNoModifiers = function(event)
@@ -148,13 +155,13 @@ WebInspector.KeyboardShortcut.hasNoModifiers = function(event)
     return !event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey;
 }
 
-/** @typedef {{key: number, name: string}} */
+/** @typedef {!{key: number, name: string}} */
 WebInspector.KeyboardShortcut.Descriptor;
 
 /**
- * @param {string|WebInspector.KeyboardShortcut.Key} key
+ * @param {string|!WebInspector.KeyboardShortcut.Key} key
  * @param {number=} modifiers
- * @return {WebInspector.KeyboardShortcut.Descriptor}
+ * @return {!WebInspector.KeyboardShortcut.Descriptor}
  */
 WebInspector.KeyboardShortcut.makeDescriptor = function(key, modifiers)
 {
@@ -165,7 +172,7 @@ WebInspector.KeyboardShortcut.makeDescriptor = function(key, modifiers)
 }
 
 /**
- * @param {string|WebInspector.KeyboardShortcut.Key} key
+ * @param {string|!WebInspector.KeyboardShortcut.Key} key
  * @param {number=} modifiers
  * @return {string}
  */
@@ -175,7 +182,7 @@ WebInspector.KeyboardShortcut.shortcutToString = function(key, modifiers)
 }
 
 /**
- * @param {string|WebInspector.KeyboardShortcut.Key} key
+ * @param {string|!WebInspector.KeyboardShortcut.Key} key
  * @return {string}
  */
 WebInspector.KeyboardShortcut._keyName = function(key)

@@ -33,7 +33,7 @@ class ScriptLoader;
 
 class HTMLScriptElement FINAL : public HTMLElement, public ScriptLoaderClient {
 public:
-    static PassRefPtr<HTMLScriptElement> create(const QualifiedName&, Document*, bool wasInsertedByParser, bool alreadyStarted = false);
+    static PassRefPtr<HTMLScriptElement> create(Document&, bool wasInsertedByParser, bool alreadyStarted = false);
 
     String text() { return textFromChildren(); }
     void setText(const String&);
@@ -46,10 +46,11 @@ public:
     ScriptLoader* loader() const { return m_loader.get(); }
 
 private:
-    HTMLScriptElement(const QualifiedName&, Document*, bool wasInsertedByParser, bool alreadyStarted);
+    HTMLScriptElement(Document&, bool wasInsertedByParser, bool alreadyStarted);
 
     virtual void parseAttribute(const QualifiedName&, const AtomicString&) OVERRIDE;
     virtual InsertionNotificationRequest insertedInto(ContainerNode*) OVERRIDE;
+    virtual void didNotifySubtreeInsertionsToDocument() OVERRIDE;
     virtual void childrenChanged(bool changedByParser = false, Node* beforeChange = 0, Node* afterChange = 0, int childCountDelta = 0);
 
     virtual bool isURLAttribute(const Attribute&) const OVERRIDE;
@@ -73,11 +74,7 @@ private:
     OwnPtr<ScriptLoader> m_loader;
 };
 
-inline HTMLScriptElement* toHTMLScriptElement(Node* node)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!node || node->hasTagName(HTMLNames::scriptTag));
-    return static_cast<HTMLScriptElement*>(node);
-}
+DEFINE_NODE_TYPE_CASTS(HTMLScriptElement, hasTagName(HTMLNames::scriptTag));
 
 } //namespace
 

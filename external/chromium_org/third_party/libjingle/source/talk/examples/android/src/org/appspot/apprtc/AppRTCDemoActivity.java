@@ -34,8 +34,8 @@ import android.content.Intent;
 import android.graphics.Point;
 import android.media.AudioManager;
 import android.os.Bundle;
-import android.os.PowerManager;
 import android.util.Log;
+import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.widget.EditText;
 import android.widget.Toast;
@@ -62,6 +62,8 @@ import org.webrtc.VideoTrack;
 import java.util.EnumSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Main Activity of the AppRTCDemo Android app demonstrating interoperability
@@ -71,6 +73,8 @@ import java.util.List;
 public class AppRTCDemoActivity extends Activity
     implements AppRTCClient.IceServersObserver {
   private static final String TAG = "AppRTCDemoActivity";
+  private PeerConnectionFactory factory;
+  private VideoSource videoSource;
   private PeerConnection pc;
   private final PCObserver pcObserver = new PCObserver();
   private final SDPObserver sdpObserver = new SDPObserver();
@@ -83,33 +87,16 @@ public class AppRTCDemoActivity extends Activity
   // Synchronize on quit[0] to avoid teardown-related crashes.
   private final Boolean[] quit = new Boolean[] { false };
   private MediaConstraints sdpMediaConstraints;
-  private PowerManager.WakeLock wakeLock;
 
   @Override
   public void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
 
-    // Since the error-handling of this demo consists of throwing
-    // RuntimeExceptions and we assume that'll terminate the app, we install
-    // this default handler so it's applied to background threads as well.
     Thread.setDefaultUncaughtExceptionHandler(
-        new Thread.UncaughtExceptionHandler() {
-          public void uncaughtException(Thread t, Throwable e) {
-            e.printStackTrace();
-            System.exit(-1);
-          }
-        });
+        new UnhandledExceptionHandler(this));
 
-    // Uncomment to get ALL WebRTC tracing and SENSITIVE libjingle logging.
-    // Logging.enableTracing(
-    //     "/sdcard/trace.txt",
-    //     EnumSet.of(Logging.TraceLevel.TRACE_ALL),
-    //     Logging.Severity.LS_SENSITIVE);
-
-    PowerManager powerManager = (PowerManager) getSystemService(POWER_SERVICE);
-    wakeLock = powerManager.newWakeLock(
-        PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "AppRTCDemo");
-    wakeLock.acquire();
+    getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+    getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
     Point displaySize = new Point();
     getWindowManager().getDefaultDisplay().getSize(displaySize);
@@ -121,9 +108,13 @@ public class AppRTCDemoActivity extends Activity
 
     AudioManager audioManager =
         ((AudioManager) getSystemService(AUDIO_SERVICE));
-    audioManager.setMode(audioManager.isWiredHeadsetOn() ?
+    // TODO(fischman): figure out how to do this Right(tm) and remove the
+    // suppression.
+    @SuppressWarnings("deprecation")
+    boolean isWiredHeadsetOn = audioManager.isWiredHeadsetOn();
+    audioManager.setMode(isWiredHeadsetOn ?
         AudioManager.MODE_IN_CALL : AudioManager.MODE_IN_COMMUNICATION);
-    audioManager.setSpeakerphoneOn(!audioManager.isWiredHeadsetOn());
+    audioManager.setSpeakerphoneOn(!isWiredHeadsetOn);
 
     sdpMediaConstraints = new MediaConstraints();
     sdpMediaConstraints.mandatory.add(new MediaConstraints.KeyValuePair(
@@ -166,27 +157,47 @@ public class AppRTCDemoActivity extends Activity
   public void onPause() {
     super.onPause();
     vsv.onPause();
-    // TODO(fischman): IWBN to support pause/resume, but the WebRTC codebase
-    // isn't ready for that yet; e.g.
-    // https://code.google.com/p/webrtc/issues/detail?id=1407
-    // Instead, simply exit instead of pausing (the alternative leads to
-    // system-borking with wedged cameras; e.g. b/8224551)
-    disconnectAndExit();
+    if (videoSource != null) {
+      videoSource.stop();
+    }
   }
 
   @Override
   public void onResume() {
-    // The onResume() is a lie!  See TODO(fischman) in onPause() above.
     super.onResume();
     vsv.onResume();
+    if (videoSource != null) {
+      videoSource.restart();
+    }
+  }
+
+
+  // Just for fun (and to regression-test bug 2302) make sure that DataChannels
+  // can be created, queried, and disposed.
+  private static void createDataChannelToRegressionTestBug2302(
+      PeerConnection pc) {
+    DataChannel dc = pc.createDataChannel("dcLabel", new DataChannel.Init());
+    abortUnless("dcLabel".equals(dc.label()), "WTF?");
+    dc.dispose();
   }
 
   @Override
   public void onIceServers(List<PeerConnection.IceServer> iceServers) {
-    PeerConnectionFactory factory = new PeerConnectionFactory();
+    factory = new PeerConnectionFactory();
 
-    pc = factory.createPeerConnection(
-        iceServers, appRtcClient.pcConstraints(), pcObserver);
+    MediaConstraints pcConstraints = appRtcClient.pcConstraints();
+    pcConstraints.optional.add(
+        new MediaConstraints.KeyValuePair("RtpDataChannels", "true"));
+    pc = factory.createPeerConnection(iceServers, pcConstraints, pcObserver);
+
+    createDataChannelToRegressionTestBug2302(pc);  // See method comment.
+
+    // Uncomment to get ALL WebRTC tracing and SENSITIVE libjingle logging.
+    // NOTE: this _must_ happen while |factory| is alive!
+    // Logging.enableTracing(
+    //     "logcat:",
+    //     EnumSet.of(Logging.TraceLevel.TRACE_ALL),
+    //     Logging.Severity.LS_SENSITIVE);
 
     {
       final PeerConnection finalPC = pc;
@@ -216,14 +227,17 @@ public class AppRTCDemoActivity extends Activity
 
     {
       logAndToast("Creating local video source...");
-      VideoCapturer capturer = getVideoCapturer();
-      VideoSource videoSource = factory.createVideoSource(
-          capturer, appRtcClient.videoConstraints());
       MediaStream lMS = factory.createLocalMediaStream("ARDAMS");
-      VideoTrack videoTrack = factory.createVideoTrack("ARDAMSv0", videoSource);
-      videoTrack.addRenderer(new VideoRenderer(new VideoCallbacks(
-          vsv, VideoStreamsView.Endpoint.LOCAL)));
-      lMS.addTrack(videoTrack);
+      if (appRtcClient.videoConstraints() != null) {
+        VideoCapturer capturer = getVideoCapturer();
+        videoSource = factory.createVideoSource(
+            capturer, appRtcClient.videoConstraints());
+        VideoTrack videoTrack =
+            factory.createVideoTrack("ARDAMSv0", videoSource);
+        videoTrack.addRenderer(new VideoRenderer(new VideoCallbacks(
+            vsv, VideoStreamsView.Endpoint.LOCAL)));
+        lMS.addTrack(videoTrack);
+      }
       lMS.addTrack(factory.createAudioTrack("ARDAMSa0"));
       pc.addStream(lMS, new MediaConstraints());
     }
@@ -253,7 +267,8 @@ public class AppRTCDemoActivity extends Activity
   }
 
   @Override
-  public void onDestroy() {
+  protected void onDestroy() {
+    disconnectAndExit();
     super.onDestroy();
   }
 
@@ -286,6 +301,55 @@ public class AppRTCDemoActivity extends Activity
     } catch (JSONException e) {
       throw new RuntimeException(e);
     }
+  }
+
+  // Mangle SDP to prefer ISAC/16000 over any other audio codec.
+  private String preferISAC(String sdpDescription) {
+    String[] lines = sdpDescription.split("\n");
+    int mLineIndex = -1;
+    String isac16kRtpMap = null;
+    Pattern isac16kPattern =
+        Pattern.compile("^a=rtpmap:(\\d+) ISAC/16000[\r]?$");
+    for (int i = 0;
+         (i < lines.length) && (mLineIndex == -1 || isac16kRtpMap == null);
+         ++i) {
+      if (lines[i].startsWith("m=audio ")) {
+        mLineIndex = i;
+        continue;
+      }
+      Matcher isac16kMatcher = isac16kPattern.matcher(lines[i]);
+      if (isac16kMatcher.matches()) {
+        isac16kRtpMap = isac16kMatcher.group(1);
+        continue;
+      }
+    }
+    if (mLineIndex == -1) {
+      Log.d(TAG, "No m=audio line, so can't prefer iSAC");
+      return sdpDescription;
+    }
+    if (isac16kRtpMap == null) {
+      Log.d(TAG, "No ISAC/16000 line, so can't prefer iSAC");
+      return sdpDescription;
+    }
+    String[] origMLineParts = lines[mLineIndex].split(" ");
+    StringBuilder newMLine = new StringBuilder();
+    int origPartIndex = 0;
+    // Format is: m=<media> <port> <proto> <fmt> ...
+    newMLine.append(origMLineParts[origPartIndex++]).append(" ");
+    newMLine.append(origMLineParts[origPartIndex++]).append(" ");
+    newMLine.append(origMLineParts[origPartIndex++]).append(" ");
+    newMLine.append(isac16kRtpMap).append(" ");
+    for (; origPartIndex < origMLineParts.length; ++origPartIndex) {
+      if (!origMLineParts[origPartIndex].equals(isac16kRtpMap)) {
+        newMLine.append(origMLineParts[origPartIndex]).append(" ");
+      }
+    }
+    lines[mLineIndex] = newMLine.toString();
+    StringBuilder newSdpDescription = new StringBuilder();
+    for (String line : lines) {
+      newSdpDescription.append(line).append("\n");
+    }
+    return newSdpDescription.toString();
   }
 
   // Implementation detail: observe ICE & stream changes and react accordingly.
@@ -326,11 +390,13 @@ public class AppRTCDemoActivity extends Activity
     @Override public void onAddStream(final MediaStream stream){
       runOnUiThread(new Runnable() {
           public void run() {
-            abortUnless(stream.audioTracks.size() == 1 &&
-                stream.videoTracks.size() == 1,
+            abortUnless(stream.audioTracks.size() <= 1 &&
+                stream.videoTracks.size() <= 1,
                 "Weird-looking stream: " + stream);
-            stream.videoTracks.get(0).addRenderer(new VideoRenderer(
-                new VideoCallbacks(vsv, VideoStreamsView.Endpoint.REMOTE)));
+            if (stream.videoTracks.size() == 1) {
+              stream.videoTracks.get(0).addRenderer(new VideoRenderer(
+                  new VideoCallbacks(vsv, VideoStreamsView.Endpoint.REMOTE)));
+            }
           }
         });
     }
@@ -357,10 +423,12 @@ public class AppRTCDemoActivity extends Activity
   // Implementation detail: handle offer creation/signaling and answer setting,
   // as well as adding remote ICE candidates once the answer SDP is set.
   private class SDPObserver implements SdpObserver {
-    @Override public void onCreateSuccess(final SessionDescription sdp) {
+    @Override public void onCreateSuccess(final SessionDescription origSdp) {
       runOnUiThread(new Runnable() {
           public void run() {
-            logAndToast("Sending " + sdp.type);
+            logAndToast("Sending " + origSdp.type);
+            SessionDescription sdp = new SessionDescription(
+                origSdp.type, preferISAC(origSdp.description));
             JSONObject json = new JSONObject();
             jsonPut(json, "type", sdp.type.canonicalForm());
             jsonPut(json, "sdp", sdp.description);
@@ -446,7 +514,7 @@ public class AppRTCDemoActivity extends Activity
         } else if (type.equals("answer") || type.equals("offer")) {
           SessionDescription sdp = new SessionDescription(
               SessionDescription.Type.fromCanonicalForm(type),
-              (String) json.get("sdp"));
+              preferISAC((String) json.get("sdp")));
           pc.setRemoteDescription(sdpObserver, sdp);
         } else if (type.equals("bye")) {
           logAndToast("Remote end hung up; dropping PeerConnection");
@@ -475,7 +543,6 @@ public class AppRTCDemoActivity extends Activity
         return;
       }
       quit[0] = true;
-      wakeLock.release();
       if (pc != null) {
         pc.dispose();
         pc = null;
@@ -484,6 +551,14 @@ public class AppRTCDemoActivity extends Activity
         appRtcClient.sendMessage("{\"type\": \"bye\"}");
         appRtcClient.disconnect();
         appRtcClient = null;
+      }
+      if (videoSource != null) {
+        videoSource.dispose();
+        videoSource = null;
+      }
+      if (factory != null) {
+        factory.dispose();
+        factory = null;
       }
       finish();
     }

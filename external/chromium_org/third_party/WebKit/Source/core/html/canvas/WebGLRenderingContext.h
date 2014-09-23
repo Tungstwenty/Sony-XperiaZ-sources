@@ -30,16 +30,16 @@
 #include "core/html/canvas/CanvasRenderingContext.h"
 #include "core/html/canvas/WebGLGetInfo.h"
 #include "core/page/Page.h"
-#include "core/platform/Timer.h"
-#include "core/platform/graphics/GraphicsContext3D.h"
-#include "core/platform/graphics/ImageBuffer.h"
+#include "platform/Timer.h"
+#include "platform/graphics/GraphicsContext3D.h"
+#include "platform/graphics/ImageBuffer.h"
 
 #include "wtf/Float32Array.h"
 #include "wtf/Int32Array.h"
-#include "wtf/OwnArrayPtr.h"
+#include "wtf/OwnPtr.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebKit { class WebLayer; }
+namespace blink { class WebLayer; }
 
 namespace WebCore {
 
@@ -315,7 +315,7 @@ public:
 
     GraphicsContext3D* graphicsContext3D() const { return m_context.get(); }
     WebGLContextGroup* contextGroup() const { return m_contextGroup.get(); }
-    virtual WebKit::WebLayer* platformLayer() const;
+    virtual blink::WebLayer* platformLayer() const;
 
     void reshape(int width, int height);
 
@@ -326,7 +326,7 @@ public:
     void removeSharedObject(WebGLSharedObject*);
     void removeContextObject(WebGLContextObject*);
 
-    unsigned getMaxVertexAttribs() const { return m_maxVertexAttribs; }
+    unsigned maxVertexAttribs() const { return m_maxVertexAttribs; }
 
     // ActiveDOMObject notifications
     virtual bool hasPendingActivity() const;
@@ -372,6 +372,8 @@ public:
     // Adds a compressed texture format.
     void addCompressedTextureFormat(GC3Denum);
     void removeAllCompressedTextureFormats();
+
+    PassRefPtr<Image> drawImageIntoBuffer(Image*, int width, int height);
 
     PassRefPtr<Image> videoFrameToImage(HTMLVideoElement*, BackingStoreCopy);
 
@@ -459,10 +461,10 @@ public:
         ImageBuffer* imageBuffer(const IntSize& size);
     private:
         void bubbleToFront(int idx);
-        OwnArrayPtr<OwnPtr<ImageBuffer> > m_buffers;
+        OwnPtr<OwnPtr<ImageBuffer>[]> m_buffers;
         int m_capacity;
     };
-    LRUImageBufferCache m_videoCache;
+    LRUImageBufferCache m_generatedImageCache;
 
     GC3Dint m_maxTextureSize;
     GC3Dint m_maxCubeMapTextureSize;
@@ -506,6 +508,12 @@ public:
     bool m_synthesizedErrorsToConsole;
     int m_numGLErrorsToConsoleAllowed;
 
+    bool m_multisamplingAllowed;
+    bool m_multisamplingObserverRegistered;
+
+    GC3Duint m_onePlusMaxEnabledAttribIndex;
+    unsigned long m_onePlusMaxNonDefaultTextureUnit;
+
     // Enabled extension objects.
     RefPtr<ANGLEInstancedArrays> m_angleInstancedArrays;
     RefPtr<EXTFragDepth> m_extFragDepth;
@@ -526,12 +534,21 @@ public:
     RefPtr<WebGLCompressedTextureS3TC> m_webglCompressedTextureS3TC;
     RefPtr<WebGLDepthTexture> m_webglDepthTexture;
 
+    enum ExtensionFlags {
+        ApprovedExtension   = 0x00,
+        DraftExtension      = 0x01,
+        PrivilegedExtension = 0x02,
+        PrefixedExtension   = 0x04,
+        WebGLDebugRendererInfoExtension = 0x08,
+    };
+
     class ExtensionTracker {
     public:
-        ExtensionTracker(bool privileged, bool draft, bool prefixed, const char** prefixes)
-            : m_privileged(privileged)
-            , m_draft(draft)
-            , m_prefixed(prefixed)
+        ExtensionTracker(ExtensionFlags flags, const char* const* prefixes)
+            : m_privileged(flags & PrivilegedExtension)
+            , m_draft(flags & DraftExtension)
+            , m_prefixed(flags & PrefixedExtension)
+            , m_webglDebugRendererInfo(flags & WebGLDebugRendererInfoExtension)
             , m_prefixes(prefixes)
         {
         }
@@ -540,40 +557,46 @@ public:
         {
         }
 
-        bool getPrefixed() const
+        bool prefixed() const
         {
             return m_prefixed;
         }
 
-        bool getPrivileged() const
+        bool privileged() const
         {
             return m_privileged;
         }
 
-        bool getDraft() const
+        bool draft() const
         {
             return m_draft;
+        }
+
+        bool webglDebugRendererInfo() const
+        {
+            return m_webglDebugRendererInfo;
         }
 
         bool matchesNameWithPrefixes(const String&) const;
 
         virtual PassRefPtr<WebGLExtension> getExtension(WebGLRenderingContext*) const = 0;
         virtual bool supported(WebGLRenderingContext*) const = 0;
-        virtual const char* getExtensionName() const = 0;
+        virtual const char* extensionName() const = 0;
         virtual void loseExtension() = 0;
 
     private:
         bool m_privileged;
         bool m_draft;
         bool m_prefixed;
-        const char** m_prefixes;
+        bool m_webglDebugRendererInfo;
+        const char* const* m_prefixes;
     };
 
     template <typename T>
     class TypedExtensionTracker : public ExtensionTracker {
     public:
-        TypedExtensionTracker(RefPtr<T>& extensionField, bool privileged, bool draft, bool prefixed, const char** prefixes)
-            : ExtensionTracker(privileged, draft, prefixed, prefixes)
+        TypedExtensionTracker(RefPtr<T>& extensionField, ExtensionFlags flags, const char* const* prefixes)
+            : ExtensionTracker(flags, prefixes)
             , m_extensionField(extensionField)
         {
         }
@@ -599,9 +622,9 @@ public:
             return T::supported(context);
         }
 
-        virtual const char* getExtensionName() const
+        virtual const char* extensionName() const
         {
-            return T::getExtensionName();
+            return T::extensionName();
         }
 
         virtual void loseExtension()
@@ -620,9 +643,9 @@ public:
     Vector<ExtensionTracker*> m_extensions;
 
     template <typename T>
-    void registerExtension(RefPtr<T>& extensionPtr, bool privileged, bool draft, bool prefixed, const char** prefixes)
+    void registerExtension(RefPtr<T>& extensionPtr, ExtensionFlags flags = ApprovedExtension, const char* const* prefixes = 0)
     {
-        m_extensions.append(new TypedExtensionTracker<T>(extensionPtr, privileged, draft, prefixed, prefixes));
+        m_extensions.append(new TypedExtensionTracker<T>(extensionPtr, flags, prefixes));
     }
 
     // Errors raised by synthesizeGLError() while the context is lost.
@@ -660,13 +683,13 @@ public:
                                                         GC3Denum colorBufferFormat);
 
     // Helper function to get the bound framebuffer's color buffer format.
-    GC3Denum getBoundFramebufferColorFormat();
+    GC3Denum boundFramebufferColorFormat();
 
     // Helper function to get the bound framebuffer's width.
-    int getBoundFramebufferWidth();
+    int boundFramebufferWidth();
 
     // Helper function to get the bound framebuffer's height.
-    int getBoundFramebufferHeight();
+    int boundFramebufferHeight();
 
     // Helper function to verify limits on the length of uniform and attribute locations.
     bool validateLocationLength(const char* functionName, const String&);
@@ -710,6 +733,11 @@ public:
     bool validateTexFunc(const char* functionName, TexFuncValidationFunctionType, TexFuncValidationSourceType, GC3Denum target, GC3Dint level, GC3Denum internalformat, GC3Dsizei width,
         GC3Dsizei height, GC3Dint border, GC3Denum format, GC3Denum type, GC3Dint xoffset, GC3Dint yoffset);
 
+    // Helper function to check input width and height for functions {copy, compressed}Tex{Sub}Image.
+    // Generates GL error and returns false if width or height is invalid.
+    bool validateTexFuncDimensions(const char* functionName, TexFuncValidationFunctionType,
+        GC3Denum target, GC3Dint level, GC3Dsizei width, GC3Dsizei height);
+
     // Helper function to check input parameters for functions {copy}Tex{Sub}Image.
     // Generates GL error and returns false if parameters are invalid.
     bool validateTexFuncParameters(const char* functionName,
@@ -750,7 +778,7 @@ public:
 
     // Helper function to validate compressed texture dimensions are valid for
     // the given format.
-    bool validateCompressedTexDimensions(const char* functionName, GC3Dint level, GC3Dsizei width, GC3Dsizei height, GC3Denum format);
+    bool validateCompressedTexDimensions(const char* functionName, TexFuncValidationFunctionType, GC3Denum target, GC3Dint level, GC3Dsizei width, GC3Dsizei height, GC3Denum format);
 
     // Helper function to validate compressed texture dimensions are valid for
     // the given format.
@@ -840,6 +868,11 @@ public:
     // a Safari or Chrome extension.
     bool allowPrivilegedExtensions() const;
 
+    // Determine if WEBGL_debug_renderer_info extension is enabled. For the
+    // moment it can be enabled either through a chromium finch experiment
+    // or for privileged code in the browser.
+    bool allowWebGLDebugRendererInfo() const;
+
     enum ConsoleDisplayPreference {
         DisplayInConsole,
         DontDisplayInConsole
@@ -864,8 +897,8 @@ public:
 
     // First time called, if EXT_draw_buffers is supported, query the value; otherwise return 0.
     // Later, return the cached value.
-    GC3Dint getMaxDrawBuffers();
-    GC3Dint getMaxColorAttachments();
+    GC3Dint maxDrawBuffers();
+    GC3Dint maxColorAttachments();
 
     void setBackDrawBuffer(GC3Denum);
 
@@ -873,8 +906,9 @@ public:
     void restoreCurrentTexture2D();
 
     virtual void multisamplingChanged(bool);
-    bool m_multisamplingAllowed;
-    bool m_multisamplingObserverRegistered;
+
+    void findNewMaxEnabledAttribIndex();
+    void findNewMaxNonDefaultTextureUnit();
 
     friend class WebGLStateRestorer;
     friend class WebGLRenderingContextEvictionManager;
@@ -886,8 +920,13 @@ public:
     static void deactivateContext(WebGLRenderingContext*, bool addToInactiveList);
     static void willDestroyContext(WebGLRenderingContext*);
     static void forciblyLoseOldestContext(const String& reason);
+    // Return the least recently used context's position in the active context vector.
+    // If the vector is empty, return the maximum allowed active context number.
+    static size_t oldestContextIndex();
     static IntSize oldestContextSize();
 };
+
+DEFINE_TYPE_CASTS(WebGLRenderingContext, CanvasRenderingContext, context, context->is3d(), context.is3d());
 
 } // namespace WebCore
 

@@ -36,15 +36,13 @@ class IntRect;
 class Scrollbar;
 }
 
-namespace WebKit {
+namespace blink {
 
 class ScrollbarGroup;
 
 class WebPluginScrollbarImpl : public WebPluginScrollbar {
 public:
-    WebPluginScrollbarImpl(Orientation,
-                     ScrollbarGroup*,
-                     WebPluginScrollbarClient*);
+    WebPluginScrollbarImpl(Orientation, ScrollbarGroup*, WebPluginScrollbarClient*);
     ~WebPluginScrollbarImpl();
 
     void setScrollOffset(int);
@@ -57,7 +55,7 @@ public:
     int scrollOffset() { return m_scrollOffset; }
     WebCore::Scrollbar* scrollbar() { return m_scrollbar.get(); }
 
-    // WebKit::WebScrollbar methods
+    // blink::WebScrollbar methods
     virtual bool isOverlay() const OVERRIDE;
     virtual int value() const OVERRIDE;
     virtual WebPoint location() const OVERRIDE;
@@ -73,9 +71,10 @@ public:
     virtual WebScrollbar::ScrollbarPart hoveredPart() const OVERRIDE;
     virtual WebScrollbar::ScrollbarOverlayStyle scrollbarOverlayStyle() const OVERRIDE;
     virtual WebScrollbar::Orientation orientation() const OVERRIDE;
+    virtual bool isLeftSideVerticalScrollbar() const OVERRIDE;
     virtual bool isCustomScrollbar() const OVERRIDE;
 
-    // WebKit::WebPluginScrollbar methods
+    // blink::WebPluginScrollbar methods
     virtual void setLocation(const WebRect&) OVERRIDE;
     virtual void setValue(int position) OVERRIDE;
     virtual void setDocumentSize(int) OVERRIDE;
@@ -100,6 +99,6 @@ private:
     RefPtr<WebCore::Scrollbar> m_scrollbar;
 };
 
-} // namespace WebKit
+} // namespace blink
 
 #endif

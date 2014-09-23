@@ -18,9 +18,9 @@ $(gyp_shared_intermediate_dir)/blink/InspectorOverlayPage.h: gyp_local_path := $
 $(gyp_shared_intermediate_dir)/blink/InspectorOverlayPage.h: gyp_intermediate_dir := $(abspath $(gyp_intermediate_dir))
 $(gyp_shared_intermediate_dir)/blink/InspectorOverlayPage.h: gyp_shared_intermediate_dir := $(abspath $(gyp_shared_intermediate_dir))
 $(gyp_shared_intermediate_dir)/blink/InspectorOverlayPage.h: export PATH := $(subst $(ANDROID_BUILD_PATHS),,$(PATH))
-$(gyp_shared_intermediate_dir)/blink/InspectorOverlayPage.h: $(LOCAL_PATH)/third_party/WebKit/Source/core/inspector/xxd.pl $(LOCAL_PATH)/third_party/WebKit/Source/core/inspector/InspectorOverlayPage.html $(GYP_TARGET_DEPENDENCIES)
+$(gyp_shared_intermediate_dir)/blink/InspectorOverlayPage.h: $(LOCAL_PATH)/third_party/WebKit/Source/build/scripts/xxd.py $(LOCAL_PATH)/third_party/WebKit/Source/core/inspector/InspectorOverlayPage.html $(GYP_TARGET_DEPENDENCIES)
 	@echo "Gyp action: Generating $(gyp_shared_intermediate_dir)/blink/InspectorOverlayPage.h from inspector/InspectorOverlayPage.html ($@)"
-	$(hide)cd $(gyp_local_path)/third_party/WebKit/Source/core; mkdir -p $(gyp_shared_intermediate_dir)/blink; perl inspector/xxd.pl InspectorOverlayPage_html inspector/InspectorOverlayPage.html "$(gyp_shared_intermediate_dir)/blink/InspectorOverlayPage.h"
+	$(hide)cd $(gyp_local_path)/third_party/WebKit/Source/core; mkdir -p $(gyp_shared_intermediate_dir)/blink; python ../build/scripts/xxd.py InspectorOverlayPage_html inspector/InspectorOverlayPage.html "$(gyp_shared_intermediate_dir)/blink/InspectorOverlayPage.h"
 
 
 

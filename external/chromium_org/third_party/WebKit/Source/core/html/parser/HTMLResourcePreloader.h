@@ -26,8 +26,8 @@
 #ifndef HTMLResourcePreloader_h
 #define HTMLResourcePreloader_h
 
-#include "core/loader/cache/FetchRequest.h"
-#include "core/loader/cache/Resource.h"
+#include "core/fetch/FetchRequest.h"
+#include "core/fetch/Resource.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/text/TextPosition.h"
 
@@ -53,7 +53,12 @@ public:
     const String& media() const { return m_mediaAttribute; }
     double discoveryTime() const { return m_discoveryTime; }
     void setCharset(const String& charset) { m_charset = charset.isolatedCopy(); }
-    void setCrossOriginModeAllowsCookies(bool allowsCookies) { m_crossOriginModeAllowsCookies = allowsCookies; }
+    void setCrossOriginEnabled(StoredCredentials allowCredentials)
+    {
+        m_isCORSEnabled = true;
+        m_allowCredentials = allowCredentials;
+    }
+
     Resource::Type resourceType() const { return m_resourceType; }
 
 private:
@@ -64,7 +69,8 @@ private:
         , m_baseURL(baseURL.copy())
         , m_resourceType(resourceType)
         , m_mediaAttribute(mediaAttribute.isolatedCopy())
-        , m_crossOriginModeAllowsCookies(false)
+        , m_isCORSEnabled(false)
+        , m_allowCredentials(DoNotAllowStoredCredentials)
         , m_discoveryTime(monotonicallyIncreasingTime())
     {
     }
@@ -78,7 +84,8 @@ private:
     String m_charset;
     Resource::Type m_resourceType;
     String m_mediaAttribute;
-    bool m_crossOriginModeAllowsCookies;
+    bool m_isCORSEnabled;
+    StoredCredentials m_allowCredentials;
     double m_discoveryTime;
 };
 
@@ -89,18 +96,14 @@ class HTMLResourcePreloader {
 public:
     explicit HTMLResourcePreloader(Document* document)
         : m_document(document)
-        , m_weakFactory(this)
     {
     }
 
     void takeAndPreload(PreloadRequestStream&);
     void preload(PassOwnPtr<PreloadRequest>);
 
-    WeakPtr<HTMLResourcePreloader> createWeakPtr() { return m_weakFactory.createWeakPtr(); }
-
 private:
     Document* m_document;
-    WeakPtrFactory<HTMLResourcePreloader> m_weakFactory;
 };
 
 }

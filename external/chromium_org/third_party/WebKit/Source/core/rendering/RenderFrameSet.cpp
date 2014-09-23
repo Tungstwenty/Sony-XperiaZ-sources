@@ -25,17 +25,19 @@
 #include "core/rendering/RenderFrameSet.h"
 
 #include "core/dom/Document.h"
-#include "core/dom/EventNames.h"
-#include "core/dom/MouseEvent.h"
+#include "core/events/MouseEvent.h"
+#include "core/events/ThreadLocalEventNames.h"
 #include "core/html/HTMLDimension.h"
 #include "core/html/HTMLFrameSetElement.h"
 #include "core/page/EventHandler.h"
-#include "core/page/Frame.h"
-#include "core/platform/Cursor.h"
-#include "core/platform/graphics/GraphicsContext.h"
+#include "core/frame/Frame.h"
+#include "core/rendering/GraphicsContextAnnotator.h"
+#include "core/rendering/LayoutRectRecorder.h"
 #include "core/rendering/PaintInfo.h"
 #include "core/rendering/RenderFrame.h"
 #include "core/rendering/RenderView.h"
+#include "platform/Cursor.h"
+#include "platform/graphics/GraphicsContext.h"
 
 namespace WebCore {
 
@@ -58,7 +60,7 @@ RenderFrameSet::GridAxis::GridAxis()
 
 inline HTMLFrameSetElement* RenderFrameSet::frameSet() const
 {
-    return static_cast<HTMLFrameSetElement*>(node());
+    return toHTMLFrameSetElement(node());
 }
 
 static Color borderStartEdgeColor()
@@ -437,10 +439,10 @@ FrameEdgeInfo RenderFrameSet::edgeInfo() const
 
 void RenderFrameSet::layout()
 {
-    StackStats::LayoutCheckPoint layoutCheckPoint;
     ASSERT(needsLayout());
 
-    bool doFullRepaint = selfNeedsLayout() && checkForRepaintDuringLayout();
+    LayoutRectRecorder recorder(*this);
+    bool doFullRepaint = !RuntimeEnabledFeatures::repaintAfterLayoutEnabled() && selfNeedsLayout() && checkForRepaintDuringLayout();
     LayoutRect oldBounds;
     RenderLayerModelObject* repaintContainer = 0;
     if (doFullRepaint) {
@@ -448,7 +450,7 @@ void RenderFrameSet::layout()
         oldBounds = clippedOverflowRectForRepaint(repaintContainer);
     }
 
-    if (!parent()->isFrameSet() && !document()->printing()) {
+    if (!parent()->isFrameSet() && !document().printing()) {
         setWidth(view()->viewWidth());
         setHeight(view()->viewHeight());
     }
@@ -481,6 +483,16 @@ void RenderFrameSet::layout()
     }
 
     clearNeedsLayout();
+}
+
+static void clearNeedsLayoutOnHiddenFrames(RenderBox* frame)
+{
+    for (; frame; frame = frame->nextSiblingBox()) {
+        frame->setWidth(0);
+        frame->setHeight(0);
+        frame->clearNeedsLayout();
+        clearNeedsLayoutOnHiddenFrames(frame->firstChildBox());
+    }
 }
 
 void RenderFrameSet::positionFrames()
@@ -518,12 +530,8 @@ void RenderFrameSet::positionFrames()
         yPos += height + borderThickness;
     }
 
-    // all the remaining frames are hidden to avoid ugly spurious unflowed frames
-    for (; child; child = child->nextSiblingBox()) {
-        child->setWidth(0);
-        child->setHeight(0);
-        child->clearNeedsLayout();
-    }
+    // All the remaining frames are hidden to avoid ugly spurious unflowed frames.
+    clearNeedsLayoutOnHiddenFrames(child);
 }
 
 void RenderFrameSet::startResizing(GridAxis& axis, int position)
@@ -557,7 +565,7 @@ bool RenderFrameSet::userResize(MouseEvent* evt)
     if (!m_isResizing) {
         if (needsLayout())
             return false;
-        if (evt->type() == eventNames().mousedownEvent && evt->button() == LeftButton) {
+        if (evt->type() == EventTypeNames::mousedown && evt->button() == LeftButton) {
             FloatPoint localPos = absoluteToLocal(evt->absoluteLocation(), UseTransforms);
             startResizing(m_cols, localPos.x());
             startResizing(m_rows, localPos.y());
@@ -567,11 +575,11 @@ bool RenderFrameSet::userResize(MouseEvent* evt)
             }
         }
     } else {
-        if (evt->type() == eventNames().mousemoveEvent || (evt->type() == eventNames().mouseupEvent && evt->button() == LeftButton)) {
+        if (evt->type() == EventTypeNames::mousemove || (evt->type() == EventTypeNames::mouseup && evt->button() == LeftButton)) {
             FloatPoint localPos = absoluteToLocal(evt->absoluteLocation(), UseTransforms);
             continueResizing(m_cols, localPos.x());
             continueResizing(m_rows, localPos.y());
-            if (evt->type() == eventNames().mouseupEvent && evt->button() == LeftButton) {
+            if (evt->type() == EventTypeNames::mouseup && evt->button() == LeftButton) {
                 setIsResizing(false);
                 return true;
             }
@@ -589,7 +597,7 @@ void RenderFrameSet::setIsResizing(bool isResizing)
             toRenderFrameSet(ancestor)->m_isChildResizing = isResizing;
     }
     if (Frame* frame = this->frame())
-        frame->eventHandler()->setResizingFrameSet(isResizing ? frameSet() : 0);
+        frame->eventHandler().setResizingFrameSet(isResizing ? frameSet() : 0);
 }
 
 bool RenderFrameSet::isResizingRow() const

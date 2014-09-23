@@ -30,27 +30,27 @@
  */
 
 [
-    Conditional=NOTIFICATIONS|LEGACY_NOTIFICATIONS,
     ActiveDOMObject,
     Constructor(DOMString title, [Default=Undefined] optional Dictionary options),
-    ConstructorCallWith=ScriptExecutionContext,
+    ConstructorCallWith=ExecutionContext,
+    RuntimeEnabled=Notifications,
 ] interface Notification : EventTarget {
-    void show();
-    [Conditional=LEGACY_NOTIFICATIONS] void cancel();
-    [Conditional=NOTIFICATIONS] void close();
+    [CallWith=ExecutionContext] static readonly attribute DOMString permission;
+    [CallWith=ExecutionContext] static void requestPermission(optional NotificationPermissionCallback callback);
 
+    // FIXME: Implement the Notification.get() method.
 
-    [CallWith=ScriptExecutionContext, Conditional=NOTIFICATIONS] static readonly attribute DOMString permission;
-    [CallWith=ScriptExecutionContext, Conditional=NOTIFICATIONS] static void requestPermission(optional NotificationPermissionCallback callback);
-
+    attribute EventHandler onclick;
     attribute EventHandler onshow;
-    [Conditional=LEGACY_NOTIFICATIONS] attribute EventHandler ondisplay;
     attribute EventHandler onerror;
     attribute EventHandler onclose;
-    attribute EventHandler onclick;
 
-    [Conditional=LEGACY_NOTIFICATIONS] attribute DOMString dir;
-    [Conditional=LEGACY_NOTIFICATIONS] attribute DOMString replaceId;
-    [Conditional=NOTIFICATIONS] attribute DOMString tag;
+    readonly attribute DOMString title;
+    readonly attribute DOMString dir;
+    readonly attribute DOMString lang;
+    readonly attribute DOMString body;
+    readonly attribute DOMString tag;
+    readonly attribute DOMString icon;
+
+    void close();
 };
-

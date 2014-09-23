@@ -121,12 +121,14 @@ class DtlsTransportChannelWrapper : public TransportChannelImpl {
                               TransportChannelImpl* channel);
   virtual ~DtlsTransportChannelWrapper();
 
-  virtual void SetIceRole(IceRole ice_role);
-  // Returns current transport role of the channel.
+  virtual void SetIceRole(IceRole role) {
+    channel_->SetIceRole(role);
+  }
   virtual IceRole GetIceRole() const {
     return channel_->GetIceRole();
   }
   virtual bool SetLocalIdentity(talk_base::SSLIdentity *identity);
+  virtual bool GetLocalIdentity(talk_base::SSLIdentity** identity) const;
 
   virtual bool SetRemoteFingerprint(const std::string& digest_alg,
                                     const uint8* digest,
@@ -134,7 +136,9 @@ class DtlsTransportChannelWrapper : public TransportChannelImpl {
   virtual bool IsDtlsActive() const { return dtls_state_ != STATE_NONE; }
 
   // Called to send a packet (via DTLS, if turned on).
-  virtual int SendPacket(const char* data, size_t size, int flags);
+  virtual int SendPacket(const char* data, size_t size,
+                         talk_base::DiffServCodePoint dscp,
+                         int flags);
 
   // TransportChannel calls that we forward to the wrapped transport.
   virtual int SetOption(talk_base::Socket::Option opt, int value) {
@@ -157,6 +161,13 @@ class DtlsTransportChannelWrapper : public TransportChannelImpl {
 
   // Find out which DTLS-SRTP cipher was negotiated
   virtual bool GetSrtpCipher(std::string* cipher);
+
+  virtual bool GetSslRole(talk_base::SSLRole* role) const;
+  virtual bool SetSslRole(talk_base::SSLRole role);
+
+  // Once DTLS has been established, this method retrieves the certificate in
+  // use by the remote peer, for use in external identity verification.
+  virtual bool GetRemoteCertificate(talk_base::SSLCertificate** cert) const;
 
   // Once DTLS has established (i.e., this channel is writable), this method
   // extracts the keys negotiated during the DTLS handshake, for use in external
@@ -214,7 +225,7 @@ class DtlsTransportChannelWrapper : public TransportChannelImpl {
   void OnReadableState(TransportChannel* channel);
   void OnWritableState(TransportChannel* channel);
   void OnReadPacket(TransportChannel* channel, const char* data, size_t size,
-                    int flags);
+                    const talk_base::PacketTime& packet_time, int flags);
   void OnReadyToSend(TransportChannel* channel);
   void OnDtlsEvent(talk_base::StreamInterface* stream_, int sig, int err);
   bool SetupDtls();
@@ -234,7 +245,7 @@ class DtlsTransportChannelWrapper : public TransportChannelImpl {
   std::vector<std::string> srtp_ciphers_;  // SRTP ciphers to use with DTLS.
   State dtls_state_;
   talk_base::SSLIdentity* local_identity_;
-  talk_base::SSLRole dtls_role_;
+  talk_base::SSLRole ssl_role_;
   talk_base::Buffer remote_fingerprint_value_;
   std::string remote_fingerprint_algorithm_;
 

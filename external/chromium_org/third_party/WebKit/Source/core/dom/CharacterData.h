@@ -38,21 +38,21 @@ public:
     unsigned length() const { return m_data.length(); }
     String substringData(unsigned offset, unsigned count, ExceptionState&);
     void appendData(const String&);
-    void insertData(unsigned offset, const String&, ExceptionState&);
-    void deleteData(unsigned offset, unsigned count, ExceptionState&);
     void replaceData(unsigned offset, unsigned count, const String&, ExceptionState&);
+
+    enum RecalcStyleBehavior { DoNotRecalcStyle, DeprecatedRecalcStyleImmediatlelyForEditing };
+    void insertData(unsigned offset, const String&, ExceptionState&, RecalcStyleBehavior = DoNotRecalcStyle);
+    void deleteData(unsigned offset, unsigned count, ExceptionState&, RecalcStyleBehavior = DoNotRecalcStyle);
 
     bool containsOnlyWhitespace() const;
 
     StringImpl* dataImpl() { return m_data.impl(); }
 
-    // Like appendData, but optimized for the parser (e.g., no mutation events).
-    // Returns how much could be added before length limit was met.
-    unsigned parserAppendData(const String& string, unsigned offset, unsigned lengthLimit);
+    void parserAppendData(const String&);
 
 protected:
-    CharacterData(TreeScope* treeScope, const String& text, ConstructionType type)
-        : Node(treeScope, type)
+    CharacterData(TreeScope& treeScope, const String& text, ConstructionType type)
+        : Node(&treeScope, type)
         , m_data(!text.isNull() ? text : emptyString())
     {
         ASSERT(type == CreateOther || type == CreateText || type == CreateEditingText);
@@ -66,16 +66,18 @@ protected:
     }
     void didModifyData(const String& oldValue);
 
+    String m_data;
+
 private:
     virtual String nodeValue() const OVERRIDE FINAL;
     virtual void setNodeValue(const String&) OVERRIDE FINAL;
     virtual bool isCharacterDataNode() const OVERRIDE FINAL { return true; }
     virtual int maxCharacterOffset() const OVERRIDE FINAL;
     virtual bool offsetInCharacters() const OVERRIDE FINAL;
-    void setDataAndUpdate(const String&, unsigned offsetOfReplacedData, unsigned oldLength, unsigned newLength);
-
-    String m_data;
+    void setDataAndUpdate(const String&, unsigned offsetOfReplacedData, unsigned oldLength, unsigned newLength, RecalcStyleBehavior = DoNotRecalcStyle);
 };
+
+DEFINE_NODE_TYPE_CASTS(CharacterData, isCharacterDataNode());
 
 } // namespace WebCore
 

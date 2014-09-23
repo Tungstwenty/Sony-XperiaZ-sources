@@ -39,7 +39,7 @@
 #include <v8/include/v8-profiler.h>
 #include <v8/include/v8.h>
 
-using namespace WebKit;
+using namespace blink;
 
 namespace {
 
@@ -48,7 +48,7 @@ const v8::HeapGraphNode* GetProperty(const v8::HeapGraphNode* node, v8::HeapGrap
     for (int i = 0, count = node->GetChildrenCount(); i < count; ++i) {
         const v8::HeapGraphEdge* prop = node->GetChild(i);
         if (prop->GetType() == type) {
-            v8::String::AsciiValue propName(prop->GetName());
+            v8::String::Utf8Value propName(prop->GetName());
             if (!strcmp(name, *propName))
                 return prop->GetToNode();
         }
@@ -61,7 +61,7 @@ int GetNumObjects(const char* constructor)
     v8::Isolate* isolate = v8::Isolate::GetCurrent();
     v8::HandleScope scope(isolate);
     v8::HeapProfiler* profiler = isolate->GetHeapProfiler();
-    const v8::HeapSnapshot* snapshot = profiler->TakeHeapSnapshot(v8::String::New(""));
+    const v8::HeapSnapshot* snapshot = profiler->TakeHeapSnapshot(v8::String::NewFromUtf8(isolate, ""));
     if (!snapshot)
         return -1;
     int count = 0;
@@ -69,12 +69,12 @@ int GetNumObjects(const char* constructor)
         const v8::HeapGraphNode* node = snapshot->GetNode(i);
         if (node->GetType() != v8::HeapGraphNode::kObject)
             continue;
-        v8::String::AsciiValue nodeName(node->GetName());
+        v8::String::Utf8Value nodeName(node->GetName());
         if (!strcmp(constructor, *nodeName)) {
             const v8::HeapGraphNode* constructorProp = GetProperty(node, v8::HeapGraphEdge::kProperty, "constructor");
             // Skip an Object instance named after the constructor.
             if (constructorProp) {
-                v8::String::AsciiValue constructorName(constructorProp->GetName());
+                v8::String::Utf8Value constructorName(constructorProp->GetName());
                 if (!strcmp(constructor, *constructorName))
                     continue;
             }
@@ -87,26 +87,22 @@ int GetNumObjects(const char* constructor)
 
 class ListenerLeakTest : public testing::Test {
 public:
-    ListenerLeakTest() : m_webView(0) { }
-
     void RunTest(const std::string& filename)
     {
         std::string baseURL("http://www.example.com/");
         std::string fileName(filename);
         bool executeScript = true;
         URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(baseURL.c_str()), WebString::fromUTF8(fileName.c_str()));
-        m_webView = FrameTestHelpers::createWebViewAndLoad(baseURL + fileName, executeScript);
+        webViewHelper.initializeAndLoad(baseURL + fileName, executeScript);
     }
 
     virtual void TearDown() OVERRIDE
     {
-        if (m_webView)
-            m_webView->close();
         Platform::current()->unitTestSupport()->unregisterAllMockedURLs();
     }
 
 protected:
-    WebView* m_webView;
+    FrameTestHelpers::WebViewHelper webViewHelper;
 };
 
 

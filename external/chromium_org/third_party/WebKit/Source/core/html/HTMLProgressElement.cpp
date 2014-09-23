@@ -23,10 +23,10 @@
 #include "core/html/HTMLProgressElement.h"
 
 #include "HTMLNames.h"
+#include "bindings/v8/ExceptionMessages.h"
 #include "bindings/v8/ExceptionState.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/ExceptionCode.h"
-#include "core/dom/NodeRenderingContext.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html/shadow/ProgressShadowElement.h"
@@ -39,11 +39,10 @@ using namespace HTMLNames;
 const double HTMLProgressElement::IndeterminatePosition = -1;
 const double HTMLProgressElement::InvalidPosition = -2;
 
-HTMLProgressElement::HTMLProgressElement(const QualifiedName& tagName, Document* document)
-    : LabelableElement(tagName, document)
+HTMLProgressElement::HTMLProgressElement(Document& document)
+    : LabelableElement(progressTag, document)
     , m_value(0)
 {
-    ASSERT(hasTagName(progressTag));
     ScriptWrappable::init(this);
 }
 
@@ -51,9 +50,9 @@ HTMLProgressElement::~HTMLProgressElement()
 {
 }
 
-PassRefPtr<HTMLProgressElement> HTMLProgressElement::create(const QualifiedName& tagName, Document* document)
+PassRefPtr<HTMLProgressElement> HTMLProgressElement::create(Document& document)
 {
-    RefPtr<HTMLProgressElement> progress = adoptRef(new HTMLProgressElement(tagName, document));
+    RefPtr<HTMLProgressElement> progress = adoptRef(new HTMLProgressElement(document));
     progress->ensureUserAgentShadowRoot();
     return progress.release();
 }
@@ -69,11 +68,11 @@ RenderObject* HTMLProgressElement::createRenderer(RenderStyle* style)
 RenderProgress* HTMLProgressElement::renderProgress() const
 {
     if (renderer() && renderer()->isProgress())
-        return static_cast<RenderProgress*>(renderer());
+        return toRenderProgress(renderer());
 
     RenderObject* renderObject = userAgentShadowRoot()->firstChild()->renderer();
     ASSERT_WITH_SECURITY_IMPLICATION(!renderObject || renderObject->isProgress());
-    return static_cast<RenderProgress*>(renderObject);
+    return toRenderProgress(renderObject);
 }
 
 void HTMLProgressElement::parseAttribute(const QualifiedName& name, const AtomicString& value)
@@ -95,32 +94,33 @@ void HTMLProgressElement::attach(const AttachContext& context)
 
 double HTMLProgressElement::value() const
 {
-    double value = parseToDoubleForNumberType(fastGetAttribute(valueAttr));
+    double value = getFloatingPointAttribute(valueAttr);
     return !std::isfinite(value) || value < 0 ? 0 : std::min(value, max());
 }
 
-void HTMLProgressElement::setValue(double value, ExceptionState& es)
+void HTMLProgressElement::setValue(double value, ExceptionState& exceptionState)
 {
     if (!std::isfinite(value)) {
-        es.throwDOMException(NotSupportedError);
+        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(value));
         return;
     }
-    setAttribute(valueAttr, String::number(value >= 0 ? value : 0));
+    setFloatingPointAttribute(valueAttr, std::max(value, 0.));
 }
 
 double HTMLProgressElement::max() const
 {
-    double max = parseToDoubleForNumberType(getAttribute(maxAttr));
+    double max = getFloatingPointAttribute(maxAttr);
     return !std::isfinite(max) || max <= 0 ? 1 : max;
 }
 
-void HTMLProgressElement::setMax(double max, ExceptionState& es)
+void HTMLProgressElement::setMax(double max, ExceptionState& exceptionState)
 {
     if (!std::isfinite(max)) {
-        es.throwDOMException(NotSupportedError);
+        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(max));
         return;
     }
-    setAttribute(maxAttr, String::number(max > 0 ? max : 1));
+    // FIXME: The specification says we should ignore the input value if it is inferior or equal to 0.
+    setFloatingPointAttribute(maxAttr, max > 0 ? max : 1);
 }
 
 double HTMLProgressElement::position() const
@@ -146,20 +146,23 @@ void HTMLProgressElement::didElementStateChange()
     }
 }
 
-void HTMLProgressElement::didAddUserAgentShadowRoot(ShadowRoot* root)
+void HTMLProgressElement::didAddUserAgentShadowRoot(ShadowRoot& root)
 {
     ASSERT(!m_value);
 
     RefPtr<ProgressInnerElement> inner = ProgressInnerElement::create(document());
-    root->appendChild(inner);
+    inner->setPseudo(AtomicString("-webkit-progress-inner-element", AtomicString::ConstructFromLiteral));
+    root.appendChild(inner);
 
     RefPtr<ProgressBarElement> bar = ProgressBarElement::create(document());
+    bar->setPseudo(AtomicString("-webkit-progress-bar", AtomicString::ConstructFromLiteral));
     RefPtr<ProgressValueElement> value = ProgressValueElement::create(document());
     m_value = value.get();
+    m_value->setPseudo(AtomicString("-webkit-progress-value", AtomicString::ConstructFromLiteral));
     m_value->setWidthPercentage(HTMLProgressElement::IndeterminatePosition * 100);
-    bar->appendChild(m_value, ASSERT_NO_EXCEPTION);
+    bar->appendChild(m_value);
 
-    inner->appendChild(bar, ASSERT_NO_EXCEPTION);
+    inner->appendChild(bar);
 }
 
 bool HTMLProgressElement::shouldAppearIndeterminate() const

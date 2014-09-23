@@ -24,11 +24,15 @@
 #include "config.h"
 #include "core/rendering/RenderReplaced.h"
 
-#include "core/platform/graphics/GraphicsContext.h"
+#include "RuntimeEnabledFeatures.h"
+#include "core/rendering/GraphicsContextAnnotator.h"
+#include "core/rendering/LayoutRectRecorder.h"
 #include "core/rendering/LayoutRepainter.h"
 #include "core/rendering/RenderBlock.h"
+#include "core/rendering/RenderImage.h"
 #include "core/rendering/RenderLayer.h"
 #include "core/rendering/RenderView.h"
+#include "platform/graphics/GraphicsContext.h"
 
 using namespace std;
 
@@ -75,9 +79,9 @@ void RenderReplaced::styleDidChange(StyleDifference diff, const RenderStyle* old
 
 void RenderReplaced::layout()
 {
-    StackStats::LayoutCheckPoint layoutCheckPoint;
     ASSERT(needsLayout());
 
+    LayoutRectRecorder recorder(*this);
     LayoutRepainter repainter(*this, checkForRepaintDuringLayout());
 
     setHeight(minimumReplacedHeight());
@@ -119,17 +123,20 @@ void RenderReplaced::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
         return;
     }
 
+    if (paintInfo.phase == PaintPhaseClippingMask && (!hasLayer() || !layer()->hasCompositedClippingMask()))
+        return;
+
     LayoutRect paintRect = LayoutRect(adjustedPaintOffset, size());
     if ((paintInfo.phase == PaintPhaseOutline || paintInfo.phase == PaintPhaseSelfOutline) && style()->outlineWidth())
         paintOutline(paintInfo, paintRect);
 
-    if (paintInfo.phase != PaintPhaseForeground && paintInfo.phase != PaintPhaseSelection && !canHaveChildren())
+    if (paintInfo.phase != PaintPhaseForeground && paintInfo.phase != PaintPhaseSelection && !canHaveChildren() && paintInfo.phase != PaintPhaseClippingMask)
         return;
 
     if (!paintInfo.shouldPaintWithinRoot(this))
         return;
 
-    bool drawSelectionTint = selectionState() != SelectionNone && !document()->printing();
+    bool drawSelectionTint = selectionState() != SelectionNone && !document().printing();
     if (paintInfo.phase == PaintPhaseSelection) {
         if (selectionState() == SelectionNone)
             return;
@@ -152,7 +159,11 @@ void RenderReplaced::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
     }
 
     if (!completelyClippedOut) {
-        paintReplaced(paintInfo, adjustedPaintOffset);
+        if (paintInfo.phase == PaintPhaseClippingMask) {
+            paintClippingMask(paintInfo, adjustedPaintOffset);
+        } else {
+            paintReplaced(paintInfo, adjustedPaintOffset);
+        }
 
         if (style()->hasBorderRadius())
             paintInfo.context->restore();
@@ -170,7 +181,7 @@ void RenderReplaced::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 bool RenderReplaced::shouldPaint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     if (paintInfo.phase != PaintPhaseForeground && paintInfo.phase != PaintPhaseOutline && paintInfo.phase != PaintPhaseSelfOutline
-            && paintInfo.phase != PaintPhaseSelection && paintInfo.phase != PaintPhaseMask)
+        && paintInfo.phase != PaintPhaseSelection && paintInfo.phase != PaintPhaseMask && paintInfo.phase != PaintPhaseClippingMask)
         return false;
 
     if (!paintInfo.shouldPaintWithinRoot(this))
@@ -270,8 +281,11 @@ void RenderReplaced::computeAspectRatioInformationForRenderBox(RenderBox* conten
             ASSERT(!isPercentageIntrinsicSize);
 
         // Handle zoom & vertical writing modes here, as the embedded document doesn't know about them.
-        if (!isPercentageIntrinsicSize)
+        if (!isPercentageIntrinsicSize) {
             intrinsicSize.scale(style()->effectiveZoom());
+            if (isRenderImage())
+                intrinsicSize.scale(toRenderImage(this)->imageDevicePixelRatio());
+        }
 
         if (rendererHasAspectRatio(this) && isPercentageIntrinsicSize)
             intrinsicRatio = 1;
@@ -309,6 +323,46 @@ void RenderReplaced::computeAspectRatioInformationForRenderBox(RenderBox* conten
         constrainedSize.setWidth(RenderBox::computeReplacedLogicalHeight() * intrinsicSize.width() / intrinsicSize.height());
         constrainedSize.setHeight(RenderBox::computeReplacedLogicalWidth() * intrinsicSize.height() / intrinsicSize.width());
     }
+}
+
+LayoutRect RenderReplaced::replacedContentRect(const LayoutSize* overriddenIntrinsicSize) const
+{
+    LayoutRect contentRect = contentBoxRect();
+    ObjectFit objectFit = style()->objectFit();
+
+    if (objectFit == ObjectFitFill && style()->objectPosition() == RenderStyle::initialObjectPosition()) {
+        if (!isVideo() || RuntimeEnabledFeatures::objectFitPositionEnabled())
+            return contentRect;
+        objectFit = ObjectFitContain;
+    }
+
+    LayoutSize intrinsicSize = overriddenIntrinsicSize ? *overriddenIntrinsicSize : this->intrinsicSize();
+    if (!intrinsicSize.width() || !intrinsicSize.height())
+        return contentRect;
+
+    LayoutRect finalRect = contentRect;
+    switch (objectFit) {
+    case ObjectFitContain:
+    case ObjectFitScaleDown:
+    case ObjectFitCover:
+        finalRect.setSize(finalRect.size().fitToAspectRatio(intrinsicSize, objectFit == ObjectFitCover ? AspectRatioFitGrow : AspectRatioFitShrink));
+        if (objectFit != ObjectFitScaleDown || finalRect.width() <= intrinsicSize.width())
+            break;
+        // fall through
+    case ObjectFitNone:
+        finalRect.setSize(intrinsicSize);
+        break;
+    case ObjectFitFill:
+        break;
+    default:
+        ASSERT_NOT_REACHED();
+    }
+
+    LayoutUnit xOffset = minimumValueForLength(style()->objectPosition().x(), contentRect.width() - finalRect.width(), view());
+    LayoutUnit yOffset = minimumValueForLength(style()->objectPosition().y(), contentRect.height() - finalRect.height(), view());
+    finalRect.move(xOffset, yOffset);
+
+    return finalRect;
 }
 
 void RenderReplaced::computeIntrinsicRatioInformation(FloatSize& intrinsicSize, double& intrinsicRatio, bool& isPercentageIntrinsicSize) const
@@ -461,7 +515,7 @@ void RenderReplaced::computePreferredLogicalWidths()
     m_minPreferredLogicalWidth += borderAndPadding;
     m_maxPreferredLogicalWidth += borderAndPadding;
 
-    setPreferredLogicalWidthsDirty(false);
+    clearPreferredLogicalWidthsDirty();
 }
 
 PositionWithAffinity RenderReplaced::positionForPoint(const LayoutPoint& point)

@@ -21,7 +21,7 @@
 #ifndef RenderFileUploadControl_h
 #define RenderFileUploadControl_h
 
-#include "core/rendering/RenderBlock.h"
+#include "core/rendering/RenderBlockFlow.h"
 
 namespace WebCore {
 
@@ -31,7 +31,7 @@ class HTMLInputElement;
 // sufficient space to draw a file icon and filename. The RenderButton has a shadow node
 // associated with it to receive click/hover events.
 
-class RenderFileUploadControl FINAL : public RenderBlock {
+class RenderFileUploadControl FINAL : public RenderBlockFlow {
 public:
     RenderFileUploadControl(HTMLInputElement*);
     virtual ~RenderFileUploadControl();
@@ -44,13 +44,12 @@ public:
 private:
     virtual const char* renderName() const { return "RenderFileUploadControl"; }
 
-    virtual bool canBeReplacedWithInlineRunIn() const OVERRIDE;
     virtual void updateFromElement();
     virtual void computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidth, LayoutUnit& maxLogicalWidth) const OVERRIDE;
     virtual void computePreferredLogicalWidths();
     virtual void paintObject(PaintInfo&, const LayoutPoint&);
 
-    virtual bool requiresForcedStyleRecalcPropagation() const { return true; }
+    virtual bool supportsPartialLayout() const OVERRIDE { return false; }
 
     int maxFilenameWidth() const;
 
@@ -61,20 +60,7 @@ private:
     bool m_canReceiveDroppedFiles;
 };
 
-inline RenderFileUploadControl* toRenderFileUploadControl(RenderObject* object)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!object || object->isFileUploadControl());
-    return static_cast<RenderFileUploadControl*>(object);
-}
-
-inline const RenderFileUploadControl* toRenderFileUploadControl(const RenderObject* object)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!object || object->isFileUploadControl());
-    return static_cast<const RenderFileUploadControl*>(object);
-}
-
-// This will catch anyone doing an unnecessary cast.
-void toRenderFileUploadControl(const RenderFileUploadControl*);
+DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderFileUploadControl, isFileUploadControl());
 
 } // namespace WebCore
 

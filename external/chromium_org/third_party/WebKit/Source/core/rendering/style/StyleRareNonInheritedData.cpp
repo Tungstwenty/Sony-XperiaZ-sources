@@ -24,9 +24,10 @@
 
 #include "core/rendering/style/ContentData.h"
 #include "core/rendering/style/RenderStyle.h"
-#include "core/rendering/style/ShadowData.h"
+#include "core/rendering/style/ShadowList.h"
 #include "core/rendering/style/StyleFilterData.h"
 #include "core/rendering/style/StyleTransformData.h"
+#include "core/rendering/svg/ReferenceFilterBuilder.h"
 
 namespace WebCore {
 
@@ -39,15 +40,17 @@ StyleRareNonInheritedData::StyleRareNonInheritedData()
     , m_perspectiveOriginY(RenderStyle::initialPerspectiveOriginY())
     , lineClamp(RenderStyle::initialLineClamp())
     , m_draggableRegionMode(DraggableRegionNone)
-    , m_mask(FillLayer(MaskFillLayer))
+    , m_mask(MaskFillLayer, true)
     , m_pageSize()
     , m_shapeInside(RenderStyle::initialShapeInside())
     , m_shapeOutside(RenderStyle::initialShapeOutside())
     , m_shapeMargin(RenderStyle::initialShapeMargin())
     , m_shapePadding(RenderStyle::initialShapePadding())
+    , m_shapeImageThreshold(RenderStyle::initialShapeImageThreshold())
     , m_clipPath(RenderStyle::initialClipPath())
     , m_visitedLinkBackgroundColor(RenderStyle::initialBackgroundColor())
     , m_order(RenderStyle::initialOrder())
+    , m_objectPosition(RenderStyle::initialObjectPosition())
     , m_flowThread(RenderStyle::initialFlowThread())
     , m_regionThread(RenderStyle::initialRegionThread())
     , m_regionFragment(RenderStyle::initialRegionFragment())
@@ -75,6 +78,8 @@ StyleRareNonInheritedData::StyleRareNonInheritedData()
     , m_hasAspectRatio(false)
     , m_effectiveBlendMode(RenderStyle::initialBlendMode())
     , m_touchAction(RenderStyle::initialTouchAction())
+    , m_objectFit(RenderStyle::initialObjectFit())
+    , m_isolation(RenderStyle::initialIsolation())
 {
     m_maskBoxImage.setMaskDefaults();
 }
@@ -99,7 +104,7 @@ StyleRareNonInheritedData::StyleRareNonInheritedData(const StyleRareNonInherited
     , m_gridItem(o.m_gridItem)
     , m_content(o.m_content ? o.m_content->clone() : nullptr)
     , m_counterDirectives(o.m_counterDirectives ? clone(*o.m_counterDirectives) : nullptr)
-    , m_boxShadow(cloneShadow(o.m_boxShadow))
+    , m_boxShadow(o.m_boxShadow)
     , m_boxReflect(o.m_boxReflect)
     , m_animations(o.m_animations ? adoptPtr(new CSSAnimationDataList(*o.m_animations)) : nullptr)
     , m_transitions(o.m_transitions ? adoptPtr(new CSSAnimationDataList(*o.m_transitions)) : nullptr)
@@ -110,6 +115,7 @@ StyleRareNonInheritedData::StyleRareNonInheritedData(const StyleRareNonInherited
     , m_shapeOutside(o.m_shapeOutside)
     , m_shapeMargin(o.m_shapeMargin)
     , m_shapePadding(o.m_shapePadding)
+    , m_shapeImageThreshold(o.m_shapeImageThreshold)
     , m_clipPath(o.m_clipPath)
     , m_textDecorationColor(o.m_textDecorationColor)
     , m_visitedLinkTextDecorationColor(o.m_visitedLinkTextDecorationColor)
@@ -120,6 +126,7 @@ StyleRareNonInheritedData::StyleRareNonInheritedData(const StyleRareNonInherited
     , m_visitedLinkBorderTopColor(o.m_visitedLinkBorderTopColor)
     , m_visitedLinkBorderBottomColor(o.m_visitedLinkBorderBottomColor)
     , m_order(o.m_order)
+    , m_objectPosition(o.m_objectPosition)
     , m_flowThread(o.m_flowThread)
     , m_regionThread(o.m_regionThread)
     , m_regionFragment(o.m_regionFragment)
@@ -147,11 +154,16 @@ StyleRareNonInheritedData::StyleRareNonInheritedData(const StyleRareNonInherited
     , m_hasAspectRatio(o.m_hasAspectRatio)
     , m_effectiveBlendMode(o.m_effectiveBlendMode)
     , m_touchAction(o.m_touchAction)
+    , m_objectFit(o.m_objectFit)
+    , m_isolation(o.m_isolation)
 {
 }
 
 StyleRareNonInheritedData::~StyleRareNonInheritedData()
 {
+    const FilterOperations& filterOperations = m_filter->m_operations;
+    for (unsigned i = 0; i < filterOperations.size(); ++i)
+        ReferenceFilterBuilder::clearDocumentResourceReference(filterOperations.at(i));
 }
 
 bool StyleRareNonInheritedData::operator==(const StyleRareNonInheritedData& o) const
@@ -185,6 +197,7 @@ bool StyleRareNonInheritedData::operator==(const StyleRareNonInheritedData& o) c
         && m_shapeOutside == o.m_shapeOutside
         && m_shapeMargin == o.m_shapeMargin
         && m_shapePadding == o.m_shapePadding
+        && m_shapeImageThreshold == o.m_shapeImageThreshold
         && m_clipPath == o.m_clipPath
         && m_textDecorationColor == o.m_textDecorationColor
         && m_visitedLinkTextDecorationColor == o.m_visitedLinkTextDecorationColor
@@ -195,6 +208,8 @@ bool StyleRareNonInheritedData::operator==(const StyleRareNonInheritedData& o) c
         && m_visitedLinkBorderTopColor == o.m_visitedLinkBorderTopColor
         && m_visitedLinkBorderBottomColor == o.m_visitedLinkBorderBottomColor
         && m_order == o.m_order
+        && m_objectPosition == o.m_objectPosition
+        && m_callbackSelectors == o.m_callbackSelectors
         && m_flowThread == o.m_flowThread
         && m_regionThread == o.m_regionThread
         && m_regionFragment == o.m_regionFragment
@@ -221,7 +236,9 @@ bool StyleRareNonInheritedData::operator==(const StyleRareNonInheritedData& o) c
         && !m_runningAcceleratedAnimation && !o.m_runningAcceleratedAnimation
         && m_effectiveBlendMode == o.m_effectiveBlendMode
         && m_hasAspectRatio == o.m_hasAspectRatio
-        && m_touchAction == o.m_touchAction;
+        && m_touchAction == o.m_touchAction
+        && m_objectFit == o.m_objectFit
+        && m_isolation == o.m_isolation;
 }
 
 bool StyleRareNonInheritedData::contentDataEquivalent(const StyleRareNonInheritedData& o) const
@@ -283,6 +300,11 @@ bool StyleRareNonInheritedData::transitionDataEquivalent(const StyleRareNonInher
     if (m_transitions && o.m_transitions && (*m_transitions != *o.m_transitions))
         return false;
     return true;
+}
+
+bool StyleRareNonInheritedData::hasFilters() const
+{
+    return m_filter.get() && !m_filter->m_operations.isEmpty();
 }
 
 } // namespace WebCore

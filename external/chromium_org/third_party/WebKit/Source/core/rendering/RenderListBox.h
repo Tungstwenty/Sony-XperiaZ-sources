@@ -31,14 +31,14 @@
 #ifndef RenderListBox_h
 #define RenderListBox_h
 
-#include "core/platform/ScrollableArea.h"
-#include "core/rendering/RenderBlock.h"
+#include "core/rendering/RenderBlockFlow.h"
+#include "platform/scroll/ScrollableArea.h"
 
 namespace WebCore {
 
 class HTMLSelectElement;
 
-class RenderListBox FINAL : public RenderBlock, private ScrollableArea {
+class RenderListBox FINAL : public RenderBlockFlow, private ScrollableArea {
 public:
     explicit RenderListBox(Element*);
     virtual ~RenderListBox();
@@ -65,15 +65,13 @@ private:
     virtual bool isListBox() const { return true; }
 
     virtual void updateFromElement();
-    virtual bool canBeReplacedWithInlineRunIn() const OVERRIDE;
     virtual bool hasControlClip() const { return true; }
     virtual void paintObject(PaintInfo&, const LayoutPoint&);
     virtual LayoutRect controlClipRect(const LayoutPoint&) const;
 
     virtual bool isPointInOverflowControl(HitTestResult&, const LayoutPoint& locationInContainer, const LayoutPoint& accumulatedOffset);
 
-    virtual bool scroll(ScrollDirection, ScrollGranularity, float multiplier = 1, Node** stopNode = 0);
-    virtual bool logicalScroll(ScrollLogicalDirection, ScrollGranularity, float multiplier = 1, Node** stopNode = 0);
+    virtual bool scroll(ScrollDirection, ScrollGranularity, float) OVERRIDE;
 
     virtual void computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidth, LayoutUnit& maxLogicalWidth) const OVERRIDE;
     virtual void computePreferredLogicalWidths() OVERRIDE;
@@ -81,6 +79,8 @@ private:
     virtual void computeLogicalHeight(LayoutUnit logicalHeight, LayoutUnit logicalTop, LogicalExtentComputedValues&) const OVERRIDE;
 
     virtual void layout();
+
+    virtual bool supportsPartialLayout() const OVERRIDE { return false; }
 
     virtual void addFocusRingRects(Vector<IntRect>&, const LayoutPoint& additionalOffset, const RenderLayerModelObject* paintContainer = 0) OVERRIDE;
 
@@ -124,6 +124,7 @@ private:
     virtual IntPoint minimumScrollPosition() const OVERRIDE;
     virtual IntPoint maximumScrollPosition() const OVERRIDE;
     virtual bool userInputScrollable(ScrollbarOrientation) const OVERRIDE;
+    virtual bool shouldPlaceVerticalScrollbarOnLeft() const OVERRIDE;
     virtual int lineStep(ScrollbarOrientation) const;
     virtual int pageStep(ScrollbarOrientation) const;
     virtual float pixelStep(ScrollbarOrientation) const;
@@ -144,6 +145,7 @@ private:
     int numVisibleItems() const;
     int numItems() const;
     LayoutUnit listHeight() const;
+    int scrollbarLeft() const;
     void paintScrollbar(PaintInfo&, const LayoutPoint&);
     void paintItemForeground(PaintInfo&, const LayoutPoint&, int listIndex);
     void paintItemBackground(PaintInfo&, const LayoutPoint&, int listIndex);
@@ -158,14 +160,7 @@ private:
     RefPtr<Scrollbar> m_vBar;
 };
 
-inline RenderListBox* toRenderListBox(RenderObject* object)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!object || object->isListBox());
-    return static_cast<RenderListBox*>(object);
-}
-
-// This will catch anyone doing an unnecessary cast.
-void toRenderListBox(const RenderListBox*);
+DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderListBox, isListBox());
 
 } // namepace WebCore
 

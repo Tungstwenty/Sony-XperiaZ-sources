@@ -25,13 +25,16 @@
 #include "core/rendering/RenderTextControlSingleLine.h"
 
 #include "CSSValueKeywords.h"
+#include "core/dom/shadow/ShadowRoot.h"
 #include "core/editing/FrameSelection.h"
-#include "core/page/Frame.h"
-#include "core/platform/PlatformKeyboardEvent.h"
-#include "core/platform/graphics/SimpleFontData.h"
+#include "core/html/shadow/ShadowElementNames.h"
+#include "core/frame/Frame.h"
 #include "core/rendering/HitTestResult.h"
+#include "core/rendering/LayoutRectRecorder.h"
 #include "core/rendering/RenderLayer.h"
 #include "core/rendering/RenderTheme.h"
+#include "platform/PlatformKeyboardEvent.h"
+#include "platform/fonts/SimpleFontData.h"
 
 using namespace std;
 
@@ -51,15 +54,19 @@ RenderTextControlSingleLine::~RenderTextControlSingleLine()
 {
 }
 
-inline HTMLElement* RenderTextControlSingleLine::innerSpinButtonElement() const
+inline Element* RenderTextControlSingleLine::containerElement() const
 {
-    return inputElement()->innerSpinButtonElement();
+    return inputElement()->userAgentShadowRoot()->getElementById(ShadowElementNames::textFieldContainer());
 }
 
-RenderStyle* RenderTextControlSingleLine::textBaseStyle() const
+inline Element* RenderTextControlSingleLine::editingViewPortElement() const
 {
-    HTMLElement* innerBlock = innerBlockElement();
-    return innerBlock ? innerBlock->renderer()->style() : style();
+    return inputElement()->userAgentShadowRoot()->getElementById(ShadowElementNames::editingViewPort());
+}
+
+inline HTMLElement* RenderTextControlSingleLine::innerSpinButtonElement() const
+{
+    return toHTMLElement(inputElement()->userAgentShadowRoot()->getElementById(ShadowElementNames::spinButton()));
 }
 
 void RenderTextControlSingleLine::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
@@ -77,7 +84,7 @@ void RenderTextControlSingleLine::paint(PaintInfo& paintInfo, const LayoutPoint&
 
         // Convert the rect into the coords used for painting the content
         contentsRect.moveBy(paintOffset + location());
-        theme()->paintCapsLockIndicator(this, paintInfo, pixelSnappedIntRect(contentsRect));
+        RenderTheme::theme().paintCapsLockIndicator(this, paintInfo, pixelSnappedIntRect(contentsRect));
     }
 }
 
@@ -86,18 +93,10 @@ LayoutUnit RenderTextControlSingleLine::computeLogicalHeightLimit() const
     return containerElement() ? contentLogicalHeight() : logicalHeight();
 }
 
-// 'end' must be an ancestor of 'start.'
-static void setNeedsLayoutInRange(RenderObject* start, RenderObject* end)
-{
-    ASSERT(start);
-    ASSERT(start != end);
-    for (RenderObject* renderer = start; renderer != end; renderer = renderer->parent())
-        renderer->setNeedsLayout(MarkOnlyThis);
-}
-
 void RenderTextControlSingleLine::layout()
 {
-    StackStats::LayoutCheckPoint layoutCheckPoint;
+    LayoutRectRecorder recorder(*this);
+    SubtreeLayoutScope layoutScope(this);
 
     // FIXME: We should remove the height-related hacks in layout() and
     // styleDidChange(). We need them because
@@ -111,21 +110,21 @@ void RenderTextControlSingleLine::layout()
     // because of compability.
 
     RenderBox* innerTextRenderer = innerTextElement()->renderBox();
-    RenderBox* innerBlockRenderer = innerBlockElement() ? innerBlockElement()->renderBox() : 0;
+    RenderBox* viewPortRenderer = editingViewPortElement() ? editingViewPortElement()->renderBox() : 0;
 
     // To ensure consistency between layouts, we need to reset any conditionally overriden height.
     if (innerTextRenderer && !innerTextRenderer->style()->logicalHeight().isAuto()) {
         innerTextRenderer->style()->setLogicalHeight(Length(Auto));
-        setNeedsLayoutInRange(innerTextRenderer, this);
+        layoutScope.setNeedsLayout(innerTextRenderer);
     }
-    if (innerBlockRenderer && !innerBlockRenderer->style()->logicalHeight().isAuto()) {
-        innerBlockRenderer->style()->setLogicalHeight(Length(Auto));
-        setNeedsLayoutInRange(innerBlockRenderer, this);
+    if (viewPortRenderer && !viewPortRenderer->style()->logicalHeight().isAuto()) {
+        viewPortRenderer->style()->setLogicalHeight(Length(Auto));
+        layoutScope.setNeedsLayout(viewPortRenderer);
     }
 
-    RenderBlock::layoutBlock(false);
+    RenderBlockFlow::layoutBlock(false);
 
-    HTMLElement* container = containerElement();
+    Element* container = containerElement();
     RenderBox* containerRenderer = container ? container->renderBox() : 0;
 
     // Set the text block height
@@ -133,15 +132,15 @@ void RenderTextControlSingleLine::layout()
     LayoutUnit logicalHeightLimit = computeLogicalHeightLimit();
     if (innerTextRenderer && innerTextRenderer->logicalHeight() > logicalHeightLimit) {
         if (desiredLogicalHeight != innerTextRenderer->logicalHeight())
-            setNeedsLayout(MarkOnlyThis);
+            layoutScope.setNeedsLayout(this);
 
         m_desiredInnerTextLogicalHeight = desiredLogicalHeight;
 
         innerTextRenderer->style()->setLogicalHeight(Length(desiredLogicalHeight, Fixed));
-        innerTextRenderer->setNeedsLayout(MarkOnlyThis);
-        if (innerBlockRenderer) {
-            innerBlockRenderer->style()->setLogicalHeight(Length(desiredLogicalHeight, Fixed));
-            innerBlockRenderer->setNeedsLayout(MarkOnlyThis);
+        layoutScope.setNeedsLayout(innerTextRenderer);
+        if (viewPortRenderer) {
+            viewPortRenderer->style()->setLogicalHeight(Length(desiredLogicalHeight, Fixed));
+            layoutScope.setNeedsLayout(viewPortRenderer);
         }
     }
     // The container might be taller because of decoration elements.
@@ -150,17 +149,17 @@ void RenderTextControlSingleLine::layout()
         LayoutUnit containerLogicalHeight = containerRenderer->logicalHeight();
         if (containerLogicalHeight > logicalHeightLimit) {
             containerRenderer->style()->setLogicalHeight(Length(logicalHeightLimit, Fixed));
-            setNeedsLayout(MarkOnlyThis);
+            layoutScope.setNeedsLayout(this);
         } else if (containerRenderer->logicalHeight() < contentLogicalHeight()) {
             containerRenderer->style()->setLogicalHeight(Length(contentLogicalHeight(), Fixed));
-            setNeedsLayout(MarkOnlyThis);
+            layoutScope.setNeedsLayout(this);
         } else
             containerRenderer->style()->setLogicalHeight(Length(containerLogicalHeight, Fixed));
     }
 
     // If we need another layout pass, we have changed one of children's height so we need to relayout them.
     if (needsLayout())
-        RenderBlock::layoutBlock(true);
+        RenderBlockFlow::layoutBlock(true);
 
     // Center the child block in the block progression direction (vertical centering for horizontal text fields).
     if (!container && innerTextRenderer && innerTextRenderer->height() != contentLogicalHeight()) {
@@ -192,8 +191,8 @@ void RenderTextControlSingleLine::layout()
         LayoutPoint textOffset;
         if (innerTextRenderer)
             textOffset = innerTextRenderer->location();
-        if (innerBlockElement() && innerBlockElement()->renderBox())
-            textOffset += toLayoutSize(innerBlockElement()->renderBox()->location());
+        if (editingViewPortElement() && editingViewPortElement()->renderBox())
+            textOffset += toLayoutSize(editingViewPortElement()->renderBox()->location());
         if (containerRenderer)
             textOffset += toLayoutSize(containerRenderer->location());
         placeholderBox->setLocation(textOffset);
@@ -219,12 +218,12 @@ bool RenderTextControlSingleLine::nodeAtPoint(const HitTestRequest& request, Hit
     //  - we hit a node inside the inner text element,
     //  - we hit the <input> element (e.g. we're over the border or padding), or
     //  - we hit regions not in any decoration buttons.
-    HTMLElement* container = containerElement();
+    Element* container = containerElement();
     if (result.innerNode()->isDescendantOf(innerTextElement()) || result.innerNode() == node() || (container && container == result.innerNode())) {
         LayoutPoint pointInParent = locationInContainer.point();
-        if (container && innerBlockElement()) {
-            if (innerBlockElement()->renderBox())
-                pointInParent -= toLayoutSize(innerBlockElement()->renderBox()->location());
+        if (container && editingViewPortElement()) {
+            if (editingViewPortElement()->renderBox())
+                pointInParent -= toLayoutSize(editingViewPortElement()->renderBox()->location());
             if (container->renderBox())
                 pointInParent -= toLayoutSize(container->renderBox()->location());
         }
@@ -240,19 +239,19 @@ void RenderTextControlSingleLine::styleDidChange(StyleDifference diff, const Ren
 
     // We may have set the width and the height in the old style in layout().
     // Reset them now to avoid getting a spurious layout hint.
-    HTMLElement* innerBlock = innerBlockElement();
-    if (RenderObject* innerBlockRenderer = innerBlock ? innerBlock->renderer() : 0) {
-        innerBlockRenderer->style()->setHeight(Length());
-        innerBlockRenderer->style()->setWidth(Length());
+    Element* viewPort = editingViewPortElement();
+    if (RenderObject* viewPortRenderer = viewPort ? viewPort->renderer() : 0) {
+        viewPortRenderer->style()->setHeight(Length());
+        viewPortRenderer->style()->setWidth(Length());
     }
-    HTMLElement* container = containerElement();
+    Element* container = containerElement();
     if (RenderObject* containerRenderer = container ? container->renderer() : 0) {
         containerRenderer->style()->setHeight(Length());
         containerRenderer->style()->setWidth(Length());
     }
     RenderObject* innerTextRenderer = innerTextElement()->renderer();
     if (innerTextRenderer && diff == StyleDifferenceLayout)
-        innerTextRenderer->setNeedsLayout(MarkContainingBlockChain);
+        innerTextRenderer->setNeedsLayout();
     if (HTMLElement* placeholder = inputElement()->placeholderElement())
         placeholder->setInlineStyleProperty(CSSPropertyTextOverflow, textShouldBeTruncated() ? CSSValueEllipsis : CSSValueClip);
     setHasOverflowClip(false);
@@ -260,7 +259,7 @@ void RenderTextControlSingleLine::styleDidChange(StyleDifference diff, const Ren
 
 void RenderTextControlSingleLine::capsLockStateMayHaveChanged()
 {
-    if (!node() || !document())
+    if (!node())
         return;
 
     // Only draw the caps lock indicator if these things are true:
@@ -270,8 +269,8 @@ void RenderTextControlSingleLine::capsLockStateMayHaveChanged()
     // 4) The caps lock is on
     bool shouldDrawCapsLockIndicator = false;
 
-    if (Frame* frame = document()->frame())
-        shouldDrawCapsLockIndicator = inputElement()->isPasswordField() && frame->selection()->isFocusedAndActive() && document()->focusedElement() == node() && PlatformKeyboardEvent::currentCapsLockState();
+    if (Frame* frame = document().frame())
+        shouldDrawCapsLockIndicator = inputElement()->isPasswordField() && frame->selection().isFocusedAndActive() && document().focusedElement() == node() && PlatformKeyboardEvent::currentCapsLockState();
 
     if (shouldDrawCapsLockIndicator != m_shouldDrawCapsLockIndicator) {
         m_shouldDrawCapsLockIndicator = shouldDrawCapsLockIndicator;
@@ -373,31 +372,14 @@ PassRefPtr<RenderStyle> RenderTextControlSingleLine::createInnerTextStyle(const 
         textBlockStyle->setLineHeight(RenderStyle::initialLineHeight());
 
     textBlockStyle->setDisplay(BLOCK);
+    textBlockStyle->setUnique();
 
     return textBlockStyle.release();
 }
 
-PassRefPtr<RenderStyle> RenderTextControlSingleLine::createInnerBlockStyle(const RenderStyle* startStyle) const
-{
-    RefPtr<RenderStyle> innerBlockStyle = RenderStyle::create();
-    innerBlockStyle->inheritFrom(startStyle);
-
-    innerBlockStyle->setFlexGrow(1);
-    // min-width: 0; is needed for correct shrinking.
-    // FIXME: Remove this line when https://bugs.webkit.org/show_bug.cgi?id=111790 is fixed.
-    innerBlockStyle->setMinWidth(Length(0, Fixed));
-    innerBlockStyle->setDisplay(BLOCK);
-    innerBlockStyle->setDirection(LTR);
-
-    // We don't want the shadow dom to be editable, so we set this block to read-only in case the input itself is editable.
-    innerBlockStyle->setUserModify(READ_ONLY);
-
-    return innerBlockStyle.release();
-}
-
 bool RenderTextControlSingleLine::textShouldBeTruncated() const
 {
-    return document()->focusedElement() != node() && style()->textOverflow() == TextOverflowEllipsis;
+    return document().focusedElement() != node() && style()->textOverflow() == TextOverflowEllipsis;
 }
 
 void RenderTextControlSingleLine::autoscroll(const IntPoint& position)
@@ -405,9 +387,8 @@ void RenderTextControlSingleLine::autoscroll(const IntPoint& position)
     RenderBox* renderer = innerTextElement()->renderBox();
     if (!renderer)
         return;
-    RenderLayer* layer = renderer->layer();
-    if (layer)
-        layer->autoscroll(position);
+
+    renderer->autoscroll(position);
 }
 
 int RenderTextControlSingleLine::scrollWidth() const
@@ -448,25 +429,6 @@ void RenderTextControlSingleLine::setScrollTop(int newTop)
 {
     if (innerTextElement())
         innerTextElement()->setScrollTop(newTop);
-}
-
-bool RenderTextControlSingleLine::scroll(ScrollDirection direction, ScrollGranularity granularity, float multiplier, Node** stopNode)
-{
-    RenderBox* renderer = innerTextElement()->renderBox();
-    if (!renderer)
-        return false;
-    RenderLayer* layer = renderer->layer();
-    if (layer && layer->scroll(direction, granularity, multiplier))
-        return true;
-    return RenderBlock::scroll(direction, granularity, multiplier, stopNode);
-}
-
-bool RenderTextControlSingleLine::logicalScroll(ScrollLogicalDirection direction, ScrollGranularity granularity, float multiplier, Node** stopNode)
-{
-    RenderLayer* layer = innerTextElement()->renderBox()->layer();
-    if (layer && layer->scroll(logicalToPhysical(direction, style()->isHorizontalWritingMode(), style()->isFlippedBlocksWritingMode()), granularity, multiplier))
-        return true;
-    return RenderBlock::logicalScroll(direction, granularity, multiplier, stopNode);
 }
 
 HTMLInputElement* RenderTextControlSingleLine::inputElement() const

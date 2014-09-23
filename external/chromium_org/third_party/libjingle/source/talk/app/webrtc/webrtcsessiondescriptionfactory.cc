@@ -33,10 +33,10 @@
 #include "talk/app/webrtc/mediastreamsignaling.h"
 #include "talk/app/webrtc/webrtcsession.h"
 
+using cricket::MediaSessionOptions;
+
 namespace webrtc {
-
 namespace {
-
 static const char kFailedDueToIdentityFailed[] =
     " failed because DTLS identity request failed";
 
@@ -46,25 +46,24 @@ static const char kWebRTCIdentityName[] = "WebRTC";
 
 static const uint64 kInitSessionVersion = 2;
 
-typedef cricket::MediaSessionOptions::Stream Stream;
-typedef cricket::MediaSessionOptions::Streams Streams;
-
-static bool CompareStream(const Stream& stream1, const Stream& stream2) {
-  return (stream1.id < stream2.id);
+static bool CompareStream(const MediaSessionOptions::Stream& stream1,
+                          const MediaSessionOptions::Stream& stream2) {
+  return stream1.id < stream2.id;
 }
 
-static bool SameId(const Stream& stream1, const Stream& stream2) {
-  return (stream1.id == stream2.id);
+static bool SameId(const MediaSessionOptions::Stream& stream1,
+                   const MediaSessionOptions::Stream& stream2) {
+  return stream1.id == stream2.id;
 }
 
 // Checks if each Stream within the |streams| has unique id.
-static bool ValidStreams(const Streams& streams) {
-  Streams sorted_streams = streams;
+static bool ValidStreams(const MediaSessionOptions::Streams& streams) {
+  MediaSessionOptions::Streams sorted_streams = streams;
   std::sort(sorted_streams.begin(), sorted_streams.end(), CompareStream);
-  Streams::iterator it =
+  MediaSessionOptions::Streams::iterator it =
       std::adjacent_find(sorted_streams.begin(), sorted_streams.end(),
                          SameId);
-  return (it == sorted_streams.end());
+  return it == sorted_streams.end();
 }
 
 enum {
@@ -83,7 +82,6 @@ struct CreateSessionDescriptionMsg : public talk_base::MessageData {
   std::string error;
   talk_base::scoped_ptr<webrtc::SessionDescriptionInterface> description;
 };
-
 }  // namespace
 
 // static
@@ -113,7 +111,7 @@ WebRtcSessionDescriptionFactory::WebRtcSessionDescriptionFactory(
     WebRtcSession* session,
     const std::string& session_id,
     cricket::DataChannelType dct,
-    const MediaConstraintsInterface* constraints)
+    bool dtls_enabled)
     : signaling_thread_(signaling_thread),
       mediastream_signaling_(mediastream_signaling),
       session_desc_factory_(channel_manager, &transport_desc_factory_),
@@ -130,17 +128,12 @@ WebRtcSessionDescriptionFactory::WebRtcSessionDescriptionFactory(
   transport_desc_factory_.set_protocol(cricket::ICEPROTO_HYBRID);
   session_desc_factory_.set_add_legacy_streams(false);
   // By default SRTP-SDES is enabled in WebRtc.
-  set_secure(cricket::SEC_REQUIRED);
+  SetSecure(cricket::SEC_REQUIRED);
 
-  // Enable DTLS-SRTP if the constraint is set.
-  bool dtls_enabled = false;
-  if (!FindConstraint(
-           constraints, MediaConstraintsInterface::kEnableDtlsSrtp,
-           &dtls_enabled, NULL) ||
-      !dtls_enabled) {
+  if (!dtls_enabled) {
     return;
   }
-  // DTLS is enabled.
+
   if (identity_service_.get()) {
     identity_request_observer_ =
       new talk_base::RefCountedObject<WebRtcIdentityRequestObserver>();
@@ -197,7 +190,8 @@ void WebRtcSessionDescriptionFactory::CreateOffer(
     return;
   }
 
-  if (data_channel_type_ == cricket::DCT_SCTP) {
+  if (data_channel_type_ == cricket::DCT_SCTP &&
+      mediastream_signaling_->HasDataChannels()) {
     options.data_channel_type = cricket::DCT_SCTP;
   }
 
@@ -249,6 +243,9 @@ void WebRtcSessionDescriptionFactory::CreateAnswer(
     PostCreateSessionDescriptionFailed(observer, error);
     return;
   }
+  // RTP data channel is handled in MediaSessionOptions::AddStream. SCTP streams
+  // are not signaled in the SDP so does not go through that path and must be
+  // handled here.
   if (data_channel_type_ == cricket::DCT_SCTP) {
     options.data_channel_type = cricket::DCT_SCTP;
   }
@@ -264,17 +261,13 @@ void WebRtcSessionDescriptionFactory::CreateAnswer(
   }
 }
 
-void WebRtcSessionDescriptionFactory::set_secure(
+void WebRtcSessionDescriptionFactory::SetSecure(
     cricket::SecureMediaPolicy secure_policy) {
   session_desc_factory_.set_secure(secure_policy);
 }
 
-cricket::SecureMediaPolicy WebRtcSessionDescriptionFactory::secure() const {
+cricket::SecureMediaPolicy WebRtcSessionDescriptionFactory::Secure() const {
   return session_desc_factory_.secure();
-}
-
-bool WebRtcSessionDescriptionFactory::waiting_for_identity() const {
-  return identity_request_state_ == IDENTITY_WAITING;
 }
 
 void WebRtcSessionDescriptionFactory::OnMessage(talk_base::Message* msg) {
@@ -343,6 +336,13 @@ void WebRtcSessionDescriptionFactory::InternalCreateAnswer(
   // an answer should also contain new ice ufrag and password if an offer has
   // been received with new ufrag and password.
   request.options.transport_options.ice_restart = session_->IceRestartPending();
+  // We should pass current ssl role to the transport description factory, if
+  // there is already an existing ongoing session.
+  talk_base::SSLRole ssl_role;
+  if (session_->GetSslRole(&ssl_role)) {
+    request.options.transport_options.prefer_passive_role =
+        (talk_base::SSL_SERVER == ssl_role);
+  }
 
   cricket::SessionDescription* desc(session_desc_factory_.CreateAnswer(
       static_cast<cricket::BaseSession*>(session_)->remote_description(),
@@ -434,7 +434,6 @@ void WebRtcSessionDescriptionFactory::SetIdentity(
   SignalIdentityReady(identity);
 
   transport_desc_factory_.set_identity(identity);
-  transport_desc_factory_.set_digest_algorithm(talk_base::DIGEST_SHA_256);
   transport_desc_factory_.set_secure(cricket::SEC_ENABLED);
 
   while (!create_session_description_requests_.empty()) {
@@ -447,5 +446,4 @@ void WebRtcSessionDescriptionFactory::SetIdentity(
     create_session_description_requests_.pop();
   }
 }
-
 }  // namespace webrtc

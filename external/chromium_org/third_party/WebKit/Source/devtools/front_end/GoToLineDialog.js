@@ -53,7 +53,7 @@ WebInspector.GoToLineDialog = function(view)
 }
 
 /**
- * @param {WebInspector.Panel} panel
+ * @param {!WebInspector.Panel} panel
  * @param {function():?WebInspector.View} viewGetter
  */
 WebInspector.GoToLineDialog.install = function(panel, viewGetter)
@@ -64,7 +64,7 @@ WebInspector.GoToLineDialog.install = function(panel, viewGetter)
 
 /**
  * @param {function():?WebInspector.View} viewGetter
- * @param {Event=} event
+ * @param {?Event=} event
  * @return {boolean}
  */
 WebInspector.GoToLineDialog._show = function(viewGetter, event)
@@ -83,8 +83,6 @@ WebInspector.GoToLineDialog.createShortcut = function()
 {
     var isMac = WebInspector.isMac();
     var shortcut;
-    if (isMac)
-        return WebInspector.KeyboardShortcut.makeDescriptor("l", WebInspector.KeyboardShortcut.Modifiers.Meta);
     return WebInspector.KeyboardShortcut.makeDescriptor("g", WebInspector.KeyboardShortcut.Modifiers.Ctrl);
 }
 

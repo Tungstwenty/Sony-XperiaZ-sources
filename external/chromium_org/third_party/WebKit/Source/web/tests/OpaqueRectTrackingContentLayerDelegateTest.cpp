@@ -24,19 +24,19 @@
 
 #include "config.h"
 
-#include "core/platform/graphics/chromium/OpaqueRectTrackingContentLayerDelegate.h"
+#include "platform/graphics/OpaqueRectTrackingContentLayerDelegate.h"
 
-#include "core/platform/graphics/Color.h"
-#include "core/platform/graphics/GraphicsContext.h"
-#include "core/platform/graphics/IntRect.h"
+#include "platform/geometry/IntRect.h"
+#include "platform/graphics/Color.h"
+#include "platform/graphics/GraphicsContext.h"
 #include "skia/ext/platform_canvas.h"
 #include "public/platform/WebFloatRect.h"
 #include "public/platform/WebRect.h"
 
 #include <gtest/gtest.h>
 
-using WebKit::WebRect;
-using WebKit::WebFloatRect;
+using blink::WebRect;
+using blink::WebFloatRect;
 using namespace WebCore;
 
 namespace {

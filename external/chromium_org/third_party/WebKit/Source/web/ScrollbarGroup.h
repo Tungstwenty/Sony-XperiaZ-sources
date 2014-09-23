@@ -26,7 +26,7 @@
 #ifndef ScrollbarGroup_h
 #define ScrollbarGroup_h
 
-#include "core/platform/ScrollableArea.h"
+#include "platform/scroll/ScrollableArea.h"
 
 #include "wtf/RefPtr.h"
 
@@ -34,7 +34,7 @@ namespace WebCore {
 class FrameView;
 }
 
-namespace WebKit {
+namespace blink {
 
 class WebPluginScrollbarImpl;
 
@@ -74,6 +74,7 @@ public:
     virtual bool scrollbarsCanBeActive() const OVERRIDE;
     virtual WebCore::IntRect scrollableAreaBoundingBox() const OVERRIDE;
     virtual bool userInputScrollable(WebCore::ScrollbarOrientation) const OVERRIDE;
+    virtual bool shouldPlaceVerticalScrollbarOnLeft() const OVERRIDE;
     virtual int pageStep(WebCore::ScrollbarOrientation) const OVERRIDE;
 
 private:
@@ -84,6 +85,6 @@ private:
     WebPluginScrollbarImpl* m_verticalScrollbar;
 };
 
-} // namespace WebKit
+} // namespace blink
 
 #endif

@@ -1,5 +1,6 @@
 /*
  * Copyright 2007, The Android Open Source Project
+ * Copyright (C) 2014, Sony Mobile Communications AB
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -59,25 +60,23 @@
     #define MAX_SIZE_BEFORE_SUBSAMPLE   (32*1024*1024)
 
     // preserve quality for 24/32bit src
-    static const SkBitmap::Config gPrefConfigTable[6] = {
-        SkBitmap::kIndex8_Config,       // src: index, opaque
-        SkBitmap::kIndex8_Config,       // src: index, alpha
-        SkBitmap::kRGB_565_Config,      // src: 16bit, opaque
-        SkBitmap::kARGB_8888_Config,    // src: 16bit, alpha  (promote to 32bit)
-        SkBitmap::kARGB_8888_Config,    // src: 32bit, opaque
-        SkBitmap::kARGB_8888_Config,    // src: 32bit, alpha
+    static const SkImageDecoder::PrefConfigTable gPrefConfigTable = {
+        SkBitmap::kIndex8_Config,       // fPrefFor_8Index_NoAlpha_src
+        SkBitmap::kIndex8_Config,       // fPrefFor_8Index_YesAlpha_src
+        SkBitmap::kRGB_565_Config,      // fPrefFor_8Gray_src
+        SkBitmap::kARGB_8888_Config,    // fPrefFor_8bpc_NoAlpha_src
+        SkBitmap::kARGB_8888_Config,    // fPrefFor_8bpc_YesAlpha_src
     };
 #else
     #define MAX_SIZE_BEFORE_SUBSAMPLE   (2*1024*1024)
 
     // tries to minimize memory usage (i.e. demote opaque 32bit -> 16bit)
-    static const SkBitmap::Config gPrefConfigTable[6] = {
-        SkBitmap::kIndex8_Config,       // src: index, opaque
-        SkBitmap::kIndex8_Config,       // src: index, alpha
-        SkBitmap::kRGB_565_Config,      // src: 16bit, opaque
-        SkBitmap::kARGB_8888_Config,    // src: 16bit, alpha  (promote to 32bit)
-        SkBitmap::kRGB_565_Config,      // src: 32bit, opaque (demote to 16bit)
-        SkBitmap::kARGB_8888_Config,    // src: 32bit, alpha
+    static const SkImageDecoder::PrefConfigTable gPrefConfigTable = {
+        SkBitmap::kIndex8_Config,       // fPrefFor_8Index_NoAlpha_src
+        SkBitmap::kIndex8_Config,       // fPrefFor_8Index_YesAlpha_src
+        SkBitmap::kRGB_565_Config,      // fPrefFor_8Gray_src
+        SkBitmap::kRGB_565_Config,      // fPrefFor_8bpc_NoAlpha_src  (demote to 16 bit)
+        SkBitmap::kARGB_8888_Config,    // fPrefFor_8bpc_YesAlpha_src
     };
 #endif
 

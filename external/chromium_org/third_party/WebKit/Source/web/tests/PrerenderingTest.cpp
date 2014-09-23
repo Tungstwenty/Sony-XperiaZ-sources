@@ -53,8 +53,8 @@
 #include "public/platform/WebUnitTestSupport.h"
 #include "wtf/OwnPtr.h"
 
-using namespace WebKit;
-using WebKit::URLTestHelpers::toKURL;
+using namespace blink;
+using blink::URLTestHelpers::toKURL;
 
 namespace {
 
@@ -177,49 +177,38 @@ private:
 
 class PrerenderingTest : public testing::Test {
 public:
-    PrerenderingTest() : m_webView(0)
-    {
-    }
-
     ~PrerenderingTest()
     {
         Platform::current()->unitTestSupport()->unregisterAllMockedURLs();
-        if (m_webView)
-            close();
     }
 
     void initialize(const char* baseURL, const char* fileName)
     {
-        ASSERT(!m_webView);
         URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(baseURL), WebString::fromUTF8(fileName));
         const bool RunJavascript = true;
-        m_webView = FrameTestHelpers::createWebView(RunJavascript);
-        m_webView->setPrerendererClient(&m_prerendererClient);
+        m_webViewHelper.initialize(RunJavascript);
+        m_webViewHelper.webView()->setPrerendererClient(&m_prerendererClient);
 
-        FrameTestHelpers::loadFrame(m_webView->mainFrame(), std::string(baseURL) + fileName);
+        FrameTestHelpers::loadFrame(m_webViewHelper.webView()->mainFrame(), std::string(baseURL) + fileName);
         Platform::current()->unitTestSupport()->serveAsynchronousMockedRequests();
     }
 
     void navigateAway()
     {
-        FrameTestHelpers::loadFrame(m_webView->mainFrame(), "about:blank");
+        FrameTestHelpers::loadFrame(m_webViewHelper.webView()->mainFrame(), "about:blank");
     }
 
     void close()
     {
-        ASSERT(m_webView);
-
-        m_webView->mainFrame()->collectGarbage();
-
-        m_webView->close();
-        m_webView = 0;
+        m_webViewHelper.webView()->mainFrame()->collectGarbage();
+        m_webViewHelper.reset();
 
         WebCache::clear();
     }
 
     WebElement console()
     {
-        WebElement console = m_webView->mainFrame()->document().getElementById("console");
+        WebElement console = m_webViewHelper.webView()->mainFrame()->document().getElementById("console");
         ASSERT(console.nodeName() == "UL");
         return console;
     }
@@ -245,7 +234,7 @@ public:
 
     void executeScript(const char* code)
     {
-        m_webView->mainFrame()->executeScript(WebScriptSource(WebString::fromUTF8(code)));
+        m_webViewHelper.webView()->mainFrame()->executeScript(WebScriptSource(WebString::fromUTF8(code)));
     }
 
     TestPrerenderingSupport* prerenderingSupport()
@@ -262,7 +251,7 @@ private:
     TestPrerenderingSupport m_prerenderingSupport;
     TestPrerendererClient m_prerendererClient;
 
-    WebView* m_webView;
+    FrameTestHelpers::WebViewHelper m_webViewHelper;
 };
 
 TEST_F(PrerenderingTest, SinglePrerender)
@@ -322,6 +311,11 @@ TEST_F(PrerenderingTest, AbandonPrerender)
     navigateAway();
 
     EXPECT_EQ(1u, prerenderingSupport()->abandonCount(webPrerender));
+    EXPECT_EQ(2u, prerenderingSupport()->totalCount());
+
+    // Check that the prerender does not emit an extra cancel when garbage-collecting everything.
+    close();
+
     EXPECT_EQ(2u, prerenderingSupport()->totalCount());
 }
 
@@ -399,8 +393,7 @@ TEST_F(PrerenderingTest, TwoPrerendersRemovingFirstThenNavigating)
     navigateAway();
 
     EXPECT_EQ(1u, prerenderingSupport()->abandonCount(secondPrerender));
-
-    // FIXME: After we fix prerenders such that they don't send redundant events, assert that totalCount() == 4u.
+    EXPECT_EQ(4u, prerenderingSupport()->totalCount());
 }
 
 TEST_F(PrerenderingTest, TwoPrerendersAddingThird)

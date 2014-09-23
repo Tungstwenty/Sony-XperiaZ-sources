@@ -22,14 +22,16 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "config.h"
+
 #include "SkImageFilter.h"
-#include "core/platform/graphics/filters/FEBlend.h"
-#include "core/platform/graphics/filters/FEGaussianBlur.h"
-#include "core/platform/graphics/filters/FEMerge.h"
-#include "core/platform/graphics/filters/FilterOperations.h"
-#include "core/platform/graphics/filters/ReferenceFilter.h"
-#include "core/platform/graphics/filters/SkiaImageFilterBuilder.h"
-#include "core/platform/graphics/filters/SourceGraphic.h"
+#include "platform/graphics/filters/FEBlend.h"
+#include "platform/graphics/filters/FEGaussianBlur.h"
+#include "platform/graphics/filters/FEMerge.h"
+#include "platform/graphics/filters/FilterOperations.h"
+#include "platform/graphics/filters/ReferenceFilter.h"
+#include "platform/graphics/filters/SourceGraphic.h"
+#include "platform/graphics/filters/SkiaImageFilterBuilder.h"
 #include <gtest/gtest.h>
 
 using testing::Test;

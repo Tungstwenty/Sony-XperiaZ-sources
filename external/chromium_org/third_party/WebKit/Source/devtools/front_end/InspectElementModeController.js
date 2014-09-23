@@ -56,8 +56,10 @@ WebInspector.InspectElementModeController.prototype = {
     toggleSearch: function()
     {
         var enabled = !this.enabled();
+
         /**
          * @param {?Protocol.Error} error
+         * @this {WebInspector.InspectElementModeController}
          */
         function callback(error)
         {
@@ -68,7 +70,7 @@ WebInspector.InspectElementModeController.prototype = {
     },
 
     /**
-     * @param {KeyboardEvent} event
+     * @param {!KeyboardEvent} event
      * @return {boolean}
      */
     handleShortcut: function(event)
@@ -80,3 +82,6 @@ WebInspector.InspectElementModeController.prototype = {
         return true;
     }
 }
+
+/** @type {!WebInspector.InspectElementModeController} */
+WebInspector.inspectElementModeController;

@@ -25,7 +25,7 @@
 
 #include "CSSValueKeywords.h"
 #include "StylePropertyShorthand.h"
-#include "core/page/RuntimeCSSEnabled.h"
+#include "core/css/RuntimeCSSEnabled.h"
 #include "wtf/BitArray.h"
 #include "wtf/text/StringBuilder.h"
 
@@ -62,8 +62,8 @@ String StylePropertySerializer::asText() const
     for (unsigned n = 0; n < size; ++n) {
         StylePropertySet::PropertyReference property = m_propertySet.propertyAt(n);
         CSSPropertyID propertyID = property.id();
-        // Only enabled properties should be part of the style.
-        ASSERT(RuntimeCSSEnabled::isCSSPropertyEnabled(propertyID));
+        // Only enabled or internal properties should be part of the style.
+        ASSERT(RuntimeCSSEnabled::isCSSPropertyEnabled(propertyID) || isInternalProperty(propertyID));
         CSSPropertyID shorthandPropertyID = CSSPropertyInvalid;
         CSSPropertyID borderFallbackShorthandProperty = CSSPropertyInvalid;
         String value;
@@ -88,7 +88,7 @@ String StylePropertySerializer::asText() const
             continue;
         case CSSPropertyContent:
             if (property.value()->isValueList())
-                value = toCSSValueList(property.value())->customCssText(AlwaysQuoteCSSString);
+                value = toCSSValueList(property.value())->customCSSText(AlwaysQuoteCSSString);
             break;
         case CSSPropertyBorderTopWidth:
         case CSSPropertyBorderRightWidth:
@@ -312,6 +312,8 @@ String StylePropertySerializer::getPropertyValue(CSSPropertyID propertyID) const
 {
     // Shorthand and 4-values properties
     switch (propertyID) {
+    case CSSPropertyAnimation:
+        return getLayeredShorthandValue(animationShorthand());
     case CSSPropertyBorderSpacing:
         return borderSpacingValue(borderSpacingShorthand());
     case CSSPropertyBackgroundPosition:
@@ -366,8 +368,6 @@ String StylePropertySerializer::getPropertyValue(CSSPropertyID propertyID) const
         return getLayeredShorthandValue(transitionShorthand());
     case CSSPropertyListStyle:
         return getShorthandValue(listStyleShorthand());
-    case CSSPropertyWebkitMarquee:
-        return getShorthandValue(webkitMarqueeShorthand());
     case CSSPropertyWebkitMaskPosition:
         return getLayeredShorthandValue(webkitMaskPositionShorthand());
     case CSSPropertyWebkitMaskRepeat:

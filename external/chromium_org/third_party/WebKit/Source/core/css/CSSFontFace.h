@@ -26,11 +26,9 @@
 #ifndef CSSFontFace_h
 #define CSSFontFace_h
 
-#include "core/css/CSSFontFaceRule.h"
 #include "core/css/CSSFontFaceSource.h"
-#include "core/platform/graphics/FontTraitsMask.h"
+#include "core/css/FontFace.h"
 #include "wtf/Forward.h"
-#include "wtf/HashSet.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
@@ -38,33 +36,37 @@
 namespace WebCore {
 
 class CSSSegmentedFontFace;
+class Document;
 class FontDescription;
 class SimpleFontData;
+class StyleRuleFontFace;
 
+// FIXME: Can this be a subclass of FontFace?
 class CSSFontFace : public RefCounted<CSSFontFace> {
 public:
-    static PassRefPtr<CSSFontFace> create(FontTraitsMask traitsMask, PassRefPtr<CSSFontFaceRule> rule, bool isLocalFallback = false) { return adoptRef(new CSSFontFace(traitsMask, rule, isLocalFallback)); }
+    static PassRefPtr<CSSFontFace> create(PassRefPtr<FontFace> fontFace) { return adoptRef(new CSSFontFace(fontFace)); }
+    static PassRefPtr<CSSFontFace> createFromStyleRule(Document*, const StyleRuleFontFace*);
 
-    FontTraitsMask traitsMask() const { return m_traitsMask; }
+    class UnicodeRangeSet;
 
-    struct UnicodeRange;
+    ~CSSFontFace();
 
-    void addRange(UChar32 from, UChar32 to) { m_ranges.append(UnicodeRange(from, to)); }
-    const Vector<UnicodeRange>& ranges() const { return m_ranges; }
+    FontFace* fontFace() const { return m_fontFace.get(); }
 
-    void addedToSegmentedFontFace(CSSSegmentedFontFace*);
-    void removedFromSegmentedFontFace(CSSSegmentedFontFace*);
+    UnicodeRangeSet& ranges() { return m_ranges; }
+
+    void setSegmentedFontFace(CSSSegmentedFontFace*);
+    void clearSegmentedFontFace() { m_segmentedFontFace = 0; }
 
     bool isLoaded() const;
     bool isValid() const;
 
-    bool isLocalFallback() const { return m_isLocalFallback; }
-
     void addSource(PassOwnPtr<CSSFontFaceSource>);
 
+    void beginLoadIfNeeded(CSSFontFaceSource*);
     void fontLoaded(CSSFontFaceSource*);
 
-    PassRefPtr<SimpleFontData> getFontData(const FontDescription&, bool syntheticBold, bool syntheticItalic);
+    PassRefPtr<SimpleFontData> getFontData(const FontDescription&);
 
     struct UnicodeRange {
         UnicodeRange(UChar32 from, UChar32 to)
@@ -75,39 +77,42 @@ public:
 
         UChar32 from() const { return m_from; }
         UChar32 to() const { return m_to; }
+        bool contains(UChar32 c) const { return m_from <= c && c <= m_to; }
 
     private:
         UChar32 m_from;
         UChar32 m_to;
     };
 
-#if ENABLE(SVG_FONTS)
-    bool hasSVGFontFaceSource() const;
-#endif
+    class UnicodeRangeSet {
+    public:
+        void add(UChar32 from, UChar32 to) { m_ranges.append(UnicodeRange(from, to)); }
+        bool intersectsWith(const String&) const;
+        bool isEntireRange() const { return m_ranges.isEmpty(); }
+        size_t size() const { return m_ranges.size(); }
+        const UnicodeRange& rangeAt(size_t i) const { return m_ranges[i]; }
+    private:
+        Vector<UnicodeRange> m_ranges; // If empty, represents the whole code space.
+    };
 
-    enum LoadState { NotLoaded, Loading, Loaded, Error };
-    LoadState loadState() const { return m_loadState; }
+    FontFace::LoadStatus loadStatus() const { return m_fontFace->loadStatus(); }
+    void willUseFontData(const FontDescription&);
 
 private:
-    CSSFontFace(FontTraitsMask traitsMask, PassRefPtr<CSSFontFaceRule> rule, bool isLocalFallback)
-        : m_traitsMask(traitsMask)
+    CSSFontFace(PassRefPtr<FontFace> fontFace)
+        : m_segmentedFontFace(0)
         , m_activeSource(0)
-        , m_isLocalFallback(isLocalFallback)
-        , m_loadState(isLocalFallback ? Loaded : NotLoaded)
-        , m_rule(rule)
+        , m_fontFace(fontFace)
     {
-        UNUSED_PARAM(rule);
+        ASSERT(m_fontFace);
     }
-    void setLoadState(LoadState);
+    void setLoadStatus(FontFace::LoadStatus);
 
-    FontTraitsMask m_traitsMask;
-    Vector<UnicodeRange> m_ranges;
-    HashSet<CSSSegmentedFontFace*> m_segmentedFontFaces;
+    UnicodeRangeSet m_ranges;
+    CSSSegmentedFontFace* m_segmentedFontFace;
     Vector<OwnPtr<CSSFontFaceSource> > m_sources;
     CSSFontFaceSource* m_activeSource;
-    bool m_isLocalFallback;
-    LoadState m_loadState;
-    RefPtr<CSSFontFaceRule> m_rule;
+    RefPtr<FontFace> m_fontFace;
 };
 
 }

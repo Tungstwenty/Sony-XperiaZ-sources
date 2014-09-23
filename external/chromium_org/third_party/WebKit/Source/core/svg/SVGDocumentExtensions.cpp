@@ -28,6 +28,7 @@
 #include "core/svg/SVGElement.h"
 #include "core/svg/SVGSVGElement.h"
 #include "core/svg/animation/SMILTimeContainer.h"
+#include "wtf/TemporaryChange.h"
 #include "wtf/text/AtomicString.h"
 
 namespace WebCore {
@@ -35,6 +36,9 @@ namespace WebCore {
 SVGDocumentExtensions::SVGDocumentExtensions(Document* document)
     : m_document(document)
     , m_resourcesCache(adoptPtr(new SVGResourcesCache))
+#if !ASSERT_DISABLED
+    , m_inRelativeLengthSVGRootsInvalidation(false)
+#endif
 {
 }
 
@@ -65,7 +69,7 @@ void SVGDocumentExtensions::addResource(const AtomicString& id, RenderSVGResourc
 
 void SVGDocumentExtensions::removeResource(const AtomicString& id)
 {
-    if (id.isEmpty() || !m_resources.contains(id))
+    if (id.isEmpty())
         return;
 
     m_resources.remove(id);
@@ -365,6 +369,35 @@ void SVGDocumentExtensions::removeAllElementReferencesForTarget(SVGElement* refe
     ASSERT(it->key == referencedElement);
 
     m_elementDependencies.remove(it);
+}
+
+void SVGDocumentExtensions::addSVGRootWithRelativeLengthDescendents(SVGSVGElement* svgRoot)
+{
+    ASSERT(!m_inRelativeLengthSVGRootsInvalidation);
+    m_relativeLengthSVGRoots.add(svgRoot);
+}
+
+void SVGDocumentExtensions::removeSVGRootWithRelativeLengthDescendents(SVGSVGElement* svgRoot)
+{
+    ASSERT(!m_inRelativeLengthSVGRootsInvalidation);
+    m_relativeLengthSVGRoots.remove(svgRoot);
+}
+
+bool SVGDocumentExtensions::isSVGRootWithRelativeLengthDescendents(SVGSVGElement* svgRoot) const
+{
+    return m_relativeLengthSVGRoots.contains(svgRoot);
+}
+
+void SVGDocumentExtensions::invalidateSVGRootsWithRelativeLengthDescendents(SubtreeLayoutScope* scope)
+{
+    ASSERT(!m_inRelativeLengthSVGRootsInvalidation);
+#if !ASSERT_DISABLED
+    TemporaryChange<bool> inRelativeLengthSVGRootsChange(m_inRelativeLengthSVGRootsInvalidation, true);
+#endif
+
+    HashSet<SVGSVGElement*>::iterator end = m_relativeLengthSVGRoots.end();
+    for (HashSet<SVGSVGElement*>::iterator it = m_relativeLengthSVGRoots.begin(); it != end; ++it)
+        (*it)->invalidateRelativeLengthClients(scope);
 }
 
 #if ENABLE(SVG_FONTS)

@@ -27,8 +27,8 @@
 #define DragController_h
 
 #include "core/page/DragActions.h"
-#include "core/platform/graphics/IntPoint.h"
-#include "weborigin/KURL.h"
+#include "platform/geometry/IntPoint.h"
+#include "platform/weborigin/KURL.h"
 #include "wtf/Forward.h"
 
 namespace WebCore {
@@ -63,7 +63,11 @@ namespace WebCore {
         DragSession dragUpdated(DragData*);
         bool performDrag(DragData*);
 
-        Node* draggableNode(const Frame*, Node*, const IntPoint&, DragState&) const;
+        enum SelectionDragPolicy {
+            ImmediateSelectionDragResolution,
+            DelayedSelectionDragResolution,
+        };
+        Node* draggableNode(const Frame*, Node*, const IntPoint&, SelectionDragPolicy, DragSourceAction&) const;
         void dragEnded();
 
         bool populateDragClipboard(Frame* src, const DragState&, const IntPoint& dragOrigin);
@@ -84,7 +88,7 @@ namespace WebCore {
         bool tryDHTMLDrag(DragData*, DragOperation&);
         DragOperation dragOperation(DragData*);
         void cancelDrag();
-        bool dragIsMove(FrameSelection*, DragData*);
+        bool dragIsMove(FrameSelection&, DragData*);
         bool isCopyKeyDown(DragData*);
 
         void mouseMovedIntoDocument(Document*);

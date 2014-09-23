@@ -37,6 +37,7 @@ class WebKitFinder(object):
         self._sys_path = sys.path
         self._env_path = os.environ['PATH'].split(os.pathsep)
         self._webkit_base = None
+        self._chromium_base = None
         self._depot_tools = None
 
     def webkit_base(self):
@@ -56,8 +57,16 @@ class WebKitFinder(object):
             self._webkit_base = self._filesystem.normpath(module_path[0:tools_index - 1])
         return self._webkit_base
 
+    def chromium_base(self):
+        if not self._chromium_base:
+            self._chromium_base = self._filesystem.dirname(self._filesystem.dirname(self.webkit_base()))
+        return self._chromium_base
+
     def path_from_webkit_base(self, *comps):
         return self._filesystem.join(self.webkit_base(), *comps)
+
+    def path_from_chromium_base(self, *comps):
+        return self._filesystem.join(self.chromium_base(), *comps)
 
     def path_to_script(self, script_name):
         """Returns the relative path to the script from the top of the WebKit tree."""
@@ -89,7 +98,7 @@ class WebKitFinder(object):
     def _check_upward_for_depot_tools(self):
         fs = self._filesystem
         prev_dir = ''
-        current_dir = fs.dirname(self._webkit_base())
+        current_dir = fs.dirname(self._webkit_base)
         while current_dir != prev_dir:
             if fs.exists(fs.join(current_dir, 'depot_tools', 'pylint.py')):
                 return fs.join(current_dir, 'depot_tools')

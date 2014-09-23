@@ -21,11 +21,10 @@
 #include "config.h"
 #include "core/page/PrintContext.h"
 
-#include "core/page/Frame.h"
-#include "core/page/FrameView.h"
-#include "core/platform/graphics/GraphicsContext.h"
+#include "core/frame/Frame.h"
+#include "core/frame/FrameView.h"
 #include "core/rendering/RenderView.h"
-#include "wtf/text/WTFString.h"
+#include "platform/graphics/GraphicsContext.h"
 
 namespace WebCore {
 
@@ -64,7 +63,7 @@ void PrintContext::computePageRects(const FloatRect& printRect, float headerHeig
         return;
 
     if (userScaleFactor <= 0) {
-        LOG_ERROR("userScaleFactor has bad value %.2f", userScaleFactor);
+        WTF_LOG_ERROR("userScaleFactor has bad value %.2f", userScaleFactor);
         return;
     }
 
@@ -78,7 +77,7 @@ void PrintContext::computePageRects(const FloatRect& printRect, float headerHeig
     pageHeight -= headerHeight + footerHeight;
 
     if (pageHeight <= 0) {
-        LOG_ERROR("pageHeight has bad value %.2f", pageHeight);
+        WTF_LOG_ERROR("pageHeight has bad value %.2f", pageHeight);
         return;
     }
 
@@ -239,13 +238,13 @@ int PrintContext::pageNumberForElement(Element* element, const FloatSize& pageSi
 {
     // Make sure the element is not freed during the layout.
     RefPtr<Element> elementRef(element);
-    element->document()->updateLayout();
+    element->document().updateLayout();
 
     RenderBoxModelObject* box = enclosingBoxModelObject(element->renderer());
     if (!box)
         return -1;
 
-    Frame* frame = element->document()->frame();
+    Frame* frame = element->document().frame();
     FloatRect pageRect(FloatPoint(0, 0), pageSizeInPixels);
     PrintContext printContext(frame);
     printContext.begin(pageRect.width(), pageRect.height());
@@ -274,12 +273,12 @@ void PrintContext::collectLinkedDestinations(Node* node)
     const AtomicString& href = toElement(node)->getAttribute(HTMLNames::hrefAttr);
     if (href.isNull())
         return;
-    KURL url = node->document()->completeURL(href);
+    KURL url = node->document().completeURL(href);
     if (!url.isValid())
         return;
-    if (url.hasFragmentIdentifier() && equalIgnoringFragmentIdentifier(url, node->document()->baseURL())) {
+    if (url.hasFragmentIdentifier() && equalIgnoringFragmentIdentifier(url, node->document().baseURL())) {
         String name = url.fragmentIdentifier();
-        Element* element = node->document()->findAnchor(name);
+        Element* element = node->document().findAnchor(name);
         if (element)
             m_linkedDestinations.set(name, element);
     }

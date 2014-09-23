@@ -34,10 +34,10 @@
 #include "WebSettings.h"
 #include "WebViewClient.h"
 #include "WebViewImpl.h"
-#include "core/platform/graphics/GraphicsLayer.h"
-#include "core/rendering/RenderLayerBacking.h"
+#include "core/rendering/CompositedLayerMapping.h"
 #include "core/rendering/RenderLayerCompositor.h"
 #include "core/rendering/RenderView.h"
+#include "platform/graphics/GraphicsLayer.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebLayer.h"
 #include "public/platform/WebLayerPositionConstraint.h"
@@ -45,7 +45,7 @@
 #include "public/platform/WebUnitTestSupport.h"
 
 using namespace WebCore;
-using namespace WebKit;
+using namespace blink;
 
 namespace {
 
@@ -76,7 +76,8 @@ public:
     {
         // We cannot reuse FrameTestHelpers::createWebViewAndLoad here because the compositing
         // settings need to be set before the page is loaded.
-        m_webViewImpl = static_cast<WebViewImpl*>(WebView::create(&m_mockWebViewClient));
+        m_mainFrame = WebFrame::create(&m_mockWebFrameClient);
+        m_webViewImpl = toWebViewImpl(WebView::create(&m_mockWebViewClient));
         m_webViewImpl->settings()->setJavaScriptEnabled(true);
         m_webViewImpl->settings()->setForceCompositingMode(true);
         m_webViewImpl->settings()->setAcceleratedCompositingEnabled(true);
@@ -85,7 +86,7 @@ public:
         m_webViewImpl->settings()->setAcceleratedCompositingForScrollableFramesEnabled(true);
         m_webViewImpl->settings()->setCompositedScrollingForFramesEnabled(true);
         m_webViewImpl->settings()->setFixedPositionCreatesStackingContext(true);
-        m_webViewImpl->initializeMainFrame(&m_mockWebFrameClient);
+        m_webViewImpl->setMainFrame(m_mainFrame);
         m_webViewImpl->resize(IntSize(320, 240));
     }
 
@@ -93,12 +94,19 @@ public:
     {
         Platform::current()->unitTestSupport()->unregisterAllMockedURLs();
         m_webViewImpl->close();
+        m_mainFrame->close();
     }
 
     void navigateTo(const std::string& url)
     {
         FrameTestHelpers::loadFrame(m_webViewImpl->mainFrame(), url);
         Platform::current()->unitTestSupport()->serveAsynchronousMockedRequests();
+    }
+
+    void forceFullCompositingUpdate()
+    {
+        RenderLayerCompositor* compositor = m_webViewImpl->mainFrameImpl()->frame()->contentRenderer()->compositor();
+        compositor->updateCompositingLayers(CompositingUpdateFinishAllDeferredWork);
     }
 
     void registerMockedHttpURLLoad(const std::string& fileName)
@@ -121,11 +129,13 @@ protected:
     MockWebFrameClient m_mockWebFrameClient;
     FakeWebViewClient m_mockWebViewClient;
     WebViewImpl* m_webViewImpl;
+    WebFrame* m_mainFrame;
 };
 
 TEST_F(ScrollingCoordinatorChromiumTest, fastScrollingByDefault)
 {
     navigateTo("about:blank");
+    forceFullCompositingUpdate();
 
     // Make sure the scrolling coordinator is active.
     FrameView* frameView = m_webViewImpl->mainFrameImpl()->frameView();
@@ -150,10 +160,10 @@ static WebLayer* webLayerFromElement(Element* element)
     RenderLayer* layer = toRenderBoxModelObject(renderer)->layer();
     if (!layer)
         return 0;
-    RenderLayerBacking* backing = layer->backing();
-    if (!backing)
+    if (!layer->hasCompositedLayerMapping())
         return 0;
-    GraphicsLayer* graphicsLayer = backing->graphicsLayer();
+    CompositedLayerMappingPtr compositedLayerMapping = layer->compositedLayerMapping();
+    GraphicsLayer* graphicsLayer = compositedLayerMapping->mainGraphicsLayer();
     if (!graphicsLayer)
         return 0;
     return graphicsLayer->platformLayer();
@@ -163,6 +173,7 @@ TEST_F(ScrollingCoordinatorChromiumTest, fastScrollingForFixedPosition)
 {
     registerMockedHttpURLLoad("fixed-position.html");
     navigateTo(m_baseURL + "fixed-position.html");
+    forceFullCompositingUpdate();
 
     // Fixed position should not fall back to main thread scrolling.
     WebLayer* rootScrollLayer = getRootScrollLayer();
@@ -247,6 +258,7 @@ TEST_F(ScrollingCoordinatorChromiumTest, nonFastScrollableRegion)
 {
     registerMockedHttpURLLoad("non-fast-scrollable.html");
     navigateTo(m_baseURL + "non-fast-scrollable.html");
+    forceFullCompositingUpdate();
 
     WebLayer* rootScrollLayer = getRootScrollLayer();
     WebVector<WebRect> nonFastScrollableRegion = rootScrollLayer->nonFastScrollableRegion();
@@ -259,6 +271,7 @@ TEST_F(ScrollingCoordinatorChromiumTest, wheelEventHandler)
 {
     registerMockedHttpURLLoad("wheel-event-handler.html");
     navigateTo(m_baseURL + "wheel-event-handler.html");
+    forceFullCompositingUpdate();
 
     WebLayer* rootScrollLayer = getRootScrollLayer();
     ASSERT_TRUE(rootScrollLayer->haveWheelEventHandlers());
@@ -268,6 +281,7 @@ TEST_F(ScrollingCoordinatorChromiumTest, clippedBodyTest)
 {
     registerMockedHttpURLLoad("clipped-body.html");
     navigateTo(m_baseURL + "clipped-body.html");
+    forceFullCompositingUpdate();
 
     WebLayer* rootScrollLayer = getRootScrollLayer();
     ASSERT_EQ(0u, rootScrollLayer->nonFastScrollableRegion().size());
@@ -277,6 +291,7 @@ TEST_F(ScrollingCoordinatorChromiumTest, overflowScrolling)
 {
     registerMockedHttpURLLoad("overflow-scrolling.html");
     navigateTo(m_baseURL + "overflow-scrolling.html");
+    forceFullCompositingUpdate();
 
     // Verify the properties of the accelerated scrolling element starting from the RenderObject
     // all the way to the WebLayer.
@@ -284,30 +299,87 @@ TEST_F(ScrollingCoordinatorChromiumTest, overflowScrolling)
     ASSERT(scrollableElement);
 
     RenderObject* renderer = scrollableElement->renderer();
-    ASSERT_TRUE(renderer->isBoxModelObject());
+    ASSERT_TRUE(renderer->isBox());
     ASSERT_TRUE(renderer->hasLayer());
 
-    RenderLayer* layer = toRenderBoxModelObject(renderer)->layer();
-    ASSERT_TRUE(layer->usesCompositedScrolling());
-    ASSERT_TRUE(layer->isComposited());
+    RenderBox* box = toRenderBox(renderer);
+    ASSERT_TRUE(box->usesCompositedScrolling());
+    ASSERT_EQ(PaintsIntoOwnBacking, box->layer()->compositingState());
 
-    RenderLayerBacking* layerBacking = layer->backing();
-    ASSERT_TRUE(layerBacking->hasScrollingLayer());
-    ASSERT(layerBacking->scrollingContentsLayer());
+    CompositedLayerMappingPtr compositedLayerMapping = box->layer()->compositedLayerMapping();
+    ASSERT_TRUE(compositedLayerMapping->hasScrollingLayer());
+    ASSERT(compositedLayerMapping->scrollingContentsLayer());
 
-    GraphicsLayer* graphicsLayer = layerBacking->scrollingContentsLayer();
-    ASSERT_EQ(layer, graphicsLayer->scrollableArea());
+    GraphicsLayer* graphicsLayer = compositedLayerMapping->scrollingContentsLayer();
+    ASSERT_EQ(box->layer()->scrollableArea(), graphicsLayer->scrollableArea());
 
-    WebLayer* webScrollLayer = layerBacking->scrollingContentsLayer()->platformLayer();
+    WebLayer* webScrollLayer = compositedLayerMapping->scrollingContentsLayer()->platformLayer();
     ASSERT_TRUE(webScrollLayer->scrollable());
+    ASSERT_TRUE(webScrollLayer->userScrollableHorizontal());
+    ASSERT_TRUE(webScrollLayer->userScrollableVertical());
 
 #if OS(ANDROID)
     // Now verify we've attached impl-side scrollbars onto the scrollbar layers
-    ASSERT_TRUE(layerBacking->layerForHorizontalScrollbar());
-    ASSERT_TRUE(layerBacking->layerForHorizontalScrollbar()->hasContentsLayer());
-    ASSERT_TRUE(layerBacking->layerForVerticalScrollbar());
-    ASSERT_TRUE(layerBacking->layerForVerticalScrollbar()->hasContentsLayer());
+    ASSERT_TRUE(compositedLayerMapping->layerForHorizontalScrollbar());
+    ASSERT_TRUE(compositedLayerMapping->layerForHorizontalScrollbar()->hasContentsLayer());
+    ASSERT_TRUE(compositedLayerMapping->layerForVerticalScrollbar());
+    ASSERT_TRUE(compositedLayerMapping->layerForVerticalScrollbar()->hasContentsLayer());
 #endif
+}
+
+TEST_F(ScrollingCoordinatorChromiumTest, overflowHidden)
+{
+    registerMockedHttpURLLoad("overflow-hidden.html");
+    navigateTo(m_baseURL + "overflow-hidden.html");
+    forceFullCompositingUpdate();
+
+    // Verify the properties of the accelerated scrolling element starting from the RenderObject
+    // all the way to the WebLayer.
+    Element* overflowElement = m_webViewImpl->mainFrameImpl()->frame()->document()->getElementById("unscrollable-y");
+    ASSERT(overflowElement);
+
+    RenderObject* renderer = overflowElement->renderer();
+    ASSERT_TRUE(renderer->isBox());
+    ASSERT_TRUE(renderer->hasLayer());
+
+    RenderBox* box = toRenderBox(renderer);
+    ASSERT_TRUE(box->usesCompositedScrolling());
+    ASSERT_EQ(PaintsIntoOwnBacking, box->layer()->compositingState());
+
+    CompositedLayerMappingPtr compositedLayerMapping = box->layer()->compositedLayerMapping();
+    ASSERT_TRUE(compositedLayerMapping->hasScrollingLayer());
+    ASSERT(compositedLayerMapping->scrollingContentsLayer());
+
+    GraphicsLayer* graphicsLayer = compositedLayerMapping->scrollingContentsLayer();
+    ASSERT_EQ(box->layer()->scrollableArea(), graphicsLayer->scrollableArea());
+
+    WebLayer* webScrollLayer = compositedLayerMapping->scrollingContentsLayer()->platformLayer();
+    ASSERT_TRUE(webScrollLayer->scrollable());
+    ASSERT_TRUE(webScrollLayer->userScrollableHorizontal());
+    ASSERT_FALSE(webScrollLayer->userScrollableVertical());
+
+    overflowElement = m_webViewImpl->mainFrameImpl()->frame()->document()->getElementById("unscrollable-x");
+    ASSERT(overflowElement);
+
+    renderer = overflowElement->renderer();
+    ASSERT_TRUE(renderer->isBox());
+    ASSERT_TRUE(renderer->hasLayer());
+
+    box = toRenderBox(renderer);
+    ASSERT_TRUE(box->scrollableArea()->usesCompositedScrolling());
+    ASSERT_EQ(PaintsIntoOwnBacking, box->layer()->compositingState());
+
+    compositedLayerMapping = box->layer()->compositedLayerMapping();
+    ASSERT_TRUE(compositedLayerMapping->hasScrollingLayer());
+    ASSERT(compositedLayerMapping->scrollingContentsLayer());
+
+    graphicsLayer = compositedLayerMapping->scrollingContentsLayer();
+    ASSERT_EQ(box->layer()->scrollableArea(), graphicsLayer->scrollableArea());
+
+    webScrollLayer = compositedLayerMapping->scrollingContentsLayer()->platformLayer();
+    ASSERT_TRUE(webScrollLayer->scrollable());
+    ASSERT_FALSE(webScrollLayer->userScrollableHorizontal());
+    ASSERT_TRUE(webScrollLayer->userScrollableVertical());
 }
 
 TEST_F(ScrollingCoordinatorChromiumTest, iframeScrolling)
@@ -315,6 +387,7 @@ TEST_F(ScrollingCoordinatorChromiumTest, iframeScrolling)
     registerMockedHttpURLLoad("iframe-scrolling.html");
     registerMockedHttpURLLoad("iframe-scrolling-inner.html");
     navigateTo(m_baseURL + "iframe-scrolling.html");
+    forceFullCompositingUpdate();
 
     // Verify the properties of the accelerated scrolling element starting from the RenderObject
     // all the way to the WebLayer.
@@ -358,6 +431,7 @@ TEST_F(ScrollingCoordinatorChromiumTest, rtlIframe)
     registerMockedHttpURLLoad("rtl-iframe.html");
     registerMockedHttpURLLoad("rtl-iframe-inner.html");
     navigateTo(m_baseURL + "rtl-iframe.html");
+    forceFullCompositingUpdate();
 
     // Verify the properties of the accelerated scrolling element starting from the RenderObject
     // all the way to the WebLayer.
@@ -373,7 +447,7 @@ TEST_F(ScrollingCoordinatorChromiumTest, rtlIframe)
     ASSERT_TRUE(renderWidget->widget());
     ASSERT_TRUE(renderWidget->widget()->isFrameView());
 
-    FrameView* innerFrameView = static_cast<FrameView*>(renderWidget->widget());
+    FrameView* innerFrameView = toFrameView(renderWidget->widget());
     RenderView* innerRenderView = innerFrameView->renderView();
     ASSERT_TRUE(innerRenderView);
 
@@ -396,6 +470,7 @@ TEST_F(ScrollingCoordinatorChromiumTest, setupScrollbarLayerShouldNotCrash)
 {
     registerMockedHttpURLLoad("setup_scrollbar_layer_crash.html");
     navigateTo(m_baseURL + "setup_scrollbar_layer_crash.html");
+    forceFullCompositingUpdate();
     // This test document setup an iframe with scrollbars, then switch to
     // an empty document by javascript.
 }

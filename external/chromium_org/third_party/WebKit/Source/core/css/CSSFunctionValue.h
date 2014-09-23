@@ -45,9 +45,11 @@ public:
         return adoptRef(new CSSFunctionValue(name, args));
     }
 
-    String customCssText() const;
+    String customCSSText() const;
 
     bool equals(const CSSFunctionValue&) const;
+
+    CSSValueList* arguments() const { return m_args.get(); }
 
 private:
     explicit CSSFunctionValue(CSSParserFunction*);
@@ -57,6 +59,9 @@ private:
     RefPtr<CSSValueList> m_args;
 };
 
-}
+DEFINE_CSS_VALUE_TYPE_CASTS(CSSFunctionValue, isFunctionValue());
+
+} // namespace WebCore
+
 #endif
 

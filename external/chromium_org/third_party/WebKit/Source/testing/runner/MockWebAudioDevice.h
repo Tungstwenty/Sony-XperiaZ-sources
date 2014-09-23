@@ -33,10 +33,11 @@
 
 #include "TestCommon.h"
 #include "public/platform/WebAudioDevice.h"
+#include "public/platform/WebNonCopyable.h"
 
 namespace WebTestRunner {
 
-class MockWebAudioDevice : public WebKit::WebAudioDevice {
+class MockWebAudioDevice : public blink::WebAudioDevice, public blink::WebNonCopyable {
 public:
     explicit MockWebAudioDevice(double sampleRate);
     virtual ~MockWebAudioDevice();

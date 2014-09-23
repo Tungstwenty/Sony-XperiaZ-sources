@@ -23,10 +23,11 @@
 #ifndef XSLImportRule_h
 #define XSLImportRule_h
 
-#include "core/loader/cache/ResourcePtr.h"
-#include "core/loader/cache/StyleSheetResourceClient.h"
+#include "RuntimeEnabledFeatures.h"
+#include "core/fetch/ResourcePtr.h"
+#include "core/fetch/StyleSheetResourceClient.h"
 #include "core/xml/XSLStyleSheet.h"
-#include <wtf/PassOwnPtr.h>
+#include "wtf/PassOwnPtr.h"
 
 namespace WebCore {
 
@@ -37,6 +38,7 @@ class XSLImportRule : private StyleSheetResourceClient {
 public:
     static PassOwnPtr<XSLImportRule> create(XSLStyleSheet* parentSheet, const String& href)
     {
+        ASSERT(RuntimeEnabledFeatures::xsltEnabled());
         return adoptPtr(new XSLImportRule(parentSheet, href));
     }
 

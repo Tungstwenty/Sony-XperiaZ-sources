@@ -75,12 +75,14 @@ SocketAddress AsyncUDPSocket::GetRemoteAddress() const {
   return socket_->GetRemoteAddress();
 }
 
-int AsyncUDPSocket::Send(const void *pv, size_t cb) {
+// TODO(mallinath) - Add support of setting DSCP code on AsyncSocket.
+int AsyncUDPSocket::Send(const void *pv, size_t cb, DiffServCodePoint dscp) {
   return socket_->Send(pv, cb);
 }
 
-int AsyncUDPSocket::SendTo(
-    const void *pv, size_t cb, const SocketAddress& addr) {
+// TODO(mallinath) - Add support of setting DSCP code on AsyncSocket.
+int AsyncUDPSocket::SendTo(const void *pv, size_t cb,
+                           const SocketAddress& addr, DiffServCodePoint dscp) {
   return socket_->SendTo(pv, cb, addr);
 }
 
@@ -126,7 +128,8 @@ void AsyncUDPSocket::OnReadEvent(AsyncSocket* socket) {
 
   // TODO: Make sure that we got all of the packet.
   // If we did not, then we should resize our buffer to be large enough.
-  SignalReadPacket(this, buf_, (size_t)len, remote_addr);
+  SignalReadPacket(this, buf_, static_cast<size_t>(len), remote_addr,
+                   CreatePacketTime(0));
 }
 
 void AsyncUDPSocket::OnWriteEvent(AsyncSocket* socket) {

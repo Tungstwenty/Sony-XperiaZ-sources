@@ -29,15 +29,15 @@
 #include "WebNonCopyable.h"
 #include "WebPrivateOwnPtr.h"
 
-#if WEBKIT_IMPLEMENTATION
-#include <wtf/Forward.h>
+#if BLINK_IMPLEMENTATION
+#include "wtf/Forward.h"
 #endif
 
 namespace WebCore {
 class CCActiveAnimation;
 }
 
-namespace WebKit {
+namespace blink {
 
 class WebAnimationCurve;
 
@@ -46,7 +46,8 @@ class WebAnimation {
 public:
     enum TargetProperty {
         TargetPropertyTransform = 0,
-        TargetPropertyOpacity
+        TargetPropertyOpacity,
+        TargetPropertyFilter
     };
 
     virtual ~WebAnimation() { }
@@ -73,6 +74,6 @@ public:
     virtual void setAlternatesDirection(bool) = 0;
 };
 
-} // namespace WebKit
+} // namespace blink
 
 #endif // WebAnimation_h

@@ -33,7 +33,7 @@ var FORWARD = 'forward';
 var BACKWARD = 'backward';
 var TEST_URL_BASE_PATH_FOR_BROWSING = 'http://src.chromium.org/viewvc/blink/trunk/LayoutTests/';
 var TEST_URL_BASE_PATH_FOR_XHR = 'http://src.chromium.org/blink/trunk/LayoutTests/';
-var TEST_RESULTS_BASE_PATH = 'http://build.chromium.org/f/chromium/layout_test_results/';
+var TEST_RESULTS_BASE_PATH = 'https://storage.googleapis.com/chromium-layout-test-archives/';
 var GPU_RESULTS_BASE_PATH = 'http://chromium-browser-gpu-tests.commondatastorage.googleapis.com/runs/'
 
 var RELEASE_TIMEOUT = 6;
@@ -226,7 +226,7 @@ function createResultsObjectForTest(test, builder)
         builder: builder,
         // HTML for display of the results in the flakiness column
         html: '',
-        flips: 0,
+        flipCount: 0,
         slowestTime: 0,
         isFlaky: false,
         bugs: [],
@@ -527,7 +527,7 @@ function showPopupForBuild(e, builder, index, opt_testName)
     var chromeRevision = g_resultsByBuilder[builder].chromeRevision[index];
     if (chromeRevision && g_history.isLayoutTestResults()) {
         html += '<li><a href="' + TEST_RESULTS_BASE_PATH + currentBuilders()[builder] +
-            '/' + chromeRevision + '/layout-test-results.zip">layout-test-results.zip</a></li>';
+            '/' + buildNumber + '/layout-test-results.zip">layout-test-results.zip</a></li>';
     }
 
     if (!g_history.isLayoutTestResults() && opt_testName && isFailure(builder, opt_testName, index))
@@ -771,7 +771,7 @@ function sortTests(tests, column, order)
     var resultsProperty, sortFunctionGetter;
     if (column == 'flakiness') {
         sortFunctionGetter = numericSort;
-        resultsProperty = 'flips';
+        resultsProperty = 'flipCount';
     } else if (column == 'slowest') {
         sortFunctionGetter = numericSort;
         resultsProperty = 'slowestTime';

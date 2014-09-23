@@ -21,13 +21,13 @@
 #ifndef RenderProgress_h
 #define RenderProgress_h
 
-#include "core/rendering/RenderBlock.h"
+#include "core/rendering/RenderBlockFlow.h"
 
 namespace WebCore {
 
 class HTMLProgressElement;
 
-class RenderProgress FINAL : public RenderBlock {
+class RenderProgress FINAL : public RenderBlockFlow {
 public:
     explicit RenderProgress(HTMLElement*);
     virtual ~RenderProgress();
@@ -44,8 +44,7 @@ public:
 private:
     virtual const char* renderName() const { return "RenderProgress"; }
     virtual bool isProgress() const { return true; }
-    virtual bool requiresForcedStyleRecalcPropagation() const { return true; }
-    virtual bool canBeReplacedWithInlineRunIn() const OVERRIDE;
+    virtual bool supportsPartialLayout() const OVERRIDE { return false; }
 
     void animationTimerFired(Timer<RenderProgress>*);
     void updateAnimationState();
@@ -58,14 +57,7 @@ private:
     Timer<RenderProgress> m_animationTimer;
 };
 
-inline RenderProgress* toRenderProgress(RenderObject* object)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!object || object->isProgress());
-    return static_cast<RenderProgress*>(object);
-}
-
-// This will catch anyone doing an unnecessary cast.
-void toRenderProgress(const RenderProgress*);
+DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderProgress, isProgress());
 
 } // namespace WebCore
 

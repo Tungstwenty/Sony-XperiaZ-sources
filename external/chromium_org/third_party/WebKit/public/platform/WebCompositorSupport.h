@@ -29,9 +29,10 @@
 #include "WebAnimation.h"
 #include "WebCommon.h"
 #include "WebLayerTreeView.h"
+#include "WebScrollbar.h"
 #include "WebScrollbarThemePainter.h"
 
-namespace WebKit {
+namespace blink {
 
 class WebAnimationCurve;
 class WebCompositorOutputSurface;
@@ -39,12 +40,13 @@ class WebContentLayer;
 class WebContentLayerClient;
 class WebExternalTextureLayer;
 class WebExternalTextureLayerClient;
+class WebFilterAnimationCurve;
 class WebFilterOperations;
 class WebFloatAnimationCurve;
 class WebGraphicsContext3D;
 class WebImageLayer;
+class WebNinePatchLayer;
 class WebLayer;
-class WebScrollbar;
 class WebScrollbarLayer;
 class WebScrollbarThemeGeometry;
 class WebSolidColorLayer;
@@ -55,7 +57,7 @@ class WebTransformOperations;
 class WebCompositorSupport {
 public:
     // Creates an output surface for the compositor backed by a 3d context.
-    virtual WebCompositorOutputSurface* createOutputSurfaceFor3D(WebKit::WebGraphicsContext3D*) { return 0; }
+    virtual WebCompositorOutputSurface* createOutputSurfaceFor3D(blink::WebGraphicsContext3D*) { return 0; }
 
     // Creates an output surface for the compositor backed by a software device.
     virtual WebCompositorOutputSurface* createOutputSurfaceForSoftware() { return 0; }
@@ -70,14 +72,20 @@ public:
 
     virtual WebImageLayer* createImageLayer() { return 0; }
 
+    virtual WebNinePatchLayer* createNinePatchLayer() { return 0; }
+
     virtual WebSolidColorLayer* createSolidColorLayer() { return 0; }
 
+    // The ownership of the WebScrollbarThemeGeometry pointer is passed to Chromium.
     virtual WebScrollbarLayer* createScrollbarLayer(WebScrollbar*, WebScrollbarThemePainter, WebScrollbarThemeGeometry*) { return 0; }
 
+    virtual WebScrollbarLayer* createSolidColorScrollbarLayer(WebScrollbar::Orientation, int thumbThickness, bool isLeftSideVerticalScrollbar) { return 0; }
 
     // Animation ----------------------------------------------------
 
     virtual WebAnimation* createAnimation(const WebAnimationCurve&, WebAnimation::TargetProperty, int animationId = 0) { return 0; }
+
+    virtual WebFilterAnimationCurve* createFilterAnimationCurve() { return 0; }
 
     virtual WebFloatAnimationCurve* createFloatAnimationCurve() { return 0; }
 

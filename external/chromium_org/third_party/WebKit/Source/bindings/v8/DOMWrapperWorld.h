@@ -33,7 +33,7 @@
 
 #include "bindings/v8/V8DOMActivityLogger.h"
 #include "bindings/v8/V8PerContextData.h"
-#include "weborigin/SecurityOrigin.h"
+#include "platform/weborigin/SecurityOrigin.h"
 #include <v8.h>
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
@@ -43,18 +43,24 @@
 namespace WebCore {
 
 class DOMDataStore;
-class ScriptExecutionContext;
+class ScriptController;
+class ExecutionContext;
+
+enum WorldIdConstants {
+    MainWorldId = 0,
+    EmbedderWorldIdLimit = (1 << 29),
+    ScriptPreprocessorIsolatedWorldId
+};
 
 // This class represent a collection of DOM wrappers for a specific world.
 class DOMWrapperWorld : public RefCounted<DOMWrapperWorld> {
 public:
-    static const int mainWorldId = 0;
     static const int mainWorldExtensionGroup = 0;
     static PassRefPtr<DOMWrapperWorld> ensureIsolatedWorld(int worldId, int extensionGroup);
     ~DOMWrapperWorld();
 
     static bool isolatedWorldsExist() { return isolatedWorldCount; }
-    static bool isIsolatedWorldId(int worldId) { return worldId > mainWorldId; }
+    static bool isIsolatedWorldId(int worldId) { return worldId > MainWorldId; }
     static void getAllWorlds(Vector<RefPtr<DOMWrapperWorld> >& worlds);
 
     void setIsolatedWorldField(v8::Handle<v8::Context>);
@@ -62,7 +68,7 @@ public:
     static DOMWrapperWorld* isolatedWorld(v8::Handle<v8::Context> context)
     {
         ASSERT(contextHasCorrectPrototype(context));
-        return static_cast<DOMWrapperWorld*>(context->GetAlignedPointerFromEmbedderData(v8ContextIsolatedWorld));
+        return V8PerContextDataHolder::from(context)->isolatedWorld();
     }
 
     // Will return null if there is no DOMWrapperWorld for the current v8::Context
@@ -92,21 +98,22 @@ public:
     static void setActivityLogger(int worldId, PassOwnPtr<V8DOMActivityLogger>);
     static V8DOMActivityLogger* activityLogger(int worldId);
 
-    bool isMainWorld() const { return m_worldId == mainWorldId; }
+    bool isMainWorld() const { return m_worldId == MainWorldId; }
     bool isIsolatedWorld() const { return isIsolatedWorldId(m_worldId); }
 
     int worldId() const { return m_worldId; }
     int extensionGroup() const { return m_extensionGroup; }
-    DOMDataStore* isolatedWorldDOMDataStore() const
+    DOMDataStore& isolatedWorldDOMDataStore() const
     {
         ASSERT(isIsolatedWorld());
-        return m_domDataStore.get();
+        return *m_domDataStore;
     }
+    v8::Handle<v8::Context> context(ScriptController&);
 
     static void setInitializingWindow(bool);
 
 private:
-    static int isolatedWorldCount;
+    static unsigned isolatedWorldCount;
     static PassRefPtr<DOMWrapperWorld> createMainWorld();
     static bool contextHasCorrectPrototype(v8::Handle<v8::Context>);
 

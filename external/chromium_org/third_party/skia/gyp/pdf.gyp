@@ -15,10 +15,13 @@
       'include_dirs': [
         '../include/pdf',
         '../src/core', # needed to get SkGlyphCache.h and SkTextFormatParams.h
+        '../src/pdf',
         '../src/utils', # needed to get SkBitSet.h
       ],
       'sources': [
         'pdf.gypi', # Makes the gypi appear in IDEs (but does not modify the build).
+
+        '../src/doc/SkDocument_PDF.cpp', # Chromium does use this file
       ],
       # This section makes all targets that depend on this target
       # #define SK_SUPPORT_PDF and have access to the pdf header files.
@@ -33,9 +36,3 @@
     },
   ],
 }
-
-# Local Variables:
-# tab-width:2
-# indent-tabs-mode:nil
-# End:
-# vim: set expandtab tabstop=2 shiftwidth=2:

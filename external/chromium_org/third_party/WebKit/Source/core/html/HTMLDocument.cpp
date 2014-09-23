@@ -55,12 +55,14 @@
 
 #include "HTMLNames.h"
 #include "bindings/v8/ScriptController.h"
+#include "core/frame/DOMWindow.h"
+#include "core/frame/Frame.h"
+#include "core/frame/FrameView.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/page/FocusController.h"
-#include "core/page/Frame.h"
 #include "core/page/FrameTree.h"
-#include "core/page/FrameView.h"
 #include "core/page/Page.h"
+#include "wtf/text/StringBuilder.h"
 
 namespace WebCore {
 
@@ -77,29 +79,15 @@ HTMLDocument::~HTMLDocument()
 {
 }
 
-int HTMLDocument::width()
-{
-    updateLayoutIgnorePendingStylesheets();
-    FrameView* frameView = view();
-    return frameView ? frameView->contentsWidth() : 0;
-}
-
-int HTMLDocument::height()
-{
-    updateLayoutIgnorePendingStylesheets();
-    FrameView* frameView = view();
-    return frameView ? frameView->contentsHeight() : 0;
-}
-
-String HTMLDocument::dir()
+const AtomicString& HTMLDocument::dir()
 {
     HTMLElement* b = body();
     if (!b)
-        return String();
+        return nullAtom;
     return b->getAttribute(dirAttr);
 }
 
-void HTMLDocument::setDir(const String& value)
+void HTMLDocument::setDir(const AtomicString& value)
 {
     HTMLElement* b = body();
     if (b)
@@ -125,7 +113,7 @@ void HTMLDocument::setDesignMode(const String& value)
 
 Element* HTMLDocument::activeElement()
 {
-    if (Element* element = treeScope()->adjustedFocusedElement())
+    if (Element* element = treeScope().adjustedFocusedElement())
         return element;
     return body();
 }
@@ -138,118 +126,112 @@ bool HTMLDocument::hasFocus()
     if (!page->focusController().isActive() || !page->focusController().isFocused())
         return false;
     if (Frame* focusedFrame = page->focusController().focusedFrame()) {
-        if (focusedFrame->tree()->isDescendantOf(frame()))
+        if (focusedFrame->tree().isDescendantOf(frame()))
             return true;
     }
     return false;
 }
 
-inline HTMLBodyElement* HTMLDocument::bodyAsHTMLBodyElement() const
+HTMLBodyElement* HTMLDocument::htmlBodyElement() const
 {
-    HTMLElement* element = body();
-    return (element && element->hasTagName(bodyTag)) ? toHTMLBodyElement(element) : 0;
+    HTMLElement* body = this->body();
+    return (body && body->hasTagName(bodyTag)) ? toHTMLBodyElement(body) : 0;
 }
 
-String HTMLDocument::bgColor()
+const AtomicString& HTMLDocument::bodyAttributeValue(const QualifiedName& name) const
 {
-    if (HTMLBodyElement* bodyElement = bodyAsHTMLBodyElement())
-        return bodyElement->bgColor();
-    return String();
+    if (HTMLBodyElement* body = htmlBodyElement())
+        return body->fastGetAttribute(name);
+    return nullAtom;
 }
 
-void HTMLDocument::setBgColor(const String& value)
+void HTMLDocument::setBodyAttribute(const QualifiedName& name, const AtomicString& value)
 {
-    if (HTMLBodyElement* bodyElement = bodyAsHTMLBodyElement())
-        bodyElement->setBgColor(value);
-}
-
-String HTMLDocument::fgColor()
-{
-    if (HTMLBodyElement* bodyElement = bodyAsHTMLBodyElement())
-        return bodyElement->text();
-    return String();
-}
-
-void HTMLDocument::setFgColor(const String& value)
-{
-    if (HTMLBodyElement* bodyElement = bodyAsHTMLBodyElement())
-        bodyElement->setText(value);
-}
-
-String HTMLDocument::alinkColor()
-{
-    if (HTMLBodyElement* bodyElement = bodyAsHTMLBodyElement())
-        return bodyElement->aLink();
-    return String();
-}
-
-void HTMLDocument::setAlinkColor(const String& value)
-{
-    if (HTMLBodyElement* bodyElement = bodyAsHTMLBodyElement()) {
-        // This check is a bit silly, but some benchmarks like to set the
-        // document's link colors over and over to the same value and we
-        // don't want to incur a style update each time.
-        if (bodyElement->aLink() != value)
-            bodyElement->setALink(value);
+    if (HTMLBodyElement* body = htmlBodyElement()) {
+        // FIXME: This check is apparently for benchmarks that set the same value repeatedly.
+        // It's not clear what benchmarks though, it's also not clear why we don't avoid
+        // causing a style recalc when setting the same value to a presentational attribute
+        // in the common case.
+        if (body->fastGetAttribute(name) != value)
+            body->setAttribute(name, value);
     }
 }
 
-String HTMLDocument::linkColor()
+const AtomicString& HTMLDocument::bgColor() const
 {
-    if (HTMLBodyElement* bodyElement = bodyAsHTMLBodyElement())
-        return bodyElement->link();
-    return String();
+    return bodyAttributeValue(bgcolorAttr);
 }
 
-void HTMLDocument::setLinkColor(const String& value)
+void HTMLDocument::setBgColor(const AtomicString& value)
 {
-    if (HTMLBodyElement* bodyElement = bodyAsHTMLBodyElement()) {
-        // This check is a bit silly, but some benchmarks like to set the
-        // document's link colors over and over to the same value and we
-        // don't want to incur a style update each time.
-        if (bodyElement->link() != value)
-            bodyElement->setLink(value);
-    }
+    setBodyAttribute(bgcolorAttr, value);
 }
 
-String HTMLDocument::vlinkColor()
+const AtomicString& HTMLDocument::fgColor() const
 {
-    if (HTMLBodyElement* bodyElement = bodyAsHTMLBodyElement())
-        return bodyElement->vLink();
-    return String();
+    return bodyAttributeValue(textAttr);
 }
 
-void HTMLDocument::setVlinkColor(const String& value)
+void HTMLDocument::setFgColor(const AtomicString& value)
 {
-    if (HTMLBodyElement* bodyElement = bodyAsHTMLBodyElement()) {
-        // This check is a bit silly, but some benchmarks like to set the
-        // document's link colors over and over to the same value and we
-        // don't want to incur a style update each time.
-        if (bodyElement->vLink() != value)
-            bodyElement->setVLink(value);
-    }
+    setBodyAttribute(textAttr, value);
+}
+
+const AtomicString& HTMLDocument::alinkColor() const
+{
+    return bodyAttributeValue(alinkAttr);
+}
+
+void HTMLDocument::setAlinkColor(const AtomicString& value)
+{
+    setBodyAttribute(alinkAttr, value);
+}
+
+const AtomicString& HTMLDocument::linkColor() const
+{
+    return bodyAttributeValue(linkAttr);
+}
+
+void HTMLDocument::setLinkColor(const AtomicString& value)
+{
+    setBodyAttribute(linkAttr, value);
+}
+
+const AtomicString& HTMLDocument::vlinkColor() const
+{
+    return bodyAttributeValue(vlinkAttr);
+}
+
+void HTMLDocument::setVlinkColor(const AtomicString& value)
+{
+    setBodyAttribute(vlinkAttr, value);
+}
+
+PassRefPtr<Document> HTMLDocument::cloneDocumentWithoutChildren()
+{
+    return create(DocumentInit(url()).withRegistrationContext(registrationContext()));
 }
 
 // --------------------------------------------------------------------------
 // not part of the DOM
 // --------------------------------------------------------------------------
 
-void HTMLDocument::addItemToMap(HashCountedSet<StringImpl*>& map, const AtomicString& name)
+void HTMLDocument::addItemToMap(HashCountedSet<AtomicString>& map, const AtomicString& name)
 {
     if (name.isEmpty())
         return;
-    map.add(name.impl());
+    map.add(name);
     if (Frame* f = frame())
-        f->script()->namedItemAdded(this, name);
+        f->script().namedItemAdded(this, name);
 }
 
-void HTMLDocument::removeItemFromMap(HashCountedSet<StringImpl*>& map, const AtomicString& name)
+void HTMLDocument::removeItemFromMap(HashCountedSet<AtomicString>& map, const AtomicString& name)
 {
     if (name.isEmpty())
         return;
-    map.remove(name.impl());
+    map.remove(name);
     if (Frame* f = frame())
-        f->script()->namedItemRemoved(this, name);
+        f->script().namedItemRemoved(this, name);
 }
 
 void HTMLDocument::addNamedItem(const AtomicString& name)
@@ -344,6 +326,24 @@ void HTMLDocument::clear()
     // FIXME: This does nothing, and that seems unlikely to be correct.
     // We've long had a comment saying that IE doesn't support this.
     // But I do see it in the documentation for Mozilla.
+}
+
+void HTMLDocument::write(DOMWindow* activeWindow, const Vector<String>& text)
+{
+    ASSERT(activeWindow);
+    StringBuilder builder;
+    for (size_t i = 0; i < text.size(); ++i)
+        builder.append(text[i]);
+    write(builder.toString(), activeWindow->document());
+}
+
+void HTMLDocument::writeln(DOMWindow* activeWindow, const Vector<String>& text)
+{
+    ASSERT(activeWindow);
+    StringBuilder builder;
+    for (size_t i = 0; i < text.size(); ++i)
+        builder.append(text[i]);
+    writeln(builder.toString(), activeWindow->document());
 }
 
 }

@@ -34,20 +34,14 @@
 #include "../WebCString.h"
 #include "../WebCommon.h"
 
-namespace WebKit {
+namespace blink {
 
 struct WebFontFamily {
-    WebFontFamily()
-        : isBold(false)
-        , isItalic(false)
-    {
-    }
-
     WebCString name;
     bool isBold;
     bool isItalic;
 };
 
-} // namespace WebKit
+} // namespace blink
 
 #endif // WebFontFamily_h

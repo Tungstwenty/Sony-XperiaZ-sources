@@ -47,14 +47,15 @@ public:
         CreatingInitialEmptyDocument,
         DisplayingInitialEmptyDocument,
         StartedFirstRealLoad,
-        DisplayingInitialEmptyDocumentPostCommit,
-        CommittedFirstRealLoad
+        CommittedFirstRealLoad,
+        CommittedMultipleRealLoads
     };
 
     bool startedFirstRealLoad() const;
     bool committedFirstRealDocumentLoad() const;
     bool creatingInitialEmptyDocument() const;
     bool isDisplayingInitialEmptyDocument() const;
+    bool committedMultipleRealLoads() const;
     void advanceTo(State);
 
 private:

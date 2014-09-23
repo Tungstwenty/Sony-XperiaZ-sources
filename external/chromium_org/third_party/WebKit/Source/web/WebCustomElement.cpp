@@ -33,18 +33,11 @@
 
 #include "../platform/WebString.h"
 #include "RuntimeEnabledFeatures.h"
-#include "core/dom/CustomElement.h"
+#include "core/dom/custom/CustomElement.h"
 
 using namespace WebCore;
 
-namespace WebKit {
-
-// FIXME: Remove this when all embedders switch to
-// addEmbedderCustomElementName.
-void WebCustomElement::allowTagName(const WebString& localName)
-{
-    addEmbedderCustomElementName(localName);
-}
+namespace blink {
 
 void WebCustomElement::addEmbedderCustomElementName(const WebString& name)
 {
@@ -52,4 +45,4 @@ void WebCustomElement::addEmbedderCustomElementName(const WebString& name)
     CustomElement::addEmbedderCustomElementName(name);
 }
 
-} // namespace WebKit
+} // namespace blink

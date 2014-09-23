@@ -24,7 +24,7 @@
 
 #include "HTMLNames.h"
 #include "core/dom/Document.h"
-#include "core/dom/NodeTraversal.h"
+#include "core/dom/ElementTraversal.h"
 #include "core/html/HTMLAreaElement.h"
 #include "core/html/HTMLCollection.h"
 #include "core/html/HTMLImageElement.h"
@@ -36,21 +36,15 @@ namespace WebCore {
 
 using namespace HTMLNames;
 
-HTMLMapElement::HTMLMapElement(const QualifiedName& tagName, Document* document)
-    : HTMLElement(tagName, document)
+HTMLMapElement::HTMLMapElement(Document& document)
+    : HTMLElement(mapTag, document)
 {
-    ASSERT(hasTagName(mapTag));
     ScriptWrappable::init(this);
 }
 
-PassRefPtr<HTMLMapElement> HTMLMapElement::create(Document* document)
+PassRefPtr<HTMLMapElement> HTMLMapElement::create(Document& document)
 {
-    return adoptRef(new HTMLMapElement(mapTag, document));
-}
-
-PassRefPtr<HTMLMapElement> HTMLMapElement::create(const QualifiedName& tagName, Document* document)
-{
-    return adoptRef(new HTMLMapElement(tagName, document));
+    return adoptRef(new HTMLMapElement(document));
 }
 
 HTMLMapElement::~HTMLMapElement()
@@ -61,7 +55,7 @@ bool HTMLMapElement::mapMouseEvent(LayoutPoint location, const LayoutSize& size,
 {
     HTMLAreaElement* defaultArea = 0;
     Element* element = this;
-    while ((element = ElementTraversal::next(element, this))) {
+    while ((element = ElementTraversal::next(*element, this))) {
         if (isHTMLAreaElement(element)) {
             HTMLAreaElement* areaElt = toHTMLAreaElement(element);
             if (areaElt->isDefault()) {
@@ -81,7 +75,7 @@ bool HTMLMapElement::mapMouseEvent(LayoutPoint location, const LayoutSize& size,
 
 HTMLImageElement* HTMLMapElement::imageElement()
 {
-    RefPtr<HTMLCollection> images = document()->images();
+    RefPtr<HTMLCollection> images = document().images();
     for (unsigned i = 0; Node* curr = images->item(i); i++) {
         if (!curr->hasTagName(imgTag))
             continue;
@@ -106,17 +100,17 @@ void HTMLMapElement::parseAttribute(const QualifiedName& name, const AtomicStrin
         if (isIdAttributeName(name)) {
             // Call base class so that hasID bit gets set.
             HTMLElement::parseAttribute(name, value);
-            if (document()->isHTMLDocument())
+            if (document().isHTMLDocument())
                 return;
         }
         if (inDocument())
-            treeScope()->removeImageMap(this);
+            treeScope().removeImageMap(this);
         String mapName = value;
         if (mapName[0] == '#')
             mapName = mapName.substring(1);
-        m_name = document()->isHTMLDocument() ? mapName.lower() : mapName;
+        m_name = document().isHTMLDocument() ? mapName.lower() : mapName;
         if (inDocument())
-            treeScope()->addImageMap(this);
+            treeScope().addImageMap(this);
 
         return;
     }
@@ -132,14 +126,14 @@ PassRefPtr<HTMLCollection> HTMLMapElement::areas()
 Node::InsertionNotificationRequest HTMLMapElement::insertedInto(ContainerNode* insertionPoint)
 {
     if (insertionPoint->inDocument())
-        treeScope()->addImageMap(this);
+        treeScope().addImageMap(this);
     return HTMLElement::insertedInto(insertionPoint);
 }
 
 void HTMLMapElement::removedFrom(ContainerNode* insertionPoint)
 {
     if (insertionPoint->inDocument())
-        treeScope()->removeImageMap(this);
+        treeScope().removeImageMap(this);
     HTMLElement::removedFrom(insertionPoint);
 }
 

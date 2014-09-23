@@ -27,8 +27,7 @@
 #include "config.h"
 #include "core/xml/XPathExpressionNode.h"
 
-#include "core/dom/Node.h"
-#include <wtf/StdLibExtras.h>
+#include "wtf/StdLibExtras.h"
 
 namespace WebCore {
 namespace XPath {
@@ -48,7 +47,6 @@ Expression::Expression()
 
 Expression::~Expression()
 {
-    deleteAllValues(m_subExpressions);
 }
 
 }

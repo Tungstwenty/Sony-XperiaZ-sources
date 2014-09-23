@@ -25,7 +25,6 @@
 #include "config.h"
 #include "core/html/ClassList.h"
 
-#include "core/dom/SpaceSplitString.h"
 
 namespace WebCore {
 
@@ -63,7 +62,7 @@ bool ClassList::containsInternal(const AtomicString& token) const
 const SpaceSplitString& ClassList::classNames() const
 {
     ASSERT(m_element->hasClass());
-    if (m_element->document()->inQuirksMode()) {
+    if (m_element->document().inQuirksMode()) {
         if (!m_classNamesForQuirksMode)
             m_classNamesForQuirksMode = adoptPtr(new SpaceSplitString(value(), false));
         return *m_classNamesForQuirksMode.get();

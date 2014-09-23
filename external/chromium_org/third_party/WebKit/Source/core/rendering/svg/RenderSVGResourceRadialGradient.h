@@ -30,13 +30,13 @@ class SVGRadialGradientElement;
 
 class RenderSVGResourceRadialGradient FINAL : public RenderSVGResourceGradient {
 public:
-    RenderSVGResourceRadialGradient(SVGRadialGradientElement*);
+    explicit RenderSVGResourceRadialGradient(SVGRadialGradientElement*);
     virtual ~RenderSVGResourceRadialGradient();
 
     virtual const char* renderName() const { return "RenderSVGResourceRadialGradient"; }
 
     virtual RenderSVGResourceType resourceType() const { return s_resourceType; }
-    static RenderSVGResourceType s_resourceType;
+    static const RenderSVGResourceType s_resourceType;
 
     virtual SVGUnitTypes::SVGUnitType gradientUnits() const { return m_attributes.gradientUnits(); }
     virtual void calculateGradientTransform(AffineTransform& transform) { transform = m_attributes.gradientTransform(); }
@@ -51,6 +51,8 @@ public:
 private:
     RadialGradientAttributes m_attributes;
 };
+
+DEFINE_RENDER_SVG_RESOURCE_TYPE_CASTS(RenderSVGResourceRadialGradient, RadialGradientResourceType);
 
 }
 

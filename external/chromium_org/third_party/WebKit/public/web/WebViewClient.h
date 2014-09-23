@@ -34,10 +34,9 @@
 #include "../platform/WebColor.h"
 #include "../platform/WebGraphicsContext3D.h"
 #include "../platform/WebString.h"
-#include "WebAccessibilityNotification.h"
+#include "WebAXEnums.h"
 #include "WebContentDetectionResult.h"
 #include "WebDragOperation.h"
-#include "WebEditingAction.h"
 #include "WebFileChooserCompletion.h"
 #include "WebFileChooserParams.h"
 #include "WebPageVisibilityState.h"
@@ -46,14 +45,13 @@
 #include "WebTextDirection.h"
 #include "WebWidgetClient.h"
 
-namespace WebKit {
+namespace blink {
 
-class WebAccessibilityObject;
+class WebAXObject;
 class WebColorChooser;
 class WebColorChooserClient;
 class WebCompositorOutputSurface;
 class WebDateTimeChooserCompletion;
-class WebDeviceOrientationClient;
 class WebDragData;
 class WebElement;
 class WebExternalPopupMenu;
@@ -81,6 +79,7 @@ class WebURLRequest;
 class WebUserMediaClient;
 class WebView;
 class WebWidget;
+struct WebColorSuggestion;
 struct WebConsoleMessage;
 struct WebContextMenuData;
 struct WebDateTimeChooserParams;
@@ -108,7 +107,8 @@ public:
                                 const WebURLRequest& request,
                                 const WebWindowFeatures& features,
                                 const WebString& name,
-                                WebNavigationPolicy policy) {
+                                WebNavigationPolicy policy,
+                                bool suppressOpener) {
         return 0;
     }
 
@@ -125,9 +125,12 @@ public:
 
     // Misc ----------------------------------------------------------------
 
+    // Whether or not we should report a detailed message for the given source.
+    virtual bool shouldReportDetailedMessageForSource(const WebString& source) { return false; }
+
     // A new message was added to the console.
     virtual void didAddMessageToConsole(
-        const WebConsoleMessage&, const WebString& sourceName, unsigned sourceLine) { }
+        const WebConsoleMessage&, const WebString& sourceName, unsigned sourceLine, const WebString& stackTrace) { }
 
     // Called when script in the page calls window.print().  If frame is
     // non-null, then it selects a particular frame, including its
@@ -148,7 +151,6 @@ public:
     // Called by WebHelperPlugin to provide the WebFrameClient interface for the WebFrame.
     virtual void initializeHelperPluginWebFrame(WebHelperPlugin*) { }
 
-
     // Navigational --------------------------------------------------------
 
     // These notifications bracket any loading that occurs in the WebView.
@@ -164,25 +166,10 @@ public:
 
     // These methods allow the client to intercept and overrule editing
     // operations.
-    virtual bool shouldBeginEditing(const WebRange&) { return true; }
-    virtual bool shouldEndEditing(const WebRange&) { return true; }
-    virtual bool shouldInsertNode(
-        const WebNode&, const WebRange&, WebEditingAction) { return true; }
-    virtual bool shouldInsertText(
-        const WebString&, const WebRange&, WebEditingAction) { return true; }
-    virtual bool shouldChangeSelectedRange(
-        const WebRange& from, const WebRange& to, WebTextAffinity,
-        bool stillSelecting) { return true; }
-    virtual bool shouldDeleteRange(const WebRange&) { return true; }
-    virtual bool shouldApplyStyle(const WebString& style, const WebRange&) { return true; }
-
-    virtual void didBeginEditing() { }
     virtual void didCancelCompositionOnSelectionChange() { }
     virtual void didChangeSelection(bool isSelectionEmpty) { }
     virtual void didChangeContents() { }
     virtual void didExecuteCommand(const WebString& commandName) { }
-    virtual void didEndEditing() { }
-    virtual void didChangeFormState(const WebNode&) { }
 
     // This method is called in response to WebView's handleInputEvent()
     // when the default action for the current keyboard event is not
@@ -198,9 +185,17 @@ public:
     // This method opens the color chooser and returns a new WebColorChooser
     // instance. If there is a WebColorChooser already from the last time this
     // was called, it ends the color chooser by calling endChooser, and replaces
-    // it with the new one.
+    // it with the new one. The given list of suggestions can be used to show a
+    // simple interface with a limited set of choices.
+
+    // FIXME: Should be removed when the chromium side change lands.
     virtual WebColorChooser* createColorChooser(WebColorChooserClient*,
                                                 const WebColor&) { return 0; }
+
+    virtual WebColorChooser* createColorChooser(
+        WebColorChooserClient*,
+        const WebColor&,
+        const WebVector<WebColorSuggestion>&) { return 0; }
 
     // This method returns immediately after showing the dialog. When the
     // dialog is closed, it should call the WebFileChooserCompletion to
@@ -215,6 +210,17 @@ public:
     // implementation opened date/time chooser UI successfully, it should return
     // true. This function is used only if ExternalDateTimeChooser is used.
     virtual bool openDateTimeChooser(const WebDateTimeChooserParams&, WebDateTimeChooserCompletion*) { return false; }
+
+    // Show a notification popup for the specified form vaidation messages
+    // besides the anchor rectangle. An implementation of this function should
+    // not hide the popup until hideValidationMessage call.
+    virtual void showValidationMessage(const WebRect& anchorInRootView, const WebString& mainText, const WebString& supplementalText, WebTextDirection hint) { }
+
+    // Hide notifation popup for form validation messages.
+    virtual void hideValidationMessage() { }
+
+    // Move the existing notifation popup to the new anchor position.
+    virtual void moveValidationMessage(const WebRect& anchorInRootView) { }
 
     // Displays a modal alert dialog containing the given message.  Returns
     // once the user dismisses the dialog.
@@ -259,6 +265,10 @@ public:
     // the given frame. Additional context data is supplied.
     virtual void showContextMenu(WebFrame*, const WebContextMenuData&) { }
 
+    // Called when the data attached to the currently displayed context menu is
+    // invalidated. The context menu may be closed if possible.
+    virtual void clearContextMenu() { }
+
     // Called when a drag-n-drop operation should begin.
     virtual void startDragging(WebFrame*, const WebDragData&, WebDragOperationsMask, const WebImage&, const WebPoint& dragImageOffset) { }
 
@@ -301,15 +311,11 @@ public:
     virtual int historyBackListCount() { return 0; }
     virtual int historyForwardListCount() { return 0; }
 
-    // Called to notify the embedder when a new history item is added.
-    virtual void didAddHistoryItem() { }
-
 
     // Accessibility -------------------------------------------------------
 
-    // Notifies embedder about an accessibility notification.
-    virtual void postAccessibilityNotification(const WebAccessibilityObject&, WebAccessibilityNotification) { }
-
+    // Notifies embedder about an accessibility event.
+    virtual void postAccessibilityEvent(const WebAXObject&, WebAXEvent) { }
 
     // Developer tools -----------------------------------------------------
 
@@ -334,11 +340,6 @@ public:
 
     // Access the embedder API for speech recognition services.
     virtual WebSpeechRecognizer* speechRecognizer() { return 0; }
-
-    // Device Orientation --------------------------------------------------
-
-    // Access the embedder API for device orientation services.
-    virtual WebDeviceOrientationClient* deviceOrientationClient() { return 0; }
 
     // Zoom ----------------------------------------------------------------
 
@@ -395,6 +396,6 @@ protected:
     ~WebViewClient() { }
 };
 
-} // namespace WebKit
+} // namespace blink
 
 #endif

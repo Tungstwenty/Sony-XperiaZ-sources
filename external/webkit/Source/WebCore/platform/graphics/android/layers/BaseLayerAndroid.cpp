@@ -1,5 +1,6 @@
 /*
  * Copyright 2012, The Android Open Source Project
+ * Copyright (C) 2014 Sony Mobile Communications AB.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -21,6 +22,9 @@
  * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * NOTE: This file has been modified by Sony Mobile Communications AB.
+ * Modifications are licensed under the License.
  */
 
 #define LOG_TAG "BaseLayerAndroid"
@@ -125,10 +129,12 @@ FixedBackgroundImageLayerAndroid::FixedBackgroundImageLayerAndroid(PassRefPtr<Re
     RefPtr<RenderStyle> style = aStyle;
     FillLayer* layers = style->accessBackgroundLayers();
     StyleImage* styleImage = layers->image();
-    CachedImage* cachedImage = static_cast<StyleCachedImage*>(styleImage)->cachedImage();
-    WebCore::Image* image = cachedImage->image();
-    setContentsImage(image->nativeImageForCurrentFrame());
-    setSize(image->width(), image->height());
+    if (styleImage->canRender(style->effectiveZoom())) {
+        CachedImage* cachedImage = static_cast<StyleCachedImage*>(styleImage)->cachedImage();
+        WebCore::Image* image = cachedImage->image();
+        setContentsImage(image->nativeImageForCurrentFrame());
+        setSize(image->width(), image->height());
+    }
 
     setIntrinsicallyComposited(true);
 

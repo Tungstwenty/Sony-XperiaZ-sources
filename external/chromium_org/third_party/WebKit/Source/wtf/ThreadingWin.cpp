@@ -86,26 +86,24 @@
 #include "config.h"
 #include "Threading.h"
 
-#if OS(WINDOWS)
+#if OS(WIN)
 
-#include "DateMath.h"
-#include "dtoa.h"
-#include "dtoa/cached-powers.h"
-
-#include "MainThread.h"
-#include "ThreadFunctionInvocation.h"
-#include "ThreadSpecific.h"
-#include <windows.h>
 #include "wtf/CurrentTime.h"
+#include "wtf/DateMath.h"
 #include "wtf/HashMap.h"
+#include "wtf/MainThread.h"
 #include "wtf/MathExtras.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
-#include "wtf/RandomNumberSeed.h"
+#include "wtf/ThreadFunctionInvocation.h"
+#include "wtf/ThreadSpecific.h"
+#include "wtf/ThreadingPrimitives.h"
 #include "wtf/WTFThreadData.h"
-
+#include "wtf/dtoa.h"
+#include "wtf/dtoa/cached-powers.h"
 #include <errno.h>
 #include <process.h>
+#include <windows.h>
 
 namespace WTF {
 
@@ -159,13 +157,11 @@ void initializeThreading()
     // This should only be called once.
     ASSERT(!atomicallyInitializedStaticMutex);
 
-    WTF::double_conversion::initialize();
     // StringImpl::empty() does not construct its static string in a threadsafe fashion,
     // so ensure it has been initialized from here.
     StringImpl::empty();
     atomicallyInitializedStaticMutex = new Mutex;
     threadMapMutex();
-    initializeRandomNumberGenerator();
     wtfThreadData();
     s_dtoaP5Mutex = new Mutex;
     initializeDates();
@@ -173,8 +169,10 @@ void initializeThreading()
 
 static HashMap<DWORD, HANDLE>& threadMap()
 {
-    static HashMap<DWORD, HANDLE> map;
-    return map;
+    static HashMap<DWORD, HANDLE>* gMap;
+    if (!gMap)
+        gMap = new HashMap<DWORD, HANDLE>();
+    return *gMap;
 }
 
 static void storeThreadHandleByIdentifier(DWORD threadID, HANDLE threadHandle)
@@ -215,13 +213,12 @@ ThreadIdentifier createThreadInternal(ThreadFunction entryPoint, void* data, con
     OwnPtr<ThreadFunctionInvocation> invocation = adoptPtr(new ThreadFunctionInvocation(entryPoint, data));
     HANDLE threadHandle = reinterpret_cast<HANDLE>(_beginthreadex(0, 0, wtfThreadEntryPoint, invocation.get(), 0, &threadIdentifier));
     if (!threadHandle) {
-        LOG_ERROR("Failed to create thread at entry point %p with data %p: %ld", entryPoint, data, errno);
+        WTF_LOG_ERROR("Failed to create thread at entry point %p with data %p: %ld", entryPoint, data, errno);
         return 0;
     }
 
     // The thread will take ownership of invocation.
-    ThreadFunctionInvocation* leakedInvocation = invocation.leakPtr();
-    UNUSED_PARAM(leakedInvocation);
+    ThreadFunctionInvocation* ALLOW_UNUSED leakedInvocation = invocation.leakPtr();
 
     threadID = static_cast<ThreadIdentifier>(threadIdentifier);
     storeThreadHandleByIdentifier(threadIdentifier, threadHandle);
@@ -235,11 +232,11 @@ int waitForThreadCompletion(ThreadIdentifier threadID)
 
     HANDLE threadHandle = threadHandleForIdentifier(threadID);
     if (!threadHandle)
-        LOG_ERROR("ThreadIdentifier %u did not correspond to an active thread when trying to quit", threadID);
+        WTF_LOG_ERROR("ThreadIdentifier %u did not correspond to an active thread when trying to quit", threadID);
 
     DWORD joinResult = WaitForSingleObject(threadHandle, INFINITE);
     if (joinResult == WAIT_FAILED)
-        LOG_ERROR("ThreadIdentifier %u was found to be deadlocked trying to quit", threadID);
+        WTF_LOG_ERROR("ThreadIdentifier %u was found to be deadlocked trying to quit", threadID);
 
     CloseHandle(threadHandle);
     clearThreadHandleForIdentifier(threadID);
@@ -492,4 +489,4 @@ DWORD absoluteTimeToWaitTimeoutInterval(double absoluteTime)
 
 } // namespace WTF
 
-#endif // OS(WINDOWS)
+#endif // OS(WIN)

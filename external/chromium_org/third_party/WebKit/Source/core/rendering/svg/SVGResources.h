@@ -42,7 +42,8 @@ class SVGResources {
 public:
     SVGResources();
 
-    bool buildResources(const RenderObject*, const SVGRenderStyle*);
+    static PassOwnPtr<SVGResources> buildResources(const RenderObject*, const SVGRenderStyle*);
+    void layoutIfNeeded();
 
     // Ordinary resources
     RenderSVGResourceClipper* clipper() const { return m_clipperFilterMaskerData ? m_clipperFilterMaskerData->clipper : 0; }
@@ -78,6 +79,8 @@ public:
 private:
     friend class SVGResourcesCycleSolver;
 
+    bool hasResourceData() const;
+
     // Only used by SVGResourcesCache cycle detection logic
     void resetClipper();
     void resetFilter();
@@ -89,7 +92,6 @@ private:
     void resetStroke();
     void resetLinkedResource();
 
-private:
     bool setClipper(RenderSVGResourceClipper*);
     bool setFilter(RenderSVGResourceFilter*);
     bool setMarkerStart(RenderSVGResourceMarker*);
@@ -150,7 +152,7 @@ private:
     // From SVG 1.1 2nd Edition
     // fill:       'shapes' and 'text content elements'
     // stroke:     'shapes' and 'text content elements'
-    // -> altGlyph, circle, ellipse, line, path, polygon, polyline, rect, text, textPath, tref, tspan
+    // -> altGlyph, circle, ellipse, line, path, polygon, polyline, rect, text, textPath, tspan
     struct FillStrokeData {
         WTF_MAKE_FAST_ALLOCATED;
     public:

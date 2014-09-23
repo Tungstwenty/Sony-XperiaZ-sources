@@ -24,8 +24,7 @@
 #if ENABLE(SVG_FONTS)
 #include "core/svg/SVGFontElement.h"
 
-#include "SVGNames.h"
-#include "core/page/UseCounter.h"
+#include "core/frame/UseCounter.h"
 #include "core/svg/SVGGlyphElement.h"
 #include "core/svg/SVGHKernElement.h"
 #include "core/svg/SVGMissingGlyphElement.h"
@@ -42,21 +41,20 @@ BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGFontElement)
     REGISTER_PARENT_ANIMATED_PROPERTIES(SVGElement)
 END_REGISTER_ANIMATED_PROPERTIES
 
-inline SVGFontElement::SVGFontElement(const QualifiedName& tagName, Document* document)
-    : SVGElement(tagName, document)
+inline SVGFontElement::SVGFontElement(Document& document)
+    : SVGElement(SVGNames::fontTag, document)
     , m_missingGlyph(0)
     , m_isGlyphCacheValid(false)
 {
-    ASSERT(hasTagName(SVGNames::fontTag));
     ScriptWrappable::init(this);
     registerAnimatedPropertiesForSVGFontElement();
 
     UseCounter::count(document, UseCounter::SVGFontElement);
 }
 
-PassRefPtr<SVGFontElement> SVGFontElement::create(const QualifiedName& tagName, Document* document)
+PassRefPtr<SVGFontElement> SVGFontElement::create(Document& document)
 {
-    return adoptRef(new SVGFontElement(tagName, document));
+    return adoptRef(new SVGFontElement(document));
 }
 
 void SVGFontElement::invalidateGlyphCache()
@@ -73,7 +71,7 @@ SVGMissingGlyphElement* SVGFontElement::firstMissingGlyphElement() const
 {
     for (Node* child = firstChild(); child; child = child->nextSibling()) {
         if (child->hasTagName(SVGNames::missing_glyphTag))
-            return static_cast<SVGMissingGlyphElement*>(child);
+            return toSVGMissingGlyphElement(child);
     }
 
     return 0;
@@ -124,7 +122,7 @@ void SVGFontElement::ensureGlyphCache()
     Vector<String> ligatures;
     for (Node* child = firstChild(); child; child = child->nextSibling()) {
         if (child->hasTagName(SVGNames::glyphTag)) {
-            SVGGlyphElement* glyph = static_cast<SVGGlyphElement*>(child);
+            SVGGlyphElement* glyph = toSVGGlyphElement(child);
             AtomicString unicode = glyph->fastGetAttribute(SVGNames::unicodeAttr);
             AtomicString glyphId = glyph->getIdAttribute();
             if (glyphId.isEmpty() && unicode.isEmpty())
@@ -136,13 +134,12 @@ void SVGFontElement::ensureGlyphCache()
             if (unicode.length() > 1 && !U16_IS_SURROGATE(unicode[0]))
                 ligatures.append(unicode.string());
         } else if (child->hasTagName(SVGNames::hkernTag)) {
-            SVGHKernElement* hkern = static_cast<SVGHKernElement*>(child);
-            hkern->buildHorizontalKerningPair(m_horizontalKerningPairs);
+            toSVGHKernElement(child)->buildHorizontalKerningPair(m_horizontalKerningPairs);
         } else if (child->hasTagName(SVGNames::vkernTag)) {
-            SVGVKernElement* vkern = static_cast<SVGVKernElement*>(child);
-            vkern->buildVerticalKerningPair(m_verticalKerningPairs);
-        } else if (child->hasTagName(SVGNames::missing_glyphTag) && !firstMissingGlyphElement)
-            firstMissingGlyphElement = static_cast<SVGMissingGlyphElement*>(child);
+            toSVGVKernElement(child)->buildVerticalKerningPair(m_verticalKerningPairs);
+        } else if (child->hasTagName(SVGNames::missing_glyphTag) && !firstMissingGlyphElement) {
+            firstMissingGlyphElement = toSVGMissingGlyphElement(child);
+        }
     }
 
     // Register each character of each ligature, if needed.

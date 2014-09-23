@@ -30,9 +30,8 @@
 #ifndef PolygonShape_h
 #define PolygonShape_h
 
-#include "core/platform/graphics/FloatPolygon.h"
 #include "core/rendering/shapes/Shape.h"
-#include "core/rendering/shapes/ShapeInterval.h"
+#include "platform/geometry/FloatPolygon.h"
 
 namespace WebCore {
 

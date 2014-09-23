@@ -29,11 +29,10 @@
  */
 
 #include "config.h"
-#include "modules/filesystem/EntrySync.h"
+#include "V8EntrySync.h"
 
 #include "V8Attr.h"
 #include "V8DirectoryEntrySync.h"
-#include "V8EntrySync.h"
 #include "V8FileEntrySync.h"
 #include "bindings/v8/V8Binding.h"
 #include "wtf/RefPtr.h"
@@ -44,10 +43,8 @@ v8::Handle<v8::Object> wrap(EntrySync* impl, v8::Handle<v8::Object> creationCont
 {
     ASSERT(impl);
     if (impl->isFile())
-        return wrap(static_cast<FileEntrySync*>(impl), creationContext, isolate);
-
-    ASSERT(impl->isDirectory());
-    return wrap(static_cast<DirectoryEntrySync*>(impl), creationContext, isolate);
+        return wrap(toFileEntrySync(impl), creationContext, isolate);
+    return wrap(toDirectoryEntrySync(impl), creationContext, isolate);
 }
 
 } // namespace WebCore

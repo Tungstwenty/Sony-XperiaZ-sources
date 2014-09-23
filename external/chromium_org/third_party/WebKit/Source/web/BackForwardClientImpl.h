@@ -31,13 +31,11 @@
 #ifndef BackForwardClientImpl_h
 #define BackForwardClientImpl_h
 
-#include "core/history/BackForwardClient.h"
 #include "core/history/HistoryItem.h"
+#include "core/page/BackForwardClient.h"
 
-namespace WebKit {
+namespace blink {
 class WebViewImpl;
-
-extern const char backForwardNavigationScheme[];
 
 class BackForwardClientImpl : public WebCore::BackForwardClient {
 public:
@@ -46,23 +44,13 @@ public:
 
 private:
     // WebCore::BackForwardList methods:
-    virtual void addItem(PassRefPtr<WebCore::HistoryItem>);
-    virtual void goToItem(WebCore::HistoryItem*);
-    virtual WebCore::HistoryItem* itemAtIndex(int index);
     virtual int backListCount();
     virtual int forwardListCount();
-    virtual bool isActive();
-    virtual void close();
+    virtual int backForwardListCount();
 
     WebViewImpl* m_webView;
-
-    RefPtr<WebCore::HistoryItem> m_currentItem;
-
-    // The last history item that was accessed via itemAtIndex().  We keep track
-    // of this until goToItem() is called, so we can track the navigation.
-    RefPtr<WebCore::HistoryItem> m_pendingHistoryItem;
 };
 
-} // namespace WebKit
+} // namespace blink
 
 #endif

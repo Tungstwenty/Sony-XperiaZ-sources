@@ -46,7 +46,8 @@ class Descriptor BASE_EMBEDDED {
  public:
   MUST_USE_RESULT MaybeObject* KeyToUniqueName() {
     if (!key_->IsUniqueName()) {
-      MaybeObject* maybe_result = HEAP->InternalizeString(String::cast(key_));
+      MaybeObject* maybe_result =
+          key_->GetIsolate()->heap()->InternalizeString(String::cast(key_));
       if (!maybe_result->To(&key_)) return maybe_result;
     }
     return key_;
@@ -183,6 +184,7 @@ class LookupResult BASE_EMBEDDED {
         next_(isolate->top_lookup_result()),
         lookup_type_(NOT_FOUND),
         holder_(NULL),
+        transition_(NULL),
         cacheable_(true),
         details_(NONE, NONEXISTENT, Representation::None()) {
     isolate->SetTopLookupResult(this);
@@ -200,6 +202,7 @@ class LookupResult BASE_EMBEDDED {
     holder_ = holder;
     details_ = details;
     number_ = number;
+    transition_ = NULL;
   }
 
   bool CanHoldValue(Handle<Object> value) {
@@ -208,16 +211,18 @@ class LookupResult BASE_EMBEDDED {
     return value->FitsRepresentation(details_.representation());
   }
 
-  void TransitionResult(JSObject* holder, int number) {
+  void TransitionResult(JSObject* holder, Map* target) {
     lookup_type_ = TRANSITION_TYPE;
     details_ = PropertyDetails(NONE, TRANSITION, Representation::None());
     holder_ = holder;
-    number_ = number;
+    transition_ = target;
+    number_ = 0xAAAA;
   }
 
   void DictionaryResult(JSObject* holder, int entry) {
     lookup_type_ = DICTIONARY_TYPE;
     holder_ = holder;
+    transition_ = NULL;
     details_ = holder->property_dictionary()->DetailsAt(entry);
     number_ = entry;
   }
@@ -225,6 +230,7 @@ class LookupResult BASE_EMBEDDED {
   void HandlerResult(JSProxy* proxy) {
     lookup_type_ = HANDLER_TYPE;
     holder_ = proxy;
+    transition_ = NULL;
     details_ = PropertyDetails(NONE, HANDLER, Representation::Tagged());
     cacheable_ = false;
   }
@@ -232,6 +238,7 @@ class LookupResult BASE_EMBEDDED {
   void InterceptorResult(JSObject* holder) {
     lookup_type_ = INTERCEPTOR_TYPE;
     holder_ = holder;
+    transition_ = NULL;
     details_ = PropertyDetails(NONE, INTERCEPTOR, Representation::Tagged());
   }
 
@@ -247,7 +254,7 @@ class LookupResult BASE_EMBEDDED {
   }
 
   JSProxy* proxy() {
-    ASSERT(IsFound());
+    ASSERT(IsHandler());
     return JSProxy::cast(holder_);
   }
 
@@ -372,42 +379,20 @@ class LookupResult BASE_EMBEDDED {
     return NULL;
   }
 
-  Map* GetTransitionTarget(Map* map) {
-    ASSERT(IsTransition());
-    TransitionArray* transitions = map->transitions();
-    return transitions->GetTarget(number_);
-  }
-
   Map* GetTransitionTarget() {
-    return GetTransitionTarget(holder()->map());
-  }
-
-  PropertyDetails GetTransitionDetails(Map* map) {
-    ASSERT(IsTransition());
-    TransitionArray* transitions = map->transitions();
-    return transitions->GetTargetDetails(number_);
+    return transition_;
   }
 
   PropertyDetails GetTransitionDetails() {
-    return GetTransitionDetails(holder()->map());
+    return transition_->GetLastDescriptorDetails();
   }
 
-  bool IsTransitionToField(Map* map) {
-    return IsTransition() && GetTransitionDetails(map).type() == FIELD;
+  bool IsTransitionToField() {
+    return IsTransition() && GetTransitionDetails().type() == FIELD;
   }
 
-  bool IsTransitionToConstant(Map* map) {
-    return IsTransition() && GetTransitionDetails(map).type() == CONSTANT;
-  }
-
-  Map* GetTransitionMap() {
-    ASSERT(IsTransition());
-    return Map::cast(GetValue());
-  }
-
-  Map* GetTransitionMapFromMap(Map* map) {
-    ASSERT(IsTransition());
-    return map->transitions()->GetTarget(number_);
+  bool IsTransitionToConstant() {
+    return IsTransition() && GetTransitionDetails().type() == CONSTANT;
   }
 
   int GetTransitionIndex() {
@@ -422,12 +407,10 @@ class LookupResult BASE_EMBEDDED {
 
   PropertyIndex GetFieldIndex() {
     ASSERT(lookup_type_ == DESCRIPTOR_TYPE);
-    ASSERT(IsField());
     return PropertyIndex::NewFieldIndex(GetFieldIndexFromMap(holder()->map()));
   }
 
   int GetLocalFieldIndexFromMap(Map* map) {
-    ASSERT(IsField());
     return GetFieldIndexFromMap(map) - map->inobject_properties();
   }
 
@@ -502,6 +485,7 @@ class LookupResult BASE_EMBEDDED {
   } lookup_type_;
 
   JSReceiver* holder_;
+  Map* transition_;
   int number_;
   bool cacheable_;
   PropertyDetails details_;

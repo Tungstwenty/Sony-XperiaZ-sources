@@ -38,42 +38,43 @@
 #include "bindings/v8/V8Binding.h"
 #include "bindings/v8/V8HiddenPropertyName.h"
 #include "bindings/v8/V8PerContextData.h"
-#include "core/dom/ScriptExecutionContext.h"
+#include "core/dom/ExecutionContext.h"
 #include "wtf/PassOwnPtr.h"
 
 namespace WebCore {
 
 #define CALLBACK_LIST(V)                  \
     V(created, Created)                   \
-    V(enteredDocument, EnteredDocument)   \
-    V(leftDocument, LeftDocument)         \
+    V(attached, Attached)           \
+    V(detached, Detached)                 \
     V(attributeChanged, AttributeChanged)
 
-PassRefPtr<V8CustomElementLifecycleCallbacks> V8CustomElementLifecycleCallbacks::create(ScriptExecutionContext* scriptExecutionContext, v8::Handle<v8::Object> prototype, v8::Handle<v8::Function> created, v8::Handle<v8::Function> enteredDocument, v8::Handle<v8::Function> leftDocument, v8::Handle<v8::Function> attributeChanged)
+PassRefPtr<V8CustomElementLifecycleCallbacks> V8CustomElementLifecycleCallbacks::create(ExecutionContext* executionContext, v8::Handle<v8::Object> prototype, v8::Handle<v8::Function> created, v8::Handle<v8::Function> attached, v8::Handle<v8::Function> detached, v8::Handle<v8::Function> attributeChanged)
 {
+    v8::Isolate* isolate = toIsolate(executionContext);
     // A given object can only be used as a Custom Element prototype
     // once; see customElementIsInterfacePrototypeObject
 #define SET_HIDDEN_PROPERTY(Value, Name) \
-    ASSERT(prototype->GetHiddenValue(V8HiddenPropertyName::customElement##Name()).IsEmpty()); \
+    ASSERT(prototype->GetHiddenValue(V8HiddenPropertyName::customElement##Name(isolate)).IsEmpty()); \
     if (!Value.IsEmpty()) \
-        prototype->SetHiddenValue(V8HiddenPropertyName::customElement##Name(), Value);
+        prototype->SetHiddenValue(V8HiddenPropertyName::customElement##Name(isolate), Value);
 
     CALLBACK_LIST(SET_HIDDEN_PROPERTY)
 #undef SET_HIDDEN_PROPERTY
 
-    return adoptRef(new V8CustomElementLifecycleCallbacks(scriptExecutionContext, prototype, created, enteredDocument, leftDocument, attributeChanged));
+    return adoptRef(new V8CustomElementLifecycleCallbacks(executionContext, prototype, created, attached, detached, attributeChanged));
 }
 
-static CustomElementLifecycleCallbacks::CallbackType flagSet(v8::Handle<v8::Function> enteredDocument, v8::Handle<v8::Function> leftDocument, v8::Handle<v8::Function> attributeChanged)
+static CustomElementLifecycleCallbacks::CallbackType flagSet(v8::Handle<v8::Function> attached, v8::Handle<v8::Function> detached, v8::Handle<v8::Function> attributeChanged)
 {
     // V8 Custom Elements always run created to swizzle prototypes.
     int flags = CustomElementLifecycleCallbacks::Created;
 
-    if (!enteredDocument.IsEmpty())
-        flags |= CustomElementLifecycleCallbacks::EnteredDocument;
+    if (!attached.IsEmpty())
+        flags |= CustomElementLifecycleCallbacks::Attached;
 
-    if (!leftDocument.IsEmpty())
-        flags |= CustomElementLifecycleCallbacks::LeftDocument;
+    if (!detached.IsEmpty())
+        flags |= CustomElementLifecycleCallbacks::Detached;
 
     if (!attributeChanged.IsEmpty())
         flags |= CustomElementLifecycleCallbacks::AttributeChanged;
@@ -82,27 +83,27 @@ static CustomElementLifecycleCallbacks::CallbackType flagSet(v8::Handle<v8::Func
 }
 
 template <typename T>
-static void weakCallback(v8::Isolate*, v8::Persistent<T>*, ScopedPersistent<T>* handle)
+static void weakCallback(const v8::WeakCallbackData<T, ScopedPersistent<T> >& data)
 {
-    handle->clear();
+    data.GetParameter()->clear();
 }
 
-V8CustomElementLifecycleCallbacks::V8CustomElementLifecycleCallbacks(ScriptExecutionContext* scriptExecutionContext, v8::Handle<v8::Object> prototype, v8::Handle<v8::Function> created, v8::Handle<v8::Function> enteredDocument, v8::Handle<v8::Function> leftDocument, v8::Handle<v8::Function> attributeChanged)
-    : CustomElementLifecycleCallbacks(flagSet(enteredDocument, leftDocument, attributeChanged))
-    , ActiveDOMCallback(scriptExecutionContext)
-    , m_world(DOMWrapperWorld::current())
-    , m_prototype(prototype)
-    , m_created(created)
-    , m_enteredDocument(enteredDocument)
-    , m_leftDocument(leftDocument)
-    , m_attributeChanged(attributeChanged)
+V8CustomElementLifecycleCallbacks::V8CustomElementLifecycleCallbacks(ExecutionContext* executionContext, v8::Handle<v8::Object> prototype, v8::Handle<v8::Function> created, v8::Handle<v8::Function> attached, v8::Handle<v8::Function> detached, v8::Handle<v8::Function> attributeChanged)
+    : CustomElementLifecycleCallbacks(flagSet(attached, detached, attributeChanged))
+    , ActiveDOMCallback(executionContext)
     , m_owner(0)
+    , m_world(DOMWrapperWorld::current())
+    , m_prototype(toIsolate(executionContext), prototype)
+    , m_created(toIsolate(executionContext), created)
+    , m_attached(toIsolate(executionContext), attached)
+    , m_detached(toIsolate(executionContext), detached)
+    , m_attributeChanged(toIsolate(executionContext), attributeChanged)
 {
-    m_prototype.makeWeak(&m_prototype, weakCallback<v8::Object>);
+    m_prototype.setWeak(&m_prototype, weakCallback<v8::Object>);
 
 #define MAKE_WEAK(Var, _) \
     if (!m_##Var.isEmpty()) \
-        m_##Var.makeWeak(&m_##Var, weakCallback<v8::Function>);
+        m_##Var.setWeak(&m_##Var, weakCallback<v8::Function>);
 
     CALLBACK_LIST(MAKE_WEAK)
 #undef MAKE_WEAK
@@ -110,10 +111,10 @@ V8CustomElementLifecycleCallbacks::V8CustomElementLifecycleCallbacks(ScriptExecu
 
 V8PerContextData* V8CustomElementLifecycleCallbacks::creationContextData()
 {
-    if (!scriptExecutionContext())
+    if (!executionContext())
         return 0;
 
-    v8::Handle<v8::Context> context = toV8Context(scriptExecutionContext(), m_world.get());
+    v8::Handle<v8::Context> context = toV8Context(executionContext(), m_world.get());
     if (context.IsEmpty())
         return 0;
 
@@ -125,7 +126,7 @@ V8CustomElementLifecycleCallbacks::~V8CustomElementLifecycleCallbacks()
     if (!m_owner)
         return;
 
-    v8::HandleScope handleScope;
+    v8::HandleScope handleScope(toIsolate(executionContext()));
     if (V8PerContextData* perContextData = creationContextData())
         perContextData->clearCustomElementBinding(m_owner);
 }
@@ -153,15 +154,15 @@ void V8CustomElementLifecycleCallbacks::created(Element* element)
 
     element->setCustomElementState(Element::Upgraded);
 
-    v8::HandleScope handleScope;
-    v8::Handle<v8::Context> context = toV8Context(scriptExecutionContext(), m_world.get());
+    v8::Isolate* isolate = toIsolate(executionContext());
+    v8::HandleScope handleScope(isolate);
+    v8::Handle<v8::Context> context = toV8Context(executionContext(), m_world.get());
     if (context.IsEmpty())
         return;
 
     v8::Context::Scope scope(context);
-    v8::Isolate* isolate = context->GetIsolate();
 
-    v8::Handle<v8::Object> receiver = DOMDataStore::current(isolate)->get<V8Element>(element);
+    v8::Handle<v8::Object> receiver = DOMDataStore::current(isolate).get<V8Element>(element, isolate);
     if (!receiver.IsEmpty()) {
         // Swizzle the prototype of the existing wrapper. We don't need to
         // worry about non-existent wrappers; they will get the right
@@ -183,17 +184,17 @@ void V8CustomElementLifecycleCallbacks::created(Element* element)
 
     v8::TryCatch exceptionCatcher;
     exceptionCatcher.SetVerbose(true);
-    ScriptController::callFunctionWithInstrumentation(scriptExecutionContext(), callback, receiver, 0, 0);
+    ScriptController::callFunction(executionContext(), callback, receiver, 0, 0, isolate);
 }
 
-void V8CustomElementLifecycleCallbacks::enteredDocument(Element* element)
+void V8CustomElementLifecycleCallbacks::attached(Element* element)
 {
-    call(m_enteredDocument, element);
+    call(m_attached, element);
 }
 
-void V8CustomElementLifecycleCallbacks::leftDocument(Element* element)
+void V8CustomElementLifecycleCallbacks::detached(Element* element)
 {
-    call(m_leftDocument, element);
+    call(m_detached, element);
 }
 
 void V8CustomElementLifecycleCallbacks::attributeChanged(Element* element, const AtomicString& name, const AtomicString& oldValue, const AtomicString& newValue)
@@ -201,13 +202,13 @@ void V8CustomElementLifecycleCallbacks::attributeChanged(Element* element, const
     if (!canInvokeCallback())
         return;
 
-    v8::HandleScope handleScope;
-    v8::Handle<v8::Context> context = toV8Context(scriptExecutionContext(), m_world.get());
+    v8::Isolate* isolate = toIsolate(executionContext());
+    v8::HandleScope handleScope(isolate);
+    v8::Handle<v8::Context> context = toV8Context(executionContext(), m_world.get());
     if (context.IsEmpty())
         return;
 
     v8::Context::Scope scope(context);
-    v8::Isolate* isolate = context->GetIsolate();
 
     v8::Handle<v8::Object> receiver = toV8(element, context->Global(), isolate).As<v8::Object>();
     ASSERT(!receiver.IsEmpty());
@@ -217,14 +218,14 @@ void V8CustomElementLifecycleCallbacks::attributeChanged(Element* element, const
         return;
 
     v8::Handle<v8::Value> argv[] = {
-        v8String(name, isolate),
-        oldValue.isNull() ? v8::Handle<v8::Value>(v8::Null()) : v8::Handle<v8::Value>(v8String(oldValue, isolate)),
-        newValue.isNull() ? v8::Handle<v8::Value>(v8::Null()) : v8::Handle<v8::Value>(v8String(newValue, isolate))
+        v8String(isolate, name),
+        oldValue.isNull() ? v8::Handle<v8::Value>(v8::Null(isolate)) : v8::Handle<v8::Value>(v8String(isolate, oldValue)),
+        newValue.isNull() ? v8::Handle<v8::Value>(v8::Null(isolate)) : v8::Handle<v8::Value>(v8String(isolate, newValue))
     };
 
     v8::TryCatch exceptionCatcher;
     exceptionCatcher.SetVerbose(true);
-    ScriptController::callFunctionWithInstrumentation(scriptExecutionContext(), callback, receiver, WTF_ARRAY_LENGTH(argv), argv);
+    ScriptController::callFunction(executionContext(), callback, receiver, WTF_ARRAY_LENGTH(argv), argv, isolate);
 }
 
 void V8CustomElementLifecycleCallbacks::call(const ScopedPersistent<v8::Function>& weakCallback, Element* element)
@@ -232,8 +233,8 @@ void V8CustomElementLifecycleCallbacks::call(const ScopedPersistent<v8::Function
     if (!canInvokeCallback())
         return;
 
-    v8::HandleScope handleScope;
-    v8::Handle<v8::Context> context = toV8Context(scriptExecutionContext(), m_world.get());
+    v8::HandleScope handleScope(toIsolate(executionContext()));
+    v8::Handle<v8::Context> context = toV8Context(executionContext(), m_world.get());
     if (context.IsEmpty())
         return;
 
@@ -249,7 +250,7 @@ void V8CustomElementLifecycleCallbacks::call(const ScopedPersistent<v8::Function
 
     v8::TryCatch exceptionCatcher;
     exceptionCatcher.SetVerbose(true);
-    ScriptController::callFunctionWithInstrumentation(scriptExecutionContext(), callback, receiver, 0, 0);
+    ScriptController::callFunction(executionContext(), callback, receiver, 0, 0, isolate);
 }
 
 } // namespace WebCore

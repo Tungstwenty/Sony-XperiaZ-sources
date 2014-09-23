@@ -29,6 +29,7 @@
 #include "core/svg/SVGFitToViewBox.h"
 #include "core/svg/SVGGraphicsElement.h"
 #include "core/svg/SVGZoomAndPan.h"
+#include "wtf/WeakPtr.h"
 
 namespace WebCore {
 
@@ -44,7 +45,7 @@ class SVGSVGElement FINAL : public SVGGraphicsElement,
                             public SVGFitToViewBox,
                             public SVGZoomAndPan {
 public:
-    static PassRefPtr<SVGSVGElement> create(const QualifiedName&, Document*);
+    static PassRefPtr<SVGSVGElement> create(Document&);
 
     using SVGGraphicsElement::ref;
     using SVGGraphicsElement::deref;
@@ -130,17 +131,17 @@ public:
     SVGZoomAndPanType zoomAndPan() const { return m_zoomAndPan; }
     void setZoomAndPan(unsigned short zoomAndPan) { m_zoomAndPan = SVGZoomAndPan::parseFromNumber(zoomAndPan); }
 
-    bool hasEmptyViewBox() const { return viewBoxIsValid() && viewBoxCurrentValue().isEmpty(); }
+    bool hasEmptyViewBox() const { return viewBoxCurrentValue().isValid() && viewBoxCurrentValue().isEmpty(); }
 
 private:
-    SVGSVGElement(const QualifiedName&, Document*);
+    explicit SVGSVGElement(Document&);
     virtual ~SVGSVGElement();
 
     virtual bool isSVGSVGElement() const OVERRIDE { return true; }
 
     virtual void parseAttribute(const QualifiedName&, const AtomicString&) OVERRIDE;
 
-    virtual bool rendererIsNeeded(const NodeRenderingContext&) OVERRIDE;
+    virtual bool rendererIsNeeded(const RenderStyle&) OVERRIDE;
     virtual RenderObject* createRenderer(RenderStyle*);
 
     virtual InsertionNotificationRequest insertedInto(ContainerNode*) OVERRIDE;
@@ -169,21 +170,22 @@ private:
         DECLARE_ANIMATED_PRESERVEASPECTRATIO(PreserveAspectRatio, preserveAspectRatio)
     END_DECLARE_ANIMATED_PROPERTIES
 
-    virtual AffineTransform localCoordinateSpaceTransform(SVGLocatable::CTMScope) const;
+    virtual AffineTransform localCoordinateSpaceTransform(SVGElement::CTMScope) const;
 
     bool m_useCurrentView;
     SVGZoomAndPanType m_zoomAndPan;
     RefPtr<SMILTimeContainer> m_timeContainer;
     SVGPoint m_translation;
     RefPtr<SVGViewSpec> m_viewSpec;
+    WeakPtrFactory<SVGSVGElement> m_weakFactory;
 };
 
-inline SVGSVGElement* toSVGSVGElement(Node* node)
+inline bool isSVGSVGElement(const Node& node)
 {
-    ASSERT_WITH_SECURITY_IMPLICATION(!node || node->isSVGElement());
-    ASSERT_WITH_SECURITY_IMPLICATION(!node || toSVGElement(node)->isSVGSVGElement());
-    return static_cast<SVGSVGElement*>(node);
+    return node.isSVGElement() && toSVGElement(node).isSVGSVGElement();
 }
+
+DEFINE_NODE_TYPE_CASTS_WITH_FUNCTION(SVGSVGElement);
 
 } // namespace WebCore
 

@@ -61,6 +61,9 @@ public:
 
     String altText() const { return m_altText; }
 
+    inline void setImageDevicePixelRatio(float factor) { m_imageDevicePixelRatio = factor; }
+    float imageDevicePixelRatio() const { return m_imageDevicePixelRatio; }
+
 protected:
     virtual bool needsPreferredWidthsRecalculation() const OVERRIDE FINAL;
     virtual RenderBox* embeddedContentBox() const OVERRIDE FINAL;
@@ -73,6 +76,9 @@ protected:
     void paintIntoRect(GraphicsContext*, const LayoutRect&);
     virtual void paint(PaintInfo&, const LayoutPoint&) OVERRIDE FINAL;
     virtual void layout();
+    virtual void didLayout(ResourceLoadPriorityOptimizer&);
+    virtual void didScroll(ResourceLoadPriorityOptimizer&);
+    void updateImageLoadingPriority(ResourceLoadPriorityOptimizer&);
 
     virtual void intrinsicSizeChanged()
     {
@@ -101,6 +107,8 @@ private:
     IntSize imageSizeForError(ImageResource*) const;
     void imageDimensionsChanged(bool imageSizeChanged, const IntRect* = 0);
     bool updateIntrinsicSizeIfNeeded(const LayoutSize&, bool imageSizeChanged);
+    // Update the size of the image to be rendered. Object-fit may cause this to be different from the CSS box's content rect.
+    void updateInnerContentRect();
 
     void paintAreaElementFocusRing(PaintInfo&);
 
@@ -110,24 +118,12 @@ private:
     bool m_needsToSetSizeForAltText;
     bool m_didIncrementVisuallyNonEmptyPixelCount;
     bool m_isGeneratedContent;
+    float m_imageDevicePixelRatio;
 
     friend class RenderImageScaleObserver;
 };
 
-inline RenderImage* toRenderImage(RenderObject* object)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!object || object->isRenderImage());
-    return static_cast<RenderImage*>(object);
-}
-
-inline const RenderImage* toRenderImage(const RenderObject* object)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!object || object->isRenderImage());
-    return static_cast<const RenderImage*>(object);
-}
-
-// This will catch anyone doing an unnecessary cast.
-void toRenderImage(const RenderImage*);
+DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderImage, isRenderImage());
 
 } // namespace WebCore
 

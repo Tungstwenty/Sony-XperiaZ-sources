@@ -27,16 +27,16 @@
 #include "core/dom/Text.h"
 #include "core/editing/Editor.h"
 #include "core/html/HTMLFrameOwnerElement.h"
-#include "core/page/FrameView.h"
-#include "core/platform/graphics/FloatPoint.h"
-#include "core/platform/graphics/FloatQuad.h"
-#include "core/platform/graphics/IntPoint.h"
-#include "core/platform/graphics/IntSize.h"
-#include "core/platform/text/TextBreakIterator.h"
+#include "core/frame/Frame.h"
+#include "core/frame/FrameView.h"
 #include "core/rendering/RenderBox.h"
 #include "core/rendering/RenderObject.h"
 #include "core/rendering/RenderText.h"
 #include "core/rendering/style/RenderStyle.h"
+#include "platform/geometry/FloatPoint.h"
+#include "platform/geometry/FloatQuad.h"
+#include "platform/geometry/IntSize.h"
+#include "platform/text/TextBreakIterator.h"
 
 namespace WebCore {
 
@@ -112,7 +112,7 @@ bool providesContextMenuItems(Node* node)
         return true;
     if (node->renderer()->canBeSelectionLeaf()) {
         // If the context menu gesture will trigger a selection all selectable nodes are valid targets.
-        if (node->renderer()->frame()->editor()->behavior().shouldSelectOnContextualMenuClick())
+        if (node->renderer()->frame()->editor().behavior().shouldSelectOnContextualMenuClick())
             return true;
         // Only the selected part of the renderer is a valid target, but this will be corrected in
         // appendContextSubtargetsForNode.
@@ -150,18 +150,18 @@ static inline void appendContextSubtargetsForNode(Node* node, SubtargetGeometryL
     if (!node->isTextNode())
         return appendBasicSubtargetsForNode(node, subtargets);
 
-    Text* textNode = static_cast<WebCore::Text*>(node);
-    RenderText* textRenderer = static_cast<RenderText*>(textNode->renderer());
+    Text* textNode = toText(node);
+    RenderText* textRenderer = toRenderText(textNode->renderer());
 
-    if (textRenderer->frame()->editor()->behavior().shouldSelectOnContextualMenuClick()) {
+    if (textRenderer->frame()->editor().behavior().shouldSelectOnContextualMenuClick()) {
         // Make subtargets out of every word.
         String textValue = textNode->data();
         TextBreakIterator* wordIterator = wordBreakIterator(textValue, 0, textValue.length());
-        int lastOffset = textBreakFirst(wordIterator);
+        int lastOffset = wordIterator->first();
         if (lastOffset == -1)
             return;
         int offset;
-        while ((offset = textBreakNext(wordIterator)) != -1) {
+        while ((offset = wordIterator->next()) != -1) {
             if (isWordTextBreak(wordIterator)) {
                 Vector<FloatQuad> quads;
                 textRenderer->absoluteQuadsForRange(quads, lastOffset, offset);
@@ -320,7 +320,7 @@ float zoomableIntersectionQuotient(const IntPoint& touchHotspot, const IntRect& 
     IntRect rect = subtarget.boundingBox();
 
     // Convert from frame coordinates to window coordinates.
-    rect = subtarget.node()->document()->view()->contentsToWindow(rect);
+    rect = subtarget.node()->document().view()->contentsToWindow(rect);
 
     // Check the rectangle is meaningful zoom target. It should at least contain the hotspot.
     if (!rect.contains(touchHotspot))
@@ -343,7 +343,7 @@ float hybridDistanceFunction(const IntPoint& touchHotspot, const IntRect& touchR
     IntRect rect = subtarget.boundingBox();
 
     // Convert from frame coordinates to window coordinates.
-    rect = subtarget.node()->document()->view()->contentsToWindow(rect);
+    rect = subtarget.node()->document().view()->contentsToWindow(rect);
 
     float radiusSquared = 0.25f * (touchRect.size().diagonalLengthSquared());
     float distanceToAdjustScore = rect.distanceSquaredToPoint(touchHotspot) / radiusSquared;
@@ -384,7 +384,7 @@ void adjustPointToRect(FloatPoint& point, const FloatRect& rect)
 
 bool snapTo(const SubtargetGeometry& geom, const IntPoint& touchPoint, const IntRect& touchArea, IntPoint& adjustedPoint)
 {
-    FrameView* view = geom.node()->document()->view();
+    FrameView* view = geom.node()->document().view();
     FloatQuad quad = geom.quad();
 
     if (quad.isRectilinear()) {
@@ -462,7 +462,7 @@ bool findNodeWithLowestDistanceMetric(Node*& targetNode, IntPoint& targetPoint, 
         }
     }
     if (targetNode) {
-        targetArea = targetNode->document()->view()->contentsToWindow(targetArea);
+        targetArea = targetNode->document().view()->contentsToWindow(targetArea);
     }
     return (targetNode);
 }

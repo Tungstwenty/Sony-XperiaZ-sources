@@ -27,16 +27,15 @@
 
 #include "config.h"
 
-#include "core/platform/ScrollAnimatorNone.h"
+#include "platform/scroll/ScrollAnimatorNone.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include "core/platform/Logging.h"
-#include "core/platform/ScrollAnimator.h"
-#include "core/platform/ScrollableArea.h"
-#include "core/platform/graphics/FloatPoint.h"
-#include "core/platform/graphics/IntRect.h"
-#include "core/tests/TreeTestHelpers.h"
+#include "platform/Logging.h"
+#include "platform/geometry/FloatPoint.h"
+#include "platform/geometry/IntRect.h"
+#include "platform/scroll/ScrollAnimator.h"
+#include "platform/scroll/ScrollableArea.h"
 
 using namespace std;
 using namespace WebCore;
@@ -62,13 +61,14 @@ public:
     MOCK_CONST_METHOD0(enclosingScrollableArea, ScrollableArea*());
     MOCK_CONST_METHOD0(minimumScrollPosition, IntPoint());
     MOCK_CONST_METHOD0(maximumScrollPosition, IntPoint());
-    MOCK_CONST_METHOD1(visibleContentRect, IntRect(VisibleContentRectIncludesScrollbars));
+    MOCK_CONST_METHOD1(visibleContentRect, IntRect(IncludeScrollbarsInRect));
     MOCK_CONST_METHOD0(contentsSize, IntSize());
     MOCK_CONST_METHOD0(overhangAmount, IntSize());
     MOCK_CONST_METHOD0(scrollbarsCanBeActive, bool());
     MOCK_CONST_METHOD0(scrollableAreaBoundingBox, IntRect());
 
     virtual bool userInputScrollable(ScrollbarOrientation) const OVERRIDE { return true; }
+    virtual bool shouldPlaceVerticalScrollbarOnLeft() const OVERRIDE { return false; }
     virtual IntPoint scrollPosition() const OVERRIDE { return IntPoint(); }
     virtual int visibleHeight() const OVERRIDE { return 768; }
     virtual int visibleWidth() const OVERRIDE { return 1024; }

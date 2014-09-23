@@ -73,7 +73,7 @@ WebInspector.StatusBarText = function(text, className)
     WebInspector.StatusBarItem.call(this, document.createElement("span"));
     this.element.className = "status-bar-item status-bar-text";
     if (className)
-        this.element.addStyleClass(className);
+        this.element.classList.add(className);
     this.element.textContent = text;
 }
 
@@ -129,8 +129,22 @@ WebInspector.StatusBarButton.prototype = {
     _clicked: function()
     {
         this.dispatchEventToListeners("click");
-        if (this._longClickInterval)
+        if (this._longClickInterval) {
             clearInterval(this._longClickInterval);
+            delete this._longClickInterval;
+        }
+    },
+
+    /**
+     * @override
+     */
+    _applyEnabledState: function()
+    {
+        this.element.disabled = !this._enabled;
+        if (this._longClickInterval) {
+            clearInterval(this._longClickInterval);
+            delete this._longClickInterval;
+        }
     },
 
     /**
@@ -167,9 +181,9 @@ WebInspector.StatusBarButton.prototype = {
         if (this.states === 2)
             this.element.enableStyleClass("toggled-on", x);
         else {
-            this.element.removeStyleClass("toggled-" + this._state);
+            this.element.classList.remove("toggled-" + this._state);
             if (x !== 0)
-                this.element.addStyleClass("toggled-" + x);
+                this.element.classList.add("toggled-" + x);
         }
         this._state = x;
     },
@@ -204,12 +218,21 @@ WebInspector.StatusBarButton.prototype = {
 
     makeLongClickEnabled: function()
     {
-        this.element.addEventListener("mousedown", mouseDown.bind(this), false);
-        this.element.addEventListener("mouseout", mouseUp.bind(this), false);
-        this.element.addEventListener("mouseup", mouseUp.bind(this), false);
+        var boundMouseDown = mouseDown.bind(this);
+        var boundMouseUp = mouseUp.bind(this);
+
+        this.element.addEventListener("mousedown", boundMouseDown, false);
+        this.element.addEventListener("mouseout", boundMouseUp, false);
+        this.element.addEventListener("mouseup", boundMouseUp, false);
 
         var longClicks = 0;
 
+        this._longClickData = { mouseUp: boundMouseUp, mouseDown: boundMouseDown };
+
+        /**
+         * @param {?Event} e
+         * @this {WebInspector.StatusBarButton}
+         */
         function mouseDown(e)
         {
             if (e.which !== 1)
@@ -218,14 +241,23 @@ WebInspector.StatusBarButton.prototype = {
             this._longClickInterval = setInterval(longClicked.bind(this), 200);
         }
 
+        /**
+         * @param {?Event} e
+         * @this {WebInspector.StatusBarButton}
+         */
         function mouseUp(e)
         {
             if (e.which !== 1)
                 return;
-            if (this._longClickInterval)
+            if (this._longClickInterval) {
                 clearInterval(this._longClickInterval);
+                delete this._longClickInterval;
+            }
         }
 
+        /**
+         * @this {WebInspector.StatusBarButton}
+         */
         function longClicked()
         {
             ++longClicks;
@@ -233,30 +265,59 @@ WebInspector.StatusBarButton.prototype = {
         }
     },
 
-    /**
-     * @param {function():Array.<WebInspector.StatusBarButton>} buttonsProvider
-     */
-    makeLongClickOptionsEnabled: function(buttonsProvider)
+    unmakeLongClickEnabled: function()
     {
-        this.makeLongClickEnabled();
-
-        this.longClickGlyph = document.createElement("div");
-        this.longClickGlyph.className = "fill long-click-glyph";
-        this.element.appendChild(this.longClickGlyph);
-
-        this.longClickGlyphShadow = document.createElement("div");
-        this.longClickGlyphShadow.className = "fill long-click-glyph shadow";
-        this.element.appendChild(this.longClickGlyphShadow);
-
-        this.addEventListener("longClickDown", this._showOptions.bind(this, buttonsProvider), this);
+        if (!this._longClickData)
+            return;
+        this.element.removeEventListener("mousedown", this._longClickData.mouseDown, false);
+        this.element.removeEventListener("mouseout", this._longClickData.mouseUp, false);
+        this.element.removeEventListener("mouseup", this._longClickData.mouseUp, false);
+        delete this._longClickData;
     },
 
     /**
-     * @param {function():Array.<WebInspector.StatusBarButton>} buttonsProvider
+     * @param {?function():!Array.<!WebInspector.StatusBarButton>} buttonsProvider
      */
-    _showOptions: function(buttonsProvider)
+    setLongClickOptionsEnabled: function(buttonsProvider)
     {
-        var buttons = buttonsProvider();
+        if (buttonsProvider) {
+            if (!this._longClickOptionsData) {
+                this.makeLongClickEnabled();
+
+                this.longClickGlyph = document.createElement("div");
+                this.longClickGlyph.className = "fill long-click-glyph";
+                this.element.appendChild(this.longClickGlyph);
+
+                this.longClickGlyphShadow = document.createElement("div");
+                this.longClickGlyphShadow.className = "fill long-click-glyph shadow";
+                this.element.appendChild(this.longClickGlyphShadow);
+
+                var longClickDownListener = this._showOptions.bind(this);
+                this.addEventListener("longClickDown", longClickDownListener, this);
+
+                this._longClickOptionsData = {
+                    glyphElement: this.longClickGlyph,
+                    glyphShadowElement: this.longClickGlyphShadow,
+                    longClickDownListener: longClickDownListener
+                };
+            }
+            this._longClickOptionsData.buttonsProvider = buttonsProvider;
+        } else {
+            if (!this._longClickOptionsData)
+                return;
+            this.element.removeChild(this._longClickOptionsData.glyphElement);
+            this.element.removeChild(this._longClickOptionsData.glyphShadowElement);
+
+            this.removeEventListener("longClickDown", this._longClickOptionsData.longClickDownListener, this);
+            delete this._longClickOptionsData;
+
+            this.unmakeLongClickEnabled();
+        }
+    },
+
+    _showOptions: function()
+    {
+        var buttons = this._longClickOptionsData.buttonsProvider();
         var mainButtonClone = new WebInspector.StatusBarButton(this.title, this.className, this.states);
         mainButtonClone.addEventListener("click", this._clicked, this);
         mainButtonClone.state = this.state;
@@ -267,9 +328,21 @@ WebInspector.StatusBarButton.prototype = {
 
         var optionsGlassPane = new WebInspector.GlassPane();
         var optionsBarElement = optionsGlassPane.element.createChild("div", "alternate-status-bar-buttons-bar");
-        const buttonHeight = 24;
+        const buttonHeight = 23;
+
+        var hostButtonPosition = this.element.totalOffset();
+
+        var topNotBottom = hostButtonPosition.top + buttonHeight * buttons.length < document.documentElement.offsetHeight;
+
+        if (topNotBottom)
+            buttons = buttons.reverse();
+
         optionsBarElement.style.height = (buttonHeight * buttons.length) + "px";
-        optionsBarElement.style.left = (this.element.offsetLeft + 1) + "px";
+        if (topNotBottom)
+            optionsBarElement.style.top = (hostButtonPosition.top + 1) + "px";
+        else
+            optionsBarElement.style.top = (hostButtonPosition.top - (buttonHeight * (buttons.length - 1))) + "px";
+        optionsBarElement.style.left = (hostButtonPosition.left + 1) + "px";
 
         var boundMouseOver = mouseOver.bind(this);
         var boundMouseOut = mouseOut.bind(this);
@@ -278,14 +351,15 @@ WebInspector.StatusBarButton.prototype = {
             buttons[i].element.addEventListener("mouseout", boundMouseOut, false);
             optionsBarElement.appendChild(buttons[i].element);
         }
-        buttons[buttons.length - 1].element.addStyleClass("emulate-active");
+        var hostButtonIndex = topNotBottom ? 0 : buttons.length - 1;
+        buttons[hostButtonIndex].element.classList.add("emulate-active");
 
         function mouseOver(e)
         {
             if (e.which !== 1)
                 return;
             var buttonElement = e.target.enclosingNodeOrSelfWithClass("status-bar-item");
-            buttonElement.addStyleClass("emulate-active");
+            buttonElement.classList.add("emulate-active");
         }
 
         function mouseOut(e)
@@ -293,7 +367,7 @@ WebInspector.StatusBarButton.prototype = {
             if (e.which !== 1)
                 return;
             var buttonElement = e.target.enclosingNodeOrSelfWithClass("status-bar-item");
-            buttonElement.removeStyleClass("emulate-active");
+            buttonElement.classList.remove("emulate-active");
         }
 
         function mouseUp(e)
@@ -304,8 +378,8 @@ WebInspector.StatusBarButton.prototype = {
             document.documentElement.removeEventListener("mouseup", mouseUpListener, false);
 
             for (var i = 0; i < buttons.length; ++i) {
-                if (buttons[i].element.hasStyleClass("emulate-active")) {
-                    buttons[i].element.removeStyleClass("emulate-active");
+                if (buttons[i].element.classList.contains("emulate-active")) {
+                    buttons[i].element.classList.remove("emulate-active");
                     buttons[i]._clicked();
                     break;
                 }
@@ -319,7 +393,7 @@ WebInspector.StatusBarButton.prototype = {
 /**
  * @constructor
  * @extends {WebInspector.StatusBarItem}
- * @param {?function(Event)} changeHandler
+ * @param {?function(!Event)} changeHandler
  * @param {string=} className
  */
 WebInspector.StatusBarComboBox = function(changeHandler, className)
@@ -332,10 +406,18 @@ WebInspector.StatusBarComboBox = function(changeHandler, className)
     if (changeHandler)
         this._selectElement.addEventListener("change", changeHandler, false);
     if (className)
-        this._selectElement.addStyleClass(className);
+        this._selectElement.classList.add(className);
 }
 
 WebInspector.StatusBarComboBox.prototype = {
+    /**
+     * @return {!Element}
+     */
+    selectElement: function()
+    {
+        return this._selectElement;
+    },
+
     /**
      * @return {number}
      */
@@ -401,7 +483,7 @@ WebInspector.StatusBarComboBox.prototype = {
     },
 
     /**
-     * @param {Element} option
+     * @param {!Element} option
      */
     select: function(option)
     {
@@ -422,6 +504,32 @@ WebInspector.StatusBarComboBox.prototype = {
     selectedIndex: function()
     {
         return this._selectElement.selectedIndex;
+    },
+
+    __proto__: WebInspector.StatusBarItem.prototype
+}
+
+/**
+ * @constructor
+ * @extends {WebInspector.StatusBarItem}
+ * @param {string} title
+ */
+WebInspector.StatusBarCheckbox = function(title)
+{
+    WebInspector.StatusBarItem.call(this, document.createElement("label"));
+    this.element.classList.add("status-bar-item", "checkbox");
+    this._checkbox = this.element.createChild("input");
+    this._checkbox.type = "checkbox";
+    this.element.createTextChild(title);
+}
+
+WebInspector.StatusBarCheckbox.prototype = {
+    /**
+     * @return {boolean}
+     */
+    checked: function()
+    {
+        return this._checkbox.checked;
     },
 
     __proto__: WebInspector.StatusBarItem.prototype

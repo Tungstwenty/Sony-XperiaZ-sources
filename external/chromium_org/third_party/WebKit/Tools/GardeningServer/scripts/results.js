@@ -29,9 +29,6 @@ var results = results || {};
 
 var kResultsName = 'failing_results.json';
 
-var kBuildLinkRegexp = /a href="\d+\/"/g;
-var kBuildNumberRegexp = /\d+/;
-
 var PASS = 'PASS';
 var TIMEOUT = 'TIMEOUT';
 var TEXT = 'TEXT';
@@ -173,13 +170,6 @@ results.failureTypeList = function(failureBlob)
     return failureBlob.split(' ');
 };
 
-results.canRebaseline = function(failureTypeList)
-{
-    return failureTypeList.some(function(element) {
-        return results.failureTypeToExtensionList(element).length > 0;
-    });
-};
-
 results.directoryForBuilder = function(builderName)
 {
     return config.kPlatforms[config.currentPlatform].resultsDirectoryNameFromBuilderName(builderName);
@@ -189,17 +179,20 @@ function resultsDirectoryURL(platform, builderName)
 {
     if (config.useLocalResults)
         return '/localresult?path=';
-    return resultsDirectoryListingURL(platform, builderName) + 'results/layout-test-results/';
+    return layoutTestResultsURL(platform) + '/' + results.directoryForBuilder(builderName) + '/results/layout-test-results/';
 }
 
-function resultsDirectoryListingURL(platform, builderName)
+function resultsPrefixListingURL(platform, builderName, marker)
 {
-    return layoutTestResultsURL(platform) + '/' + results.directoryForBuilder(builderName) + '/';
+    var url =  layoutTestResultsURL(platform) + '/?prefix=' + results.directoryForBuilder(builderName) + '/&delimiter=/';
+    if (marker)
+        return url + '&marker=' + marker;
+    return url;
 }
 
 function resultsDirectoryURLForBuildNumber(platform, builderName, buildNumber)
 {
-    return resultsDirectoryListingURL(platform, builderName) + buildNumber + '/';
+    return layoutTestResultsURL(platform) + '/' + results.directoryForBuilder(builderName) + '/' + buildNumber + '/' ;
 }
 
 function resultsSummaryURL(platform, builderName)
@@ -332,18 +325,33 @@ results.collectUnexpectedResults = function(dictionaryOfResultNodes)
 // Callback data is [{ buildNumber:, url: }]
 function historicalResultsLocations(platform, builderName, callback)
 {
-    var listingURL = resultsDirectoryListingURL(platform, builderName);
-    net.get(listingURL, function(directoryListing) {
-        var historicalResultsData = directoryListing.match(kBuildLinkRegexp).map(function(buildLink) {
-            var buildNumber = parseInt(buildLink.match(kBuildNumberRegexp)[0]);
-            var resultsData = {
-                'buildNumber': buildNumber,
-                'url': resultsSummaryURLForBuildNumber(platform, builderName, buildNumber)
-            };
-            return resultsData;
-        }).reverse();
+    var historicalResultsData = [];
 
-        callback(historicalResultsData);
+    function parseListingDocument(prefixListingDocument) {
+        $(prefixListingDocument).find("Prefix").each(function() {
+            var buildString = this.textContent.replace(results.directoryForBuilder(builderName) + '/', '');
+            if (buildString.match(/\d+\//)) {
+                var buildNumber = parseInt(buildString);
+                var resultsData = {
+                    'buildNumber': buildNumber,
+                    'url': resultsSummaryURLForBuildNumber(platform, builderName, buildNumber)
+                };
+                historicalResultsData.unshift(resultsData);
+           }
+        });
+        var nextMarker = $(prefixListingDocument).find('NextMarker').get();
+        if (nextMarker.length) {
+            var nextListingURL = resultsPrefixListingURL(platform, builderName, nextMarker[0].textContent);
+            net.get(nextListingURL, parseListingDocument);
+        } else {
+            callback(historicalResultsData);
+        }
+    }
+
+    builders.mostRecentBuildForBuilder(platform, builderName, function (mostRecentBuildNumber) {
+        var marker = results.directoryForBuilder(builderName) + "/" + (mostRecentBuildNumber - 100) + "/";
+        var listingURL = resultsPrefixListingURL(platform, builderName, marker);
+        net.get(listingURL, parseListingDocument);
     });
 }
 

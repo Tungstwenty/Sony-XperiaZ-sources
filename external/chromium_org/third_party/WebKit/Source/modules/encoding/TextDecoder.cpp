@@ -38,13 +38,13 @@
 
 namespace WebCore {
 
-PassRefPtr<TextDecoder> TextDecoder::create(const String& label, const Dictionary& options, ExceptionState& es)
+PassRefPtr<TextDecoder> TextDecoder::create(const String& label, const Dictionary& options, ExceptionState& exceptionState)
 {
     const String& encodingLabel = label.isNull() ? String("utf-8") : label;
 
     WTF::TextEncoding encoding(encodingLabel);
     if (!encoding.isValid()) {
-        es.throwTypeError();
+        exceptionState.throwUninformativeAndGenericTypeError();
         return 0;
     }
 
@@ -59,6 +59,7 @@ TextDecoder::TextDecoder(const String& encoding, bool fatal)
     : m_encoding(encoding)
     , m_codec(newTextCodec(m_encoding))
     , m_fatal(fatal)
+    , m_bomSeen(false)
 {
 }
 
@@ -68,10 +69,15 @@ TextDecoder::~TextDecoder()
 
 String TextDecoder::encoding() const
 {
-    return String(m_encoding.name()).lower();
+    String name = String(m_encoding.name()).lower();
+    // Where possible, encoding aliases should be handled by changes to Chromium's ICU or Blink's WTF.
+    // The same codec is used, but WTF maintains a different name/identity for these.
+    if (name == "iso-8859-1" || name == "us-ascii")
+        return "windows-1252";
+    return name;
 }
 
-String TextDecoder::decode(ArrayBufferView* input, const Dictionary& options, ExceptionState& es)
+String TextDecoder::decode(ArrayBufferView* input, const Dictionary& options, ExceptionState& exceptionState)
 {
     bool stream = false;
     options.get("stream", stream);
@@ -88,9 +94,19 @@ String TextDecoder::decode(ArrayBufferView* input, const Dictionary& options, Ex
     String s = m_codec->decode(start, length, flush, m_fatal, sawError);
 
     if (m_fatal && sawError) {
-        es.throwDOMException(EncodingError, "The encoded data was not valid.");
+        exceptionState.throwDOMException(EncodingError, "The encoded data was not valid.");
         return String();
     }
+
+    if (!m_bomSeen && !s.isEmpty()) {
+        m_bomSeen = true;
+        String name(m_encoding.name());
+        if ((name == "UTF-8" || name == "UTF-16LE" || name == "UTF-16BE") && s[0] == 0xFEFF)
+            s.remove(0);
+    }
+
+    if (flush)
+        m_bomSeen = false;
 
     return s;
 }

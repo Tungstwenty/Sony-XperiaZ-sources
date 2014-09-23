@@ -38,7 +38,7 @@ using namespace std;
 namespace WebCore {
 
 RenderRubyText::RenderRubyText(Element* element)
-    : RenderBlock(element)
+    : RenderBlockFlow(element)
 {
 }
 
@@ -56,7 +56,7 @@ ETextAlign RenderRubyText::textAlignmentForLine(bool endsWithSoftBreak) const
     ETextAlign textAlign = style()->textAlign();
     // FIXME: This check is bogus since user can set the initial value.
     if (textAlign != RenderStyle::initialTextAlign())
-        return RenderBlock::textAlignmentForLine(endsWithSoftBreak);
+        return RenderBlockFlow::textAlignmentForLine(endsWithSoftBreak);
 
     // The default behavior is to allow ruby text to expand if it is shorter than the ruby base.
     return JUSTIFY;

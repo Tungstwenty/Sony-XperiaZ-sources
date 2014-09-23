@@ -30,27 +30,21 @@
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/appcache/ApplicationCacheHost.h"
-#include "core/page/Frame.h"
+#include "core/frame/Frame.h"
 
 namespace WebCore {
 
 using namespace HTMLNames;
 
-HTMLHtmlElement::HTMLHtmlElement(const QualifiedName& tagName, Document* document)
-    : HTMLElement(tagName, document)
+HTMLHtmlElement::HTMLHtmlElement(Document& document)
+    : HTMLElement(htmlTag, document)
 {
-    ASSERT(hasTagName(htmlTag));
     ScriptWrappable::init(this);
 }
 
-PassRefPtr<HTMLHtmlElement> HTMLHtmlElement::create(Document* document)
+PassRefPtr<HTMLHtmlElement> HTMLHtmlElement::create(Document& document)
 {
-    return adoptRef(new HTMLHtmlElement(htmlTag, document));
-}
-
-PassRefPtr<HTMLHtmlElement> HTMLHtmlElement::create(const QualifiedName& tagName, Document* document)
-{
-    return adoptRef(new HTMLHtmlElement(tagName, document));
+    return adoptRef(new HTMLHtmlElement(document));
 }
 
 bool HTMLHtmlElement::isURLAttribute(const Attribute& attribute) const
@@ -61,13 +55,13 @@ bool HTMLHtmlElement::isURLAttribute(const Attribute& attribute) const
 void HTMLHtmlElement::insertedByParser()
 {
     // When parsing a fragment, its dummy document has a null parser.
-    if (!document()->parser() || !document()->parser()->documentWasLoadedAsPartOfNavigation())
+    if (!document().parser() || !document().parser()->documentWasLoadedAsPartOfNavigation())
         return;
 
-    if (!document()->frame())
+    if (!document().frame())
         return;
 
-    DocumentLoader* documentLoader = document()->frame()->loader()->documentLoader();
+    DocumentLoader* documentLoader = document().frame()->loader().documentLoader();
     if (!documentLoader)
         return;
 
@@ -75,7 +69,7 @@ void HTMLHtmlElement::insertedByParser()
     if (manifest.isEmpty())
         documentLoader->applicationCacheHost()->selectCacheWithoutManifest();
     else
-        documentLoader->applicationCacheHost()->selectCacheWithManifest(document()->completeURL(manifest));
+        documentLoader->applicationCacheHost()->selectCacheWithManifest(document().completeURL(manifest));
 }
 
 }

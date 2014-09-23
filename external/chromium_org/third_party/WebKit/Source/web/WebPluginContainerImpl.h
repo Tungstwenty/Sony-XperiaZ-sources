@@ -32,8 +32,8 @@
 #define WebPluginContainerImpl_h
 
 #include "WebPluginContainer.h"
-#include "core/platform/Widget.h"
 #include "core/plugins/PluginView.h"
+#include "platform/Widget.h"
 
 #include "wtf/OwnPtr.h"
 #include "wtf/PassRefPtr.h"
@@ -53,9 +53,10 @@ class ResourceError;
 class ResourceResponse;
 class TouchEvent;
 class WheelEvent;
+class Widget;
 }
 
-namespace WebKit {
+namespace blink {
 
 struct WebPrintParams;
 
@@ -76,6 +77,7 @@ public:
     virtual NPObject* scriptableObject() OVERRIDE;
     virtual bool getFormValue(String&) OVERRIDE;
     virtual bool supportsKeyboardFocus() const OVERRIDE;
+    virtual bool supportsInputMethod() const OVERRIDE;
     virtual bool canProcessDrag() const OVERRIDE;
     virtual bool wantsWheelEvents() OVERRIDE;
 
@@ -89,10 +91,11 @@ public:
     virtual void handleEvent(WebCore::Event*);
     virtual void frameRectsChanged();
     virtual void setParentVisible(bool);
-    virtual void setParent(WebCore::ScrollView*);
+    virtual void setParent(WebCore::Widget*);
     virtual void widgetPositionsUpdated();
     virtual void clipRectChanged() OVERRIDE;
     virtual bool isPluginContainer() const { return true; }
+    virtual void eventListenersRemoved() OVERRIDE;
 
     // WebPluginContainer methods
     virtual WebElement element();
@@ -196,6 +199,24 @@ private:
     bool m_wantsWheelEvents;
 };
 
-} // namespace WebKit
+inline WebPluginContainerImpl* toPluginContainerImpl(WebCore::Widget* widget)
+{
+    ASSERT_WITH_SECURITY_IMPLICATION(!widget || widget->isPluginContainer());
+    // We need to ensure that the object is actually of type PluginContainer
+    // as there are many subclasses of Widget.
+    return static_cast<WebPluginContainerImpl*>(widget);
+}
+
+inline WebPluginContainerImpl* toPluginContainerImpl(WebPluginContainer* container)
+{
+    // Unlike Widget, we need not worry about object type for container.
+    // WebPluginContainerImpl is the only subclass of WebPluginContainer.
+    return static_cast<WebPluginContainerImpl*>(container);
+}
+
+// This will catch anyone doing an unnecessary cast.
+void toPluginContainerImpl(const WebPluginContainerImpl*);
+
+} // namespace blink
 
 #endif

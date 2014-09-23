@@ -33,19 +33,23 @@
 
 #include "TestCommon.h"
 #include "public/platform/WebMIDIAccessor.h"
+#include "public/platform/WebNonCopyable.h"
+#include "public/testing/WebTask.h"
 
-namespace WebKit {
+namespace blink {
 class WebMIDIAccessorClient;
 }
 
 namespace WebTestRunner {
 
-class MockWebMIDIAccessor : public WebKit::WebMIDIAccessor {
+class TestInterfaces;
+
+class MockWebMIDIAccessor : public blink::WebMIDIAccessor, public blink::WebNonCopyable {
 public:
-    explicit MockWebMIDIAccessor(WebKit::WebMIDIAccessorClient*);
+    explicit MockWebMIDIAccessor(blink::WebMIDIAccessorClient*, TestInterfaces*);
     virtual ~MockWebMIDIAccessor();
 
-    // WebKit::WebMIDIAccessor implementation.
+    // blink::WebMIDIAccessor implementation.
     virtual void startSession() OVERRIDE;
     virtual void sendMIDIData(
         unsigned portIndex,
@@ -53,8 +57,13 @@ public:
         size_t length,
         double timestamp) OVERRIDE { }
 
+    // WebTask related methods
+    WebTaskList* taskList() { return &m_taskList; }
+
 private:
-    WebKit::WebMIDIAccessorClient* m_client;
+    blink::WebMIDIAccessorClient* m_client;
+    WebTaskList m_taskList;
+    TestInterfaces* m_interfaces;
 };
 
 } // namespace WebTestRunner

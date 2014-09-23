@@ -33,7 +33,7 @@
 
 #include "public/platform/WebCommon.h"
 
-namespace WebKit {
+namespace blink {
 
 // In chromium multi-dll build, webkit unittest code are compiled in webkit.dll.
 // This means the test suite object needs to be initialized inside WebKit.
@@ -43,14 +43,14 @@ namespace WebKit {
 // lifetime.
 
 // Initialize the global testSuite object inside webkit.dll
-WEBKIT_EXPORT void InitTestSuite(int argc, char** argv);
+BLINK_EXPORT void InitTestSuite(int argc, char** argv);
 
 // Runs all tests found inside webkit.dll
-WEBKIT_EXPORT int RunAllUnitTests();
+BLINK_EXPORT int RunAllUnitTests();
 
 // Deletes the global testSuite object inside webkit.dll
-WEBKIT_EXPORT void DeleteTestSuite();
+BLINK_EXPORT void DeleteTestSuite();
 
-} // namespace WebKit
+} // namespace blink
 
 #endif

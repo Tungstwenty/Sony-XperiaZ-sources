@@ -54,7 +54,7 @@ TestSuite = function()
 
 /**
  * Reports test failure.
- * @param {string} message Failure description.
+ * @param {string} message !Failure description.
  */
 TestSuite.prototype.fail = function(message)
 {
@@ -67,9 +67,9 @@ TestSuite.prototype.fail = function(message)
 
 /**
  * Equals assertion tests that expected === actual.
- * @param {Object} expected Expected object.
- * @param {Object} actual Actual object.
- * @param {string} opt_message User message to print if the test fails.
+ * @param {!Object} expected !Expected object.
+ * @param {!Object} actual !Actual object.
+ * @param {string} opt_message !User message to print if the test fails.
  */
 TestSuite.prototype.assertEquals = function(expected, actual, opt_message)
 {
@@ -83,8 +83,8 @@ TestSuite.prototype.assertEquals = function(expected, actual, opt_message)
 
 /**
  * True assertion tests that value == true.
- * @param {Object} value Actual object.
- * @param {string} opt_message User message to print if the test fails.
+ * @param {!Object} value !Actual object.
+ * @param {string} opt_message !User message to print if the test fails.
  */
 TestSuite.prototype.assertTrue = function(value, opt_message)
 {
@@ -94,7 +94,7 @@ TestSuite.prototype.assertTrue = function(value, opt_message)
 
 /**
  * HasKey assertion tests that object has given key.
- * @param {Object} object
+ * @param {!Object} object
  * @param {string} key
  */
 TestSuite.prototype.assertHasKey = function(object, key)
@@ -106,8 +106,8 @@ TestSuite.prototype.assertHasKey = function(object, key)
 
 /**
  * Contains assertion tests that string contains substring.
- * @param {string} string Outer.
- * @param {string} substring Inner.
+ * @param {string} string !Outer.
+ * @param {string} substring !Inner.
  */
 TestSuite.prototype.assertContains = function(string, substring)
 {
@@ -181,25 +181,24 @@ TestSuite.prototype.runTest = function(testName)
 
 
 /**
- * @param {string} panelName Name of the panel to show.
+ * @param {string} panelName !Name of the panel to show.
  */
 TestSuite.prototype.showPanel = function(panelName)
 {
     // Open Scripts panel.
-    var toolbar = document.getElementById("toolbar");
-    var button = toolbar.getElementsByClassName(panelName)[0];
-    button.click();
+    var button = document.getElementById("tab-" + panelName);
+    button.selectTabForTest();
     this.assertEquals(WebInspector.panels[panelName], WebInspector.inspectorView.currentPanel());
 };
 
 
 /**
  * Overrides the method with specified name until it's called first time.
- * @param {Object} receiver An object whose method to override.
- * @param {string} methodName Name of the method to override.
- * @param {Function} override A function that should be called right after the
+ * @param {!Object} receiver !An object whose method to override.
+ * @param {string} methodName !Name of the method to override.
+ * @param {!Function} override !A function that should be called right after the
  *     overriden method returns.
- * @param {boolean} opt_sticky Whether restore original method after first run
+ * @param {boolean} opt_sticky !Whether restore original method after first run
  *     or not.
  */
 TestSuite.prototype.addSniffer = function(receiver, methodName, override, opt_sticky)
@@ -244,7 +243,7 @@ TestSuite.prototype.testCompletionOnPause = function()
  */
 TestSuite.prototype.testShowScriptsTab = function()
 {
-    this.showPanel("scripts");
+    this.showPanel("sources");
     var test = this;
     // There should be at least main page script.
     this._waitUntilScriptsAreParsed(["debugger_test_page.html"],
@@ -274,7 +273,7 @@ TestSuite.prototype.testScriptsTabIsPopulatedOnInspectedPageRefresh = function()
     function waitUntilScriptIsParsed()
     {
         WebInspector.debuggerModel.removeEventListener(WebInspector.DebuggerModel.Events.GlobalObjectCleared, waitUntilScriptIsParsed);
-        test.showPanel("scripts");
+        test.showPanel("sources");
         test._waitUntilScriptsAreParsed(["debugger_test_page.html"],
             function() {
                 test.releaseControl();
@@ -291,7 +290,7 @@ TestSuite.prototype.testScriptsTabIsPopulatedOnInspectedPageRefresh = function()
  */
 TestSuite.prototype.testContentScriptIsPresent = function()
 {
-    this.showPanel("scripts");
+    this.showPanel("sources");
     var test = this;
 
     test._waitUntilScriptsAreParsed(
@@ -318,7 +317,7 @@ TestSuite.prototype.testNoScriptDuplicatesOnPanelSwitch = function()
     var expectedScriptsCount = 2;
     var parsedScripts = [];
 
-    this.showPanel("scripts");
+    this.showPanel("sources");
 
     function switchToElementsTab() {
         test.showPanel("elements");
@@ -326,7 +325,7 @@ TestSuite.prototype.testNoScriptDuplicatesOnPanelSwitch = function()
     }
 
     function switchToScriptsTab() {
-        test.showPanel("scripts");
+        test.showPanel("sources");
         setTimeout(checkScriptsPanel, 0);
     }
 
@@ -362,7 +361,7 @@ TestSuite.prototype.testNoScriptDuplicatesOnPanelSwitch = function()
 // frontend is being loaded.
 TestSuite.prototype.testPauseWhenLoadingDevTools = function()
 {
-    this.showPanel("scripts");
+    this.showPanel("sources");
 
     // Script execution can already be paused.
     if (WebInspector.debuggerModel.debuggerPausedDetails)
@@ -377,7 +376,7 @@ TestSuite.prototype.testPauseWhenLoadingDevTools = function()
 // is already running.
 TestSuite.prototype.testPauseWhenScriptIsRunning = function()
 {
-    this.showPanel("scripts");
+    this.showPanel("sources");
 
     this.evaluateInConsole_(
         'setTimeout("handleClick()" , 0)',
@@ -393,7 +392,7 @@ TestSuite.prototype.testPauseWhenScriptIsRunning = function()
     function testScriptPause() {
         // The script should be in infinite loop. Click "Pause" button to
         // pause it and wait for the result.
-        WebInspector.panels.scripts._pauseButton.element.click();
+        WebInspector.panels.sources._pauseButton.element.click();
 
         this._waitForScriptPause(this.releaseControl.bind(this));
     }
@@ -673,7 +672,7 @@ TestSuite.prototype.testPageOverlayUpdate = function()
 
 /**
  * Records timeline till console.timeStamp("ready"), invokes callback with resulting records.
- * @param {function(Array.<Object>)} callback
+ * @param {function(!Array.<!Object>)} callback
  */
 TestSuite.prototype.recordTimeline = function(callback)
 {
@@ -783,7 +782,7 @@ TestSuite.prototype.checkLogAndErrorMessages = function()
 
 /**
  * Serializes array of uiSourceCodes to string.
- * @param {Array.<WebInspectorUISourceCode>} uiSourceCodes
+ * @param {!Array.<!WebInspectorUISourceCode>} uiSourceCodes
  * @return {string}
  */
 TestSuite.prototype.uiSourceCodesToString_ = function(uiSourceCodes)
@@ -797,7 +796,7 @@ TestSuite.prototype.uiSourceCodesToString_ = function(uiSourceCodes)
 
 /**
  * Returns all loaded non anonymous uiSourceCodes.
- * @return {Array.<WebInspectorUISourceCode>}
+ * @return {!Array.<!WebInspectorUISourceCode>}
  */
 TestSuite.prototype.nonAnonymousUISourceCodes_ = function()
 {
@@ -840,7 +839,7 @@ TestSuite.prototype.evaluateInConsole_ = function(code, callback)
 /**
  * Checks that all expected scripts are present in the scripts list
  * in the Scripts panel.
- * @param {Array.<string>} expected Regular expressions describing
+ * @param {!Array.<string>} expected !Regular expressions describing
  *     expected script names.
  * @return {boolean} Whether all the scripts are in "scripts-files" select
  *     box
@@ -909,7 +908,7 @@ TestSuite.prototype._waitUntilScriptsAreParsed = function(expectedScripts, callb
         if (test._scriptsAreParsed(expectedScripts))
             callback();
         else
-            test.addSniffer(WebInspector.panels.scripts, "_addUISourceCode", waitForAllScripts);
+            test.addSniffer(WebInspector.panels.sources, "_addUISourceCode", waitForAllScripts);
     }
 
     waitForAllScripts();
@@ -948,7 +947,7 @@ uiTests.runAllTests = function()
 
 /**
  * Run specified test on a fresh instance of the test suite.
- * @param {string} name Name of a test method from TestSuite class.
+ * @param {string} name Name of a test method from !TestSuite class.
  */
 uiTests.runTest = function(name)
 {

@@ -29,7 +29,7 @@
  */
 
 #include "config.h"
-#include "core/dom/Node.h"
+#include "V8Node.h"
 
 #include "V8Attr.h"
 #include "V8CDATASection.h"
@@ -40,7 +40,6 @@
 #include "V8Element.h"
 #include "V8Entity.h"
 #include "V8HTMLElement.h"
-#include "V8Node.h"
 #include "V8Notation.h"
 #include "V8ProcessingInstruction.h"
 #include "V8SVGElement.h"
@@ -50,77 +49,76 @@
 #include "bindings/v8/V8AbstractEventListener.h"
 #include "bindings/v8/V8Binding.h"
 #include "bindings/v8/V8EventListener.h"
-#include "core/dom/CustomElementCallbackDispatcher.h"
 #include "core/dom/Document.h"
-#include "core/dom/EventListener.h"
+#include "core/dom/custom/CustomElementCallbackDispatcher.h"
+#include "core/events/EventListener.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "wtf/RefPtr.h"
 
 namespace WebCore {
 
-// This function is customized to take advantage of the optional 4th argument: AttachBehavior
-void V8Node::insertBeforeMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& args)
+// These functions are custom to prevent a wrapper lookup of the return value which is always
+// part of the arguments.
+void V8Node::insertBeforeMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    v8::Handle<v8::Object> holder = args.Holder();
+    v8::Handle<v8::Object> holder = info.Holder();
     Node* imp = V8Node::toNative(holder);
 
     CustomElementCallbackDispatcher::CallbackDeliveryScope deliveryScope;
 
-    ExceptionState es(args.GetIsolate());
-    Node* newChild = V8Node::HasInstance(args[0], args.GetIsolate(), worldType(args.GetIsolate())) ? V8Node::toNative(v8::Handle<v8::Object>::Cast(args[0])) : 0;
-    Node* refChild = V8Node::HasInstance(args[1], args.GetIsolate(), worldType(args.GetIsolate())) ? V8Node::toNative(v8::Handle<v8::Object>::Cast(args[1])) : 0;
-    imp->insertBefore(newChild, refChild, es, AttachLazily);
-    if (es.throwIfNeeded())
+    ExceptionState exceptionState(ExceptionState::ExecutionContext, "insertBefore", "Node", info.Holder(), info.GetIsolate());
+    Node* newChild = V8Node::hasInstance(info[0], info.GetIsolate(), worldType(info.GetIsolate())) ? V8Node::toNative(v8::Handle<v8::Object>::Cast(info[0])) : 0;
+    Node* refChild = V8Node::hasInstance(info[1], info.GetIsolate(), worldType(info.GetIsolate())) ? V8Node::toNative(v8::Handle<v8::Object>::Cast(info[1])) : 0;
+    imp->insertBefore(newChild, refChild, exceptionState);
+    if (exceptionState.throwIfNeeded())
         return;
-    v8SetReturnValue(args, args[0]);
+    v8SetReturnValue(info, info[0]);
 }
 
-// This function is customized to take advantage of the optional 4th argument: AttachBehavior
-void V8Node::replaceChildMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& args)
+void V8Node::replaceChildMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    v8::Handle<v8::Object> holder = args.Holder();
+    v8::Handle<v8::Object> holder = info.Holder();
     Node* imp = V8Node::toNative(holder);
 
     CustomElementCallbackDispatcher::CallbackDeliveryScope deliveryScope;
 
-    ExceptionState es(args.GetIsolate());
-    Node* newChild = V8Node::HasInstance(args[0], args.GetIsolate(), worldType(args.GetIsolate())) ? V8Node::toNative(v8::Handle<v8::Object>::Cast(args[0])) : 0;
-    Node* oldChild = V8Node::HasInstance(args[1], args.GetIsolate(), worldType(args.GetIsolate())) ? V8Node::toNative(v8::Handle<v8::Object>::Cast(args[1])) : 0;
-    imp->replaceChild(newChild, oldChild, es, AttachLazily);
-    if (es.throwIfNeeded())
+    ExceptionState exceptionState(ExceptionState::ExecutionContext, "replaceChild", "Node", info.Holder(), info.GetIsolate());
+    Node* newChild = V8Node::hasInstance(info[0], info.GetIsolate(), worldType(info.GetIsolate())) ? V8Node::toNative(v8::Handle<v8::Object>::Cast(info[0])) : 0;
+    Node* oldChild = V8Node::hasInstance(info[1], info.GetIsolate(), worldType(info.GetIsolate())) ? V8Node::toNative(v8::Handle<v8::Object>::Cast(info[1])) : 0;
+    imp->replaceChild(newChild, oldChild, exceptionState);
+    if (exceptionState.throwIfNeeded())
         return;
-    v8SetReturnValue(args, args[1]);
+    v8SetReturnValue(info, info[1]);
 }
 
-void V8Node::removeChildMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& args)
+void V8Node::removeChildMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    v8::Handle<v8::Object> holder = args.Holder();
+    v8::Handle<v8::Object> holder = info.Holder();
     Node* imp = V8Node::toNative(holder);
 
     CustomElementCallbackDispatcher::CallbackDeliveryScope deliveryScope;
 
-    ExceptionState es(args.GetIsolate());
-    Node* oldChild = V8Node::HasInstance(args[0], args.GetIsolate(), worldType(args.GetIsolate())) ? V8Node::toNative(v8::Handle<v8::Object>::Cast(args[0])) : 0;
-    imp->removeChild(oldChild, es);
-    if (es.throwIfNeeded())
+    ExceptionState exceptionState(ExceptionState::ExecutionContext, "removeChild", "Node", info.Holder(), info.GetIsolate());
+    Node* oldChild = V8Node::hasInstance(info[0], info.GetIsolate(), worldType(info.GetIsolate())) ? V8Node::toNative(v8::Handle<v8::Object>::Cast(info[0])) : 0;
+    imp->removeChild(oldChild, exceptionState);
+    if (exceptionState.throwIfNeeded())
         return;
-    v8SetReturnValue(args, args[0]);
+    v8SetReturnValue(info, info[0]);
 }
 
-// This function is customized to take advantage of the optional 4th argument: AttachBehavior
-void V8Node::appendChildMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& args)
+void V8Node::appendChildMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    v8::Handle<v8::Object> holder = args.Holder();
+    v8::Handle<v8::Object> holder = info.Holder();
     Node* imp = V8Node::toNative(holder);
 
     CustomElementCallbackDispatcher::CallbackDeliveryScope deliveryScope;
 
-    ExceptionState es(args.GetIsolate());
-    Node* newChild = V8Node::HasInstance(args[0], args.GetIsolate(), worldType(args.GetIsolate())) ? V8Node::toNative(v8::Handle<v8::Object>::Cast(args[0])) : 0;
-    imp->appendChild(newChild, es, AttachLazily);
-    if (es.throwIfNeeded())
+    ExceptionState exceptionState(ExceptionState::ExecutionContext, "appendChild", "Node", info.Holder(), info.GetIsolate());
+    Node* newChild = V8Node::hasInstance(info[0], info.GetIsolate(), worldType(info.GetIsolate())) ? V8Node::toNative(v8::Handle<v8::Object>::Cast(info[0])) : 0;
+    imp->appendChild(newChild, exceptionState);
+    if (exceptionState.throwIfNeeded())
         return;
-    v8SetReturnValue(args, args[0]);
+    v8SetReturnValue(info, info[0]);
 }
 
 v8::Handle<v8::Object> wrap(Node* impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
@@ -139,23 +137,24 @@ v8::Handle<v8::Object> wrap(Node* impl, v8::Handle<v8::Object> creationContext, 
     case Node::TEXT_NODE:
         return wrap(toText(impl), creationContext, isolate);
     case Node::CDATA_SECTION_NODE:
-        return wrap(static_cast<CDATASection*>(impl), creationContext, isolate);
-    case Node::ENTITY_NODE:
-        return wrap(static_cast<Entity*>(impl), creationContext, isolate);
+        return wrap(toCDATASection(impl), creationContext, isolate);
     case Node::PROCESSING_INSTRUCTION_NODE:
-        return wrap(static_cast<ProcessingInstruction*>(impl), creationContext, isolate);
+        return wrap(toProcessingInstruction(impl), creationContext, isolate);
     case Node::COMMENT_NODE:
-        return wrap(static_cast<Comment*>(impl), creationContext, isolate);
+        return wrap(toComment(impl), creationContext, isolate);
     case Node::DOCUMENT_NODE:
         return wrap(toDocument(impl), creationContext, isolate);
     case Node::DOCUMENT_TYPE_NODE:
-        return wrap(static_cast<DocumentType*>(impl), creationContext, isolate);
+        return wrap(toDocumentType(impl), creationContext, isolate);
     case Node::DOCUMENT_FRAGMENT_NODE:
         if (impl->isShadowRoot())
             return wrap(toShadowRoot(impl), creationContext, isolate);
-        return wrap(static_cast<DocumentFragment*>(impl), creationContext, isolate);
+        return wrap(toDocumentFragment(impl), creationContext, isolate);
+    case Node::ENTITY_NODE:
     case Node::NOTATION_NODE:
-        return wrap(static_cast<Notation*>(impl), creationContext, isolate);
+        // We never create objects of Entity and Notation.
+        ASSERT_NOT_REACHED();
+        break;
     default:
         break; // ENTITY_REFERENCE_NODE or XPATH_NAMESPACE_NODE
     }

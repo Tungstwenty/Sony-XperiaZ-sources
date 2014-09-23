@@ -28,6 +28,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "config.h"
 #include "WebUnitTests.h"
 
 // FIXME: Can we move this to webkit/support and fix the layering violation?
@@ -36,7 +37,7 @@
 
 static TestSuite* testSuite = 0;
 
-namespace WebKit {
+namespace blink {
 
 void InitTestSuite(int argc, char** argv)
 {
@@ -57,4 +58,4 @@ void DeleteTestSuite()
     testSuite = 0;
 }
 
-} // namespace WebKit
+} // namespace blink

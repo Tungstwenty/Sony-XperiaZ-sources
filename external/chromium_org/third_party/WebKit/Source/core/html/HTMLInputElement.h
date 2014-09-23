@@ -26,8 +26,8 @@
 #define HTMLInputElement_h
 
 #include "core/html/HTMLTextFormControlElement.h"
-#include "core/html/StepRange.h"
-#include "core/platform/FileChooser.h"
+#include "core/html/forms/StepRange.h"
+#include "platform/FileChooser.h"
 
 namespace WebCore {
 
@@ -40,13 +40,14 @@ class HTMLImageLoader;
 class HTMLOptionElement;
 class Icon;
 class InputType;
+class InputTypeView;
 class KURL;
 class ListAttributeTargetObserver;
 struct DateTimeChooserParameters;
 
 class HTMLInputElement : public HTMLTextFormControlElement {
 public:
-    static PassRefPtr<HTMLInputElement> create(const QualifiedName&, Document*, HTMLFormElement*, bool createdByParser);
+    static PassRefPtr<HTMLInputElement> create(Document&, HTMLFormElement*, bool createdByParser);
     virtual ~HTMLInputElement();
 
     DEFINE_ATTRIBUTE_EVENT_LISTENER(webkitspeechchange);
@@ -79,8 +80,8 @@ public:
     // Implementations of HTMLInputElement::stepUp() and stepDown().
     void stepUp(int, ExceptionState&);
     void stepDown(int, ExceptionState&);
-    void stepUp(ExceptionState& es) { stepUp(1, es); }
-    void stepDown(ExceptionState& es) { stepDown(1, es); }
+    void stepUp(ExceptionState& exceptionState) { stepUp(1, exceptionState); }
+    void stepDown(ExceptionState& exceptionState) { stepDown(1, exceptionState); }
     // stepUp()/stepDown() for user-interaction.
     bool isSteppable() const;
 
@@ -118,17 +119,7 @@ public:
     bool isSpeechEnabled() const;
 #endif
 
-    HTMLElement* containerElement() const;
-    virtual HTMLElement* innerTextElement() const;
-    HTMLElement* innerBlockElement() const;
-    HTMLElement* innerSpinButtonElement() const;
-#if ENABLE(INPUT_SPEECH)
-    HTMLElement* speechButtonElement() const;
-#endif
-    HTMLElement* sliderThumbElement() const;
-    HTMLElement* sliderTrackElement() const;
     HTMLElement* passwordGeneratorButtonElement() const;
-    virtual HTMLElement* placeholderElement() const;
 
     bool checked() const { return m_isChecked; }
     void setChecked(bool, TextFieldEventBehavior = DispatchNoEvent);
@@ -143,7 +134,7 @@ public:
     int size() const;
     bool sizeShouldIncludeDecoration(int& preferredSize) const;
 
-    void setType(const String&);
+    void setType(const AtomicString&);
 
     String value() const;
     void setValue(const String&, ExceptionState&, TextFieldEventBehavior = DispatchNoEvent);
@@ -185,7 +176,7 @@ public:
     void setSelectionRangeForBinding(int start, int end, ExceptionState&);
     void setSelectionRangeForBinding(int start, int end, const String& direction, ExceptionState&);
 
-    virtual bool rendererIsNeeded(const NodeRenderingContext&);
+    virtual bool rendererIsNeeded(const RenderStyle&);
     virtual RenderObject* createRenderer(RenderStyle*);
     virtual void detach(const AttachContext& = AttachContext()) OVERRIDE;
 
@@ -199,13 +190,13 @@ public:
 
     int maxResults() const { return m_maxResults; }
 
-    String defaultValue() const;
-    void setDefaultValue(const String&);
+    const AtomicString& defaultValue() const;
+    void setDefaultValue(const AtomicString&);
 
     Vector<String> acceptMIMETypes();
     Vector<String> acceptFileExtensions();
-    String accept() const;
-    String alt() const;
+    const AtomicString& accept() const;
+    const AtomicString& alt() const;
 
     void setSize(unsigned);
     void setSize(unsigned, ExceptionState&);
@@ -216,9 +207,6 @@ public:
     void setMaxLength(int, ExceptionState&);
 
     bool multiple() const;
-
-    bool isAutofilled() const { return m_isAutofilled; }
-    void setAutofilled(bool = true);
 
     FileList* files();
     void setFiles(PassRefPtr<FileList>);
@@ -242,6 +230,7 @@ public:
 
     HTMLElement* list() const;
     HTMLDataListElement* dataList() const;
+    bool hasValidDataListOptions() const;
     void listAttributeTargetChanged();
 
     HTMLInputElement* checkedRadioButtonForGroup() const;
@@ -262,7 +251,7 @@ public:
     bool capture() const;
 #endif
 
-    static const unsigned maximumLength;
+    static const int maximumLength;
 
     unsigned height() const;
     unsigned width() const;
@@ -292,25 +281,27 @@ public:
     bool supportsInputModeAttribute() const;
 
 protected:
-    HTMLInputElement(const QualifiedName&, Document*, HTMLFormElement*, bool createdByParser);
+    HTMLInputElement(Document&, HTMLFormElement*, bool createdByParser);
 
     virtual void defaultEventHandler(Event*);
 
 private:
     enum AutoCompleteSetting { Uninitialized, On, Off };
 
-    virtual void didAddUserAgentShadowRoot(ShadowRoot*) OVERRIDE;
+    virtual void didAddUserAgentShadowRoot(ShadowRoot&) OVERRIDE;
+    virtual void didAddShadowRoot(ShadowRoot&) OVERRIDE;
 
     virtual void willChangeForm() OVERRIDE;
     virtual void didChangeForm() OVERRIDE;
     virtual InsertionNotificationRequest insertedInto(ContainerNode*) OVERRIDE;
     virtual void removedFrom(ContainerNode*) OVERRIDE;
-    virtual void didMoveToNewDocument(Document* oldDocument) OVERRIDE;
+    virtual void didMoveToNewDocument(Document& oldDocument) OVERRIDE;
 
     virtual bool hasCustomFocusLogic() const OVERRIDE;
     virtual bool isKeyboardFocusable() const OVERRIDE;
     virtual bool shouldShowFocusRingOnMouseFocus() const OVERRIDE;
     virtual bool isEnumeratable() const;
+    virtual bool isInteractiveContent() const OVERRIDE;
     virtual bool supportLabels() const OVERRIDE;
     virtual void updateFocusAppearance(bool restorePreviousSelection);
     virtual bool shouldUseInputMethod();
@@ -338,11 +329,12 @@ private:
 
     virtual void attach(const AttachContext& = AttachContext()) OVERRIDE;
 
-    virtual bool appendFormData(FormDataList&, bool);
+    virtual bool appendFormData(FormDataList&, bool) OVERRIDE;
+    virtual String resultForDialogSubmit() OVERRIDE;
 
-    virtual bool isSuccessfulSubmitButton() const;
+    virtual bool canBeSuccessfulSubmitButton() const OVERRIDE;
 
-    virtual void reset();
+    virtual void resetImpl() OVERRIDE;
 
     virtual void* preDispatchEventHandler(Event*);
     virtual void postDispatchEventHandler(Event*, void* dataFromPreDispatch);
@@ -399,15 +391,14 @@ private:
     bool m_hasType : 1;
     bool m_isActivatedSubmit : 1;
     unsigned m_autocomplete : 2; // AutoCompleteSetting
-    bool m_isAutofilled : 1;
     bool m_hasNonEmptyList : 1;
     bool m_stateRestored : 1;
     bool m_parsingInProgress : 1;
     bool m_valueAttributeWasUpdatedAfterParsing : 1;
-    bool m_wasModifiedByUser : 1;
     bool m_canReceiveDroppedFiles : 1;
     bool m_hasTouchEventHandler : 1;
-    OwnPtr<InputType> m_inputType;
+    RefPtr<InputType> m_inputType;
+    RefPtr<InputTypeView> m_inputTypeView;
     // The ImageLoader must be owned by this element because the loader code assumes
     // that it lives as long as its owning element lives. If we move the loader into
     // the ImageInput object we may delete the loader while this element lives on.
@@ -415,21 +406,7 @@ private:
     OwnPtr<ListAttributeTargetObserver> m_listAttributeTargetObserver;
 };
 
-inline HTMLInputElement* toHTMLInputElement(Node* node)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!node || node->hasTagName(HTMLNames::inputTag));
-    return static_cast<HTMLInputElement*>(node);
-}
-
-inline const HTMLInputElement* toHTMLInputElement(const Node* node)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!node || node->hasTagName(HTMLNames::inputTag));
-    return static_cast<const HTMLInputElement*>(node);
-}
-
-// This will catch anyone doing an unnecessary cast.
-void toHTMLElement(const HTMLElement*);
-
+DEFINE_NODE_TYPE_CASTS(HTMLInputElement, hasTagName(HTMLNames::inputTag));
 
 } //namespace
 #endif

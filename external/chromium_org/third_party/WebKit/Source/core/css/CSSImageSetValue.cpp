@@ -30,9 +30,9 @@
 #include "core/css/CSSImageValue.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/dom/Document.h"
-#include "core/loader/cache/FetchRequest.h"
-#include "core/loader/cache/ImageResource.h"
-#include "core/loader/cache/ResourceFetcher.h"
+#include "core/fetch/FetchRequest.h"
+#include "core/fetch/ImageResource.h"
+#include "core/fetch/ResourceFetcher.h"
 #include "core/rendering/style/StyleFetchedImageSet.h"
 #include "core/rendering/style/StylePendingImage.h"
 #include "wtf/text/StringBuilder.h"
@@ -49,7 +49,7 @@ CSSImageSetValue::CSSImageSetValue()
 CSSImageSetValue::~CSSImageSetValue()
 {
     if (m_imageSet && m_imageSet->isImageResourceSet())
-        static_cast<StyleFetchedImageSet*>(m_imageSet.get())->clearImageSetValue();
+        toStyleFetchedImageSet(m_imageSet)->clearImageSetValue();
 }
 
 void CSSImageSetValue::fillImageSet()
@@ -104,14 +104,14 @@ StyleFetchedImageSet* CSSImageSetValue::cachedImageSet(ResourceFetcher* loader, 
         ImageWithScale image = bestImageForScaleFactor();
         if (Document* document = loader->document()) {
             FetchRequest request(ResourceRequest(document->completeURL(image.imageURL)), FetchInitiatorTypeNames::css);
-            if (ResourcePtr<ImageResource> cachedImage = loader->requestImage(request)) {
+            if (ResourcePtr<ImageResource> cachedImage = loader->fetchImage(request)) {
                 m_imageSet = StyleFetchedImageSet::create(cachedImage.get(), image.scaleFactor, this);
                 m_accessedBestFitImage = true;
             }
         }
     }
 
-    return (m_imageSet && m_imageSet->isImageResourceSet()) ? static_cast<StyleFetchedImageSet*>(m_imageSet.get()) : 0;
+    return (m_imageSet && m_imageSet->isImageResourceSet()) ? toStyleFetchedImageSet(m_imageSet) : 0;
 }
 
 StyleImage* CSSImageSetValue::cachedOrPendingImageSet(float deviceScaleFactor)
@@ -129,7 +129,7 @@ StyleImage* CSSImageSetValue::cachedOrPendingImageSet(float deviceScaleFactor)
     return m_imageSet.get();
 }
 
-String CSSImageSetValue::customCssText() const
+String CSSImageSetValue::customCSSText() const
 {
     StringBuilder result;
     result.append("-webkit-image-set(");
@@ -163,10 +163,9 @@ bool CSSImageSetValue::hasFailedOrCanceledSubresources() const
 {
     if (!m_imageSet || !m_imageSet->isImageResourceSet())
         return false;
-    Resource* cachedResource = static_cast<StyleFetchedImageSet*>(m_imageSet.get())->cachedImage();
-    if (!cachedResource)
-        return true;
-    return cachedResource->loadFailedOrCanceled();
+    if (Resource* cachedResource = toStyleFetchedImageSet(m_imageSet)->cachedImage())
+        return cachedResource->loadFailedOrCanceled();
+    return true;
 }
 
 CSSImageSetValue::CSSImageSetValue(const CSSImageSetValue& cloneFrom)

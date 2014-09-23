@@ -33,10 +33,9 @@
 #include "PopupMenuChromium.h"
 
 #include "PopupContainer.h"
-#include "core/page/Frame.h"
-#include "core/page/FrameView.h"
-#include "core/page/Page.h"
-#include "core/page/Settings.h"
+#include "core/frame/Frame.h"
+#include "core/frame/FrameView.h"
+#include "core/frame/Settings.h"
 
 namespace WebCore {
 
@@ -70,9 +69,8 @@ PopupMenuChromium::~PopupMenuChromium()
 void PopupMenuChromium::show(const FloatQuad& controlPosition, const IntSize& controlSize, int index)
 {
     if (!m_popup) {
-        Settings* settings = m_frameView->frame()->page()->settings();
         PopupContainerSettings popupSettings = dropDownSettings;
-        popupSettings.deviceSupportsTouch = settings->deviceSupportsTouch();
+        popupSettings.deviceSupportsTouch = m_frameView->frame().settings()->deviceSupportsTouch();
         m_popup = PopupContainer::create(client(), PopupContainer::Select, popupSettings);
     }
     m_popup->showInRect(controlPosition, controlSize, m_frameView.get(), index);

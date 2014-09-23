@@ -6,6 +6,8 @@
 TestGyp.py:  a testing framework for GYP integration tests.
 """
 
+import collections
+import itertools
 import os
 import re
 import shutil
@@ -93,6 +95,7 @@ class TestGypBase(TestCommon.TestCommon):
         else:
           gyp = 'gyp'
     self.gyp = os.path.abspath(gyp)
+    self.no_parallel = False
 
     self.initialize_build_tool()
 
@@ -154,6 +157,13 @@ class TestGypBase(TestCommon.TestCommon):
     match the specified contents.
     """
     return self.must_not_match(self.built_file_path(name, **kw), contents)
+
+  def built_file_must_not_contain(self, name, contents, **kw):
+    """
+    Fails the test if the specified built file name contains the specified
+    contents.
+    """
+    return self.must_not_contain(self.built_file_path(name, **kw), contents)
 
   def copy_test_configuration(self, source_dir, dest_dir):
     """
@@ -247,6 +257,8 @@ class TestGypBase(TestCommon.TestCommon):
     # TODO:  --depth=. works around Chromium-specific tree climbing.
     depth = kw.pop('depth', '.')
     run_args = ['--depth='+depth, '--format='+self.format, gyp_file]
+    if self.no_parallel:
+      run_args += ['--no-parallel']
     run_args.extend(self.extra_args)
     run_args.extend(args)
     return self.run(program=self.gyp, arguments=run_args, **kw)
@@ -349,6 +361,11 @@ class TestGypGypd(TestGypBase):
   internal data structure as pretty-printed Python).
   """
   format = 'gypd'
+  def __init__(self, gyp=None, *args, **kw):
+    super(TestGypGypd, self).__init__(*args, **kw)
+    # gypd implies the use of 'golden' files, so parallelizing conflicts as it
+    # causes ordering changes.
+    self.no_parallel = True
 
 
 class TestGypCustom(TestGypBase):
@@ -517,6 +534,108 @@ class TestGypAndroid(TestGypBase):
     kw['match'] = self.match_single_line
     return self.build(gyp_file, target, **kw)
 
+
+class TestGypCMake(TestGypBase):
+  """
+  Subclass for testing the GYP CMake generator, using cmake's ninja backend.
+  """
+  format = 'cmake'
+  build_tool_list = ['cmake']
+  ALL = 'all'
+
+  def cmake_build(self, gyp_file, target=None, **kw):
+    arguments = kw.get('arguments', [])[:]
+
+    self.build_tool_list = ['cmake']
+    self.initialize_build_tool()
+
+    chdir = os.path.join(kw.get('chdir', '.'),
+                         'out',
+                         self.configuration_dirname())
+    kw['chdir'] = chdir
+
+    arguments.append('-G')
+    arguments.append('Ninja')
+
+    kw['arguments'] = arguments
+
+    stderr = kw.get('stderr', None)
+    if stderr:
+      kw['stderr'] = stderr.split('$$$')[0]
+
+    self.run(program=self.build_tool, **kw)
+
+  def ninja_build(self, gyp_file, target=None, **kw):
+    arguments = kw.get('arguments', [])[:]
+
+    self.build_tool_list = ['ninja']
+    self.initialize_build_tool()
+
+    # Add a -C output/path to the command line.
+    arguments.append('-C')
+    arguments.append(os.path.join('out', self.configuration_dirname()))
+
+    if target not in (None, self.DEFAULT):
+      arguments.append(target)
+
+    kw['arguments'] = arguments
+
+    stderr = kw.get('stderr', None)
+    if stderr:
+      stderrs = stderr.split('$$$')
+      kw['stderr'] = stderrs[1] if len(stderrs) > 1 else ''
+
+    return self.run(program=self.build_tool, **kw)
+
+  def build(self, gyp_file, target=None, status=0, **kw):
+    # Two tools must be run to build, cmake and the ninja.
+    # Allow cmake to succeed when the overall expectation is to fail.
+    if status is None:
+      kw['status'] = None
+    else:
+      if not isinstance(status, collections.Iterable): status = (status,)
+      kw['status'] = list(itertools.chain((0,), status))
+    self.cmake_build(gyp_file, target, **kw)
+    kw['status'] = status
+    self.ninja_build(gyp_file, target, **kw)
+
+  def run_built_executable(self, name, *args, **kw):
+    # Enclosing the name in a list avoids prepending the original dir.
+    program = [self.built_file_path(name, type=self.EXECUTABLE, **kw)]
+    if sys.platform == 'darwin':
+      configuration = self.configuration_dirname()
+      os.environ['DYLD_LIBRARY_PATH'] = os.path.join('out', configuration)
+    return self.run(program=program, *args, **kw)
+
+  def built_file_path(self, name, type=None, **kw):
+    result = []
+    chdir = kw.get('chdir')
+    if chdir:
+      result.append(chdir)
+    result.append('out')
+    result.append(self.configuration_dirname())
+    if type == self.STATIC_LIB:
+      if sys.platform != 'darwin':
+        result.append('obj.target')
+    elif type == self.SHARED_LIB:
+      if sys.platform != 'darwin' and sys.platform != 'win32':
+        result.append('lib.target')
+    subdir = kw.get('subdir')
+    if subdir and type != self.SHARED_LIB:
+      result.append(subdir)
+    result.append(self.built_file_basename(name, type, **kw))
+    return self.workpath(*result)
+
+  def up_to_date(self, gyp_file, target=None, **kw):
+    result = self.ninja_build(gyp_file, target, **kw)
+    if not result:
+      stdout = self.stdout()
+      if 'ninja: no work to do' not in stdout:
+        self.report_not_up_to_date()
+        self.fail_test()
+    return result
+
+
 class TestGypMake(TestGypBase):
   """
   Subclass for testing the GYP Make generator.
@@ -624,6 +743,7 @@ def FindVisualStudioInstallation():
                     for drive in range(ord('C'), ord('Z') + 1)
                     for suffix in ['', ' (x86)']]
   possible_paths = {
+      '2013': r'Microsoft Visual Studio 12.0\Common7\IDE\devenv.com',
       '2012': r'Microsoft Visual Studio 11.0\Common7\IDE\devenv.com',
       '2010': r'Microsoft Visual Studio 10.0\Common7\IDE\devenv.com',
       '2008': r'Microsoft Visual Studio 9.0\Common7\IDE\devenv.com',
@@ -893,6 +1013,7 @@ class TestGypXcode(TestGypBase):
     'Checking Dependencies...\n** BUILD SUCCEEDED **\n', # Xcode 3.0/3.1
     'Check dependencies\n** BUILD SUCCEEDED **\n\n',     # Xcode 3.2
     'Check dependencies\n\n\n** BUILD SUCCEEDED **\n\n', # Xcode 4.2
+    'Check dependencies\n\n** BUILD SUCCEEDED **\n\n',   # Xcode 5.0
   )
 
   def build(self, gyp_file, target=None, **kw):
@@ -978,6 +1099,7 @@ class TestGypXcode(TestGypBase):
 format_class_list = [
   TestGypGypd,
   TestGypAndroid,
+  TestGypCMake,
   TestGypMake,
   TestGypMSVS,
   TestGypNinja,

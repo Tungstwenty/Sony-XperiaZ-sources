@@ -42,13 +42,16 @@ from webkitpy.common.system.profiler import ProfilerFactory
 _log = logging.getLogger(__name__)
 
 
+DRIVER_START_TIMEOUT_SECS = 30
+
+
 class DriverInput(object):
-    def __init__(self, test_name, timeout, image_hash, should_run_pixel_test, args=None):
+    def __init__(self, test_name, timeout, image_hash, should_run_pixel_test, args):
         self.test_name = test_name
         self.timeout = timeout  # in ms
         self.image_hash = image_hash
         self.should_run_pixel_test = should_run_pixel_test
-        self.args = args or []
+        self.args = args
 
 
 class DriverOutput(object):
@@ -76,6 +79,10 @@ class DriverOutput(object):
 
     def has_stderr(self):
         return bool(self.error)
+
+
+class DeviceFailure(Exception):
+    pass
 
 
 class Driver(object):
@@ -135,13 +142,6 @@ class Driver(object):
 
         Returns a DriverOutput object.
         """
-        base = self._port.lookup_virtual_test_base(driver_input.test_name)
-        if base:
-            virtual_driver_input = copy.copy(driver_input)
-            virtual_driver_input.test_name = base
-            virtual_driver_input.args = self._port.lookup_virtual_test_args(driver_input.test_name)
-            return self.run_test(virtual_driver_input, stop_when_done)
-
         start_time = time.time()
         self.start(driver_input.should_run_pixel_test, driver_input.args)
         test_begin_time = time.time()
@@ -256,16 +256,11 @@ class Driver(object):
             self._run_post_start_tasks()
 
     def _setup_environ_for_driver(self, environment):
-        environment['DYLD_LIBRARY_PATH'] = self._port._build_path()
-        environment['DYLD_FRAMEWORK_PATH'] = self._port._build_path()
-        environment['LOCAL_RESOURCE_ROOT'] = self._port.layout_tests_dir()
-        if 'WEBKITOUTPUTDIR' in os.environ:
-            environment['WEBKITOUTPUTDIR'] = os.environ['WEBKITOUTPUTDIR']
         if self._profiler:
             environment = self._profiler.adjusted_environment(environment)
         return environment
 
-    def _start(self, pixel_tests, per_test_args):
+    def _start(self, pixel_tests, per_test_args, wait_for_ready=True):
         self.stop()
         self._driver_tempdir = self._port._filesystem.mkdtemp(prefix='%s-' % self._port.driver_name())
         server_name = self._port.driver_name()
@@ -274,9 +269,27 @@ class Driver(object):
         self._crashed_process_name = None
         self._crashed_pid = None
         cmd_line = self.cmd_line(pixel_tests, per_test_args)
-        self._server_process = self._port._server_process_constructor(self._port, server_name, cmd_line, environment)
+        self._server_process = self._port._server_process_constructor(self._port, server_name, cmd_line, environment, logging=self._port.get_option("driver_logging"))
         self._server_process.start()
         self._current_cmd_line = cmd_line
+
+        if wait_for_ready:
+            deadline = time.time() + DRIVER_START_TIMEOUT_SECS
+            if not self._wait_for_server_process_output(self._server_process, deadline, '#READY'):
+                _log.error("content_shell took too long to startup.")
+
+    def _wait_for_server_process_output(self, server_process, deadline, text):
+        output = ''
+        line = server_process.read_stdout_line(deadline)
+        while not server_process.timed_out and not server_process.has_crashed() and not text in line.rstrip():
+            output += line
+            line = server_process.read_stdout_line(deadline)
+
+        if server_process.timed_out or server_process.has_crashed():
+            _log.error('Failed to start the %s process: \n%s' % (server_process.name(), output))
+            return False
+
+        return True
 
     def _run_post_start_tasks(self):
         # Remote drivers may override this to delay post-start tasks until the server has ack'd.
@@ -289,7 +302,7 @@ class Driver(object):
 
     def stop(self):
         if self._server_process:
-            self._server_process.stop(self._port.driver_stop_timeout())
+            self._server_process.stop()
             self._server_process = None
             if self._profiler:
                 self._profiler.profile_after_exit()
@@ -399,6 +412,9 @@ class Driver(object):
     def _strip_eof(self, line):
         if line and line.endswith("#EOF\n"):
             return line[:-5], True
+        if line and line.endswith("#EOF\r\n"):
+            _log.error("Got a CRLF-terminated #EOF - this is a driver bug.")
+            return line[:-6], True
         return line, False
 
     def _read_block(self, deadline, wait_for_stderr_eof=False):

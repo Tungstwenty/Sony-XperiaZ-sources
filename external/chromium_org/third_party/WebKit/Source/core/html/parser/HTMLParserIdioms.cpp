@@ -26,23 +26,21 @@
 #include "core/html/parser/HTMLParserIdioms.h"
 
 #include <limits>
-#include "core/dom/QualifiedName.h"
-#include "core/html/parser/HTMLIdentifier.h"
-#include "core/platform/Decimal.h"
 #include "wtf/MathExtras.h"
 #include "wtf/text/AtomicString.h"
 #include "wtf/text/StringBuilder.h"
+#include "wtf/text/StringHash.h"
 
 namespace WebCore {
 
 template <typename CharType>
-static String stripLeadingAndTrailingHTMLSpaces(String string, CharType characters, unsigned length)
+static String stripLeadingAndTrailingHTMLSpaces(String string, const CharType* characters, unsigned length)
 {
     unsigned numLeadingSpaces = 0;
     unsigned numTrailingSpaces = 0;
 
     for (; numLeadingSpaces < length; ++numLeadingSpaces) {
-        if (isNotHTMLSpace(characters[numLeadingSpaces]))
+        if (isNotHTMLSpace<CharType>(characters[numLeadingSpaces]))
             break;
     }
 
@@ -50,7 +48,7 @@ static String stripLeadingAndTrailingHTMLSpaces(String string, CharType characte
         return string.isNull() ? string : emptyAtom.string();
 
     for (; numTrailingSpaces < length; ++numTrailingSpaces) {
-        if (isNotHTMLSpace(characters[length - numTrailingSpaces - 1]))
+        if (isNotHTMLSpace<CharType>(characters[length - numTrailingSpaces - 1]))
             break;
     }
 
@@ -70,9 +68,9 @@ String stripLeadingAndTrailingHTMLSpaces(const String& string)
         return string.isNull() ? string : emptyAtom.string();
 
     if (string.is8Bit())
-        return stripLeadingAndTrailingHTMLSpaces(string, string.characters8(), length);
+        return stripLeadingAndTrailingHTMLSpaces<LChar>(string, string.characters8(), length);
 
-    return stripLeadingAndTrailingHTMLSpaces(string, string.characters16(), length);
+    return stripLeadingAndTrailingHTMLSpaces<UChar>(string, string.characters16(), length);
 }
 
 String serializeForNumberType(const Decimal& number)
@@ -115,11 +113,6 @@ Decimal parseToDecimalForNumberType(const String& string, const Decimal& fallbac
     return value.isZero() ? Decimal(0) : value;
 }
 
-Decimal parseToDecimalForNumberType(const String& string)
-{
-    return parseToDecimalForNumberType(string, Decimal::nan());
-}
-
 double parseToDoubleForNumberType(const String& string, double fallbackValue)
 {
     // See HTML5 2.5.4.3 `Real numbers.'
@@ -147,11 +140,6 @@ double parseToDoubleForNumberType(const String& string, double fallbackValue)
     return value ? value : 0;
 }
 
-double parseToDoubleForNumberType(const String& string)
-{
-    return parseToDoubleForNumberType(string, std::numeric_limits<double>::quiet_NaN());
-}
-
 template <typename CharacterType>
 static bool parseHTMLIntegerInternal(const CharacterType* position, const CharacterType* end, int& value)
 {
@@ -160,7 +148,7 @@ static bool parseHTMLIntegerInternal(const CharacterType* position, const Charac
 
     // Step 4
     while (position < end) {
-        if (!isHTMLSpace(*position))
+        if (!isHTMLSpace<CharacterType>(*position))
             break;
         ++position;
     }
@@ -221,7 +209,7 @@ static bool parseHTMLNonNegativeIntegerInternal(const CharacterType* position, c
 {
     // Step 3
     while (position < end) {
-        if (!isHTMLSpace(*position))
+        if (!isHTMLSpace<CharacterType>(*position))
             break;
         ++position;
     }
@@ -291,9 +279,31 @@ bool threadSafeMatch(const QualifiedName& a, const QualifiedName& b)
     return threadSafeEqual(a.localName().impl(), b.localName().impl());
 }
 
-bool threadSafeMatch(const HTMLIdentifier& localName, const QualifiedName& qName)
+bool threadSafeMatch(const String& localName, const QualifiedName& qName)
 {
-    return threadSafeEqual(localName.asStringImpl(), qName.localName().impl());
+    return threadSafeEqual(localName.impl(), qName.localName().impl());
+}
+
+StringImpl* findStringIfStatic(const UChar* characters, unsigned length)
+{
+    // We don't need to try hashing if we know the string is too long.
+    if (length > StringImpl::highestStaticStringLength())
+        return 0;
+    // computeHashAndMaskTop8Bits is the function StringImpl::hash() uses.
+    unsigned hash = StringHasher::computeHashAndMaskTop8Bits(characters, length);
+    const WTF::StaticStringsTable& table = StringImpl::allStaticStrings();
+    ASSERT(!table.isEmpty());
+
+    WTF::StaticStringsTable::const_iterator it = table.find(hash);
+    if (it == table.end())
+        return 0;
+    // It's possible to have hash collisions between arbitrary strings and
+    // known identifiers (e.g. "bvvfg" collides with "script").
+    // However ASSERTs in StringImpl::createStatic guard against there ever being collisions
+    // between static strings.
+    if (!equal(it->value, characters, length))
+        return 0;
+    return it->value;
 }
 
 }

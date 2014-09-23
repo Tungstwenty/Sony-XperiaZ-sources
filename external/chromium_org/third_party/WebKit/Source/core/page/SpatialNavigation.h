@@ -24,7 +24,7 @@
 #include "core/dom/Node.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/page/FocusDirection.h"
-#include "core/platform/graphics/LayoutRect.h"
+#include "platform/geometry/LayoutRect.h"
 
 #include <limits>
 
@@ -36,11 +36,9 @@ class HTMLAreaElement;
 class IntRect;
 class RenderObject;
 
-using namespace std;
-
 inline long long maxDistance()
 {
-    return numeric_limits<long long>::max();
+    return std::numeric_limits<long long>::max();
 }
 
 inline int fudgeFactor()
@@ -118,7 +116,7 @@ struct FocusCandidate {
     bool isNull() const { return !visibleNode; }
     bool inScrollableContainer() const { return visibleNode && enclosingScrollableBox; }
     bool isFrameOwnerElement() const { return visibleNode && visibleNode->isFrameOwnerElement(); }
-    Document* document() const { return visibleNode ? visibleNode->document() : 0; }
+    Document* document() const { return visibleNode ? &visibleNode->document() : 0; }
 
     // We handle differently visibleNode and FocusableNode to properly handle the areas of imagemaps,
     // where visibleNode would represent the image element and focusableNode would represent the area element.

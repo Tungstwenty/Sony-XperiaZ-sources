@@ -32,6 +32,7 @@
 #include <vector>
 #include <map>
 
+#include "talk/base/asyncpacketsocket.h"
 #include "talk/base/network.h"
 #include "talk/base/proxyinfo.h"
 #include "talk/base/ratetracker.h"
@@ -44,10 +45,6 @@
 #include "talk/p2p/base/stun.h"
 #include "talk/p2p/base/stunrequest.h"
 #include "talk/p2p/base/transport.h"
-
-namespace talk_base {
-class AsyncPacketSocket;
-}
 
 namespace cricket {
 
@@ -118,8 +115,8 @@ struct ProtocolAddress {
 class Port : public PortInterface, public talk_base::MessageHandler,
              public sigslot::has_slots<> {
  public:
-  Port(talk_base::Thread* thread, talk_base::Network* network,
-       const talk_base::IPAddress& ip,
+  Port(talk_base::Thread* thread, talk_base::PacketSocketFactory* factory,
+       talk_base::Network* network, const talk_base::IPAddress& ip,
        const std::string& username_fragment, const std::string& password);
   Port(talk_base::Thread* thread, const std::string& type,
        talk_base::PacketSocketFactory* factory,
@@ -240,7 +237,8 @@ class Port : public PortInterface, public talk_base::MessageHandler,
   // TODO(mallinath) - Make it pure virtual.
   virtual bool HandleIncomingPacket(
       talk_base::AsyncPacketSocket* socket, const char* data, size_t size,
-      const talk_base::SocketAddress& remote_addr) {
+      const talk_base::SocketAddress& remote_addr,
+      const talk_base::PacketTime& packet_time) {
     ASSERT(false);
     return false;
   }
@@ -304,7 +302,17 @@ class Port : public PortInterface, public talk_base::MessageHandler,
   // Returns if Google ICE protocol is used.
   bool IsGoogleIce() const;
 
+  // Returns default DSCP value.
+  talk_base::DiffServCodePoint DefaultDscpValue() const {
+    return default_dscp_;
+  }
+
  protected:
+  enum {
+    MSG_CHECKTIMEOUT = 0,
+    MSG_FIRST_AVAILABLE
+  };
+
   void set_type(const std::string& type) { type_ = type; }
   // Fills in the local address of the port.
   void AddAddress(const talk_base::SocketAddress& address,
@@ -333,6 +341,11 @@ class Port : public PortInterface, public talk_base::MessageHandler,
 
   // Checks if the address in addr is compatible with the port's ip.
   bool IsCompatibleAddress(const talk_base::SocketAddress& addr);
+
+  // Default DSCP value for this port. Set by TransportChannel.
+  void SetDefaultDscpValue(talk_base::DiffServCodePoint dscp) {
+    default_dscp_ = dscp;
+  }
 
  private:
   void Construct();
@@ -372,7 +385,9 @@ class Port : public PortInterface, public talk_base::MessageHandler,
   IceRole ice_role_;
   uint64 tiebreaker_;
   bool shared_socket_;
-
+  // DSCP value for ICE/STUN messages. Set by the P2PTransportChannel after
+  // port becomes ready.
+  talk_base::DiffServCodePoint default_dscp_;
   // Information to use when going through a proxy.
   std::string user_agent_;
   talk_base::ProxyInfo proxy_;
@@ -447,17 +462,20 @@ class Connection : public talk_base::MessageHandler,
   // The connection can send and receive packets asynchronously.  This matches
   // the interface of AsyncPacketSocket, which may use UDP or TCP under the
   // covers.
-  virtual int Send(const void* data, size_t size) = 0;
+  virtual int Send(const void* data, size_t size,
+                   talk_base::DiffServCodePoint dscp) = 0;
 
   // Error if Send() returns < 0
   virtual int GetError() = 0;
 
-  sigslot::signal3<Connection*, const char*, size_t> SignalReadPacket;
+  sigslot::signal4<Connection*, const char*, size_t,
+                   const talk_base::PacketTime&> SignalReadPacket;
 
   sigslot::signal1<Connection*> SignalReadyToSend;
 
   // Called when a packet is received on this connection.
-  void OnReadPacket(const char* data, size_t size);
+  void OnReadPacket(const char* data, size_t size,
+                    const talk_base::PacketTime& packet_time);
 
   // Called when the socket is currently able to send.
   void OnReadyToSend();
@@ -576,7 +594,8 @@ class ProxyConnection : public Connection {
  public:
   ProxyConnection(Port* port, size_t index, const Candidate& candidate);
 
-  virtual int Send(const void* data, size_t size);
+  virtual int Send(const void* data, size_t size,
+                   talk_base::DiffServCodePoint dscp);
   virtual int GetError() { return error_; }
 
  private:

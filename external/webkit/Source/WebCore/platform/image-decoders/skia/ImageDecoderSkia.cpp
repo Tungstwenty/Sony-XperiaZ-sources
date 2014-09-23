@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2006 Apple Computer, Inc.  All rights reserved.
  * Copyright (C) 2008, 2009 Google, Inc.
+ * Copyright (C) 2014, Sony Mobile Communications AB
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -114,7 +115,7 @@ bool ImageFrame::hasAlpha() const
 
 void ImageFrame::setHasAlpha(bool alpha)
 {
-    m_bitmap.setIsOpaque(!alpha);
+    m_bitmap.setAlphaType(alpha ? kPremul_SkAlphaType : kOpaque_SkAlphaType);
 }
 
 void ImageFrame::setColorProfile(const ColorProfile& colorProfile)

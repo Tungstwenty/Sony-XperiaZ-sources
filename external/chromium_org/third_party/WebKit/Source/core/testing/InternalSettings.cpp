@@ -31,26 +31,26 @@
 #include "bindings/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/page/Page.h"
-#include "core/page/Settings.h"
-#include "core/platform/ColorChooser.h"
-#include "core/platform/Supplementable.h"
-#include "core/platform/text/LocaleToScriptMapping.h"
+#include "core/frame/Settings.h"
+#include "platform/ColorChooser.h"
+#include "platform/Supplementable.h"
+#include "platform/text/LocaleToScriptMapping.h"
 
 #define InternalSettingsGuardForSettingsReturn(returnValue) \
     if (!settings()) { \
-        es.throwDOMException(InvalidAccessError); \
+        exceptionState.throwUninformativeAndGenericDOMException(InvalidAccessError); \
         return returnValue; \
     }
 
 #define InternalSettingsGuardForSettings()  \
     if (!settings()) { \
-        es.throwDOMException(InvalidAccessError); \
+        exceptionState.throwUninformativeAndGenericDOMException(InvalidAccessError); \
         return; \
     }
 
 #define InternalSettingsGuardForPage() \
     if (!page()) { \
-        es.throwDOMException(InvalidAccessError); \
+        exceptionState.throwUninformativeAndGenericDOMException(InvalidAccessError); \
         return; \
     }
 
@@ -61,19 +61,22 @@ InternalSettings::Backup::Backup(Settings* settings)
     , m_originalAuthorShadowDOMForAnyElementEnabled(RuntimeEnabledFeatures::authorShadowDOMForAnyElementEnabled())
     , m_originalExperimentalWebSocketEnabled(settings->experimentalWebSocketEnabled())
     , m_originalStyleScoped(RuntimeEnabledFeatures::styleScopedEnabled())
+    , m_originalOverlayScrollbarsEnabled(RuntimeEnabledFeatures::overlayScrollbarsEnabled())
     , m_originalEditingBehavior(settings->editingBehaviorType())
     , m_originalTextAutosizingEnabled(settings->textAutosizingEnabled())
     , m_originalTextAutosizingWindowSizeOverride(settings->textAutosizingWindowSizeOverride())
-    , m_originalTextAutosizingFontScaleFactor(settings->textAutosizingFontScaleFactor())
+    , m_originalAccessibilityFontScaleFactor(settings->accessibilityFontScaleFactor())
     , m_originalMediaTypeOverride(settings->mediaTypeOverride())
-    , m_originalLazyLayoutEnabled(RuntimeEnabledFeatures::lazyLayoutEnabled())
     , m_originalMockScrollbarsEnabled(settings->mockScrollbarsEnabled())
     , m_langAttributeAwareFormControlUIEnabled(RuntimeEnabledFeatures::langAttributeAwareFormControlUIEnabled())
-    , m_imagesEnabled(settings->areImagesEnabled())
+    , m_imagesEnabled(settings->imagesEnabled())
     , m_shouldDisplaySubtitles(settings->shouldDisplaySubtitles())
     , m_shouldDisplayCaptions(settings->shouldDisplayCaptions())
     , m_shouldDisplayTextDescriptions(settings->shouldDisplayTextDescriptions())
     , m_defaultVideoPosterURL(settings->defaultVideoPosterURL())
+    , m_originalCompositorDrivenAcceleratedScrollEnabled(settings->compositorDrivenAcceleratedScrollingEnabled())
+    , m_originalLayerSquashingEnabled(settings->layerSquashingEnabled())
+    , m_originalPasswordGenerationDecorationEnabled(settings->passwordGenerationDecorationEnabled())
 {
 }
 
@@ -83,12 +86,12 @@ void InternalSettings::Backup::restoreTo(Settings* settings)
     RuntimeEnabledFeatures::setAuthorShadowDOMForAnyElementEnabled(m_originalAuthorShadowDOMForAnyElementEnabled);
     settings->setExperimentalWebSocketEnabled(m_originalExperimentalWebSocketEnabled);
     RuntimeEnabledFeatures::setStyleScopedEnabled(m_originalStyleScoped);
+    RuntimeEnabledFeatures::setOverlayScrollbarsEnabled(m_originalOverlayScrollbarsEnabled);
     settings->setEditingBehaviorType(m_originalEditingBehavior);
     settings->setTextAutosizingEnabled(m_originalTextAutosizingEnabled);
     settings->setTextAutosizingWindowSizeOverride(m_originalTextAutosizingWindowSizeOverride);
-    settings->setTextAutosizingFontScaleFactor(m_originalTextAutosizingFontScaleFactor);
+    settings->setAccessibilityFontScaleFactor(m_originalAccessibilityFontScaleFactor);
     settings->setMediaTypeOverride(m_originalMediaTypeOverride);
-    RuntimeEnabledFeatures::setLazyLayoutEnabled(m_originalLazyLayoutEnabled);
     settings->setMockScrollbarsEnabled(m_originalMockScrollbarsEnabled);
     RuntimeEnabledFeatures::setLangAttributeAwareFormControlUIEnabled(m_langAttributeAwareFormControlUIEnabled);
     settings->setImagesEnabled(m_imagesEnabled);
@@ -96,6 +99,10 @@ void InternalSettings::Backup::restoreTo(Settings* settings)
     settings->setShouldDisplayCaptions(m_shouldDisplayCaptions);
     settings->setShouldDisplayTextDescriptions(m_shouldDisplayTextDescriptions);
     settings->setDefaultVideoPosterURL(m_defaultVideoPosterURL);
+    settings->setCompositorDrivenAcceleratedScrollingEnabled(m_originalCompositorDrivenAcceleratedScrollEnabled);
+    settings->setLayerSquashingEnabled(m_originalLayerSquashingEnabled);
+    settings->setPasswordGenerationDecorationEnabled(m_originalPasswordGenerationDecorationEnabled);
+    settings->genericFontFamilySettings().reset();
 }
 
 // We can't use RefCountedSupplement because that would try to make InternalSettings RefCounted
@@ -134,7 +141,7 @@ InternalSettings::~InternalSettings()
 InternalSettings::InternalSettings(Page* page)
     : InternalSettingsGenerated(page)
     , m_page(page)
-    , m_backup(page->settings())
+    , m_backup(&page->settings())
 {
 }
 
@@ -152,10 +159,10 @@ Settings* InternalSettings::settings() const
 {
     if (!page())
         return 0;
-    return page()->settings();
+    return &page()->settings();
 }
 
-void InternalSettings::setMockScrollbarsEnabled(bool enabled, ExceptionState& es)
+void InternalSettings::setMockScrollbarsEnabled(bool enabled, ExceptionState& exceptionState)
 {
     InternalSettingsGuardForSettings();
     settings()->setMockScrollbarsEnabled(enabled);
@@ -176,92 +183,131 @@ void InternalSettings::setStyleScopedEnabled(bool enabled)
     RuntimeEnabledFeatures::setStyleScopedEnabled(enabled);
 }
 
-void InternalSettings::setTouchEventEmulationEnabled(bool enabled, ExceptionState& es)
+void InternalSettings::setOverlayScrollbarsEnabled(bool enabled)
+{
+    RuntimeEnabledFeatures::setOverlayScrollbarsEnabled(enabled);
+}
+
+void InternalSettings::setTouchEventEmulationEnabled(bool enabled, ExceptionState& exceptionState)
 {
     InternalSettingsGuardForSettings();
     settings()->setTouchEventEmulationEnabled(enabled);
 }
 
+void InternalSettings::setViewportEnabled(bool enabled, ExceptionState& exceptionState)
+{
+    InternalSettingsGuardForSettings();
+    settings()->setViewportEnabled(enabled);
+}
+
 // FIXME: This is a temporary flag and should be removed once accelerated
 // overflow scroll is ready (crbug.com/254111).
-void InternalSettings::setCompositorDrivenAcceleratedScrollingEnabled(bool enabled, ExceptionState& es)
+void InternalSettings::setCompositorDrivenAcceleratedScrollingEnabled(bool enabled, ExceptionState& exceptionState)
 {
     InternalSettingsGuardForSettings();
     settings()->setCompositorDrivenAcceleratedScrollingEnabled(enabled);
 }
 
-typedef void (Settings::*SetFontFamilyFunction)(const AtomicString&, UScriptCode);
-static void setFontFamily(Settings* settings, const String& family, const String& script, SetFontFamilyFunction setter)
+// FIXME: This is a temporary flag and should be removed once squashing is
+// ready (crbug.com/261605).
+void InternalSettings::setLayerSquashingEnabled(bool enabled, ExceptionState& exceptionState)
 {
+    InternalSettingsGuardForSettings();
+    settings()->setLayerSquashingEnabled(enabled);
+}
+
+void InternalSettings::setStandardFontFamily(const String& family, const String& script, ExceptionState& exceptionState)
+{
+    InternalSettingsGuardForSettings();
     UScriptCode code = scriptNameToCode(script);
-    if (code != USCRIPT_INVALID_CODE)
-        (settings->*setter)(family, code);
+    if (code == USCRIPT_INVALID_CODE)
+        return;
+    settings()->genericFontFamilySettings().setStandard(family, code);
+    m_page->setNeedsRecalcStyleInAllFrames();
 }
 
-void InternalSettings::setStandardFontFamily(const String& family, const String& script, ExceptionState& es)
+void InternalSettings::setSerifFontFamily(const String& family, const String& script, ExceptionState& exceptionState)
 {
     InternalSettingsGuardForSettings();
-    setFontFamily(settings(), family, script, &Settings::setStandardFontFamily);
+    UScriptCode code = scriptNameToCode(script);
+    if (code == USCRIPT_INVALID_CODE)
+        return;
+    settings()->genericFontFamilySettings().setSerif(family, code);
+    m_page->setNeedsRecalcStyleInAllFrames();
 }
 
-void InternalSettings::setSerifFontFamily(const String& family, const String& script, ExceptionState& es)
+void InternalSettings::setSansSerifFontFamily(const String& family, const String& script, ExceptionState& exceptionState)
 {
     InternalSettingsGuardForSettings();
-    setFontFamily(settings(), family, script, &Settings::setSerifFontFamily);
+    UScriptCode code = scriptNameToCode(script);
+    if (code == USCRIPT_INVALID_CODE)
+        return;
+    settings()->genericFontFamilySettings().setSansSerif(family, code);
+    m_page->setNeedsRecalcStyleInAllFrames();
 }
 
-void InternalSettings::setSansSerifFontFamily(const String& family, const String& script, ExceptionState& es)
+void InternalSettings::setFixedFontFamily(const String& family, const String& script, ExceptionState& exceptionState)
 {
     InternalSettingsGuardForSettings();
-    setFontFamily(settings(), family, script, &Settings::setSansSerifFontFamily);
+    UScriptCode code = scriptNameToCode(script);
+    if (code == USCRIPT_INVALID_CODE)
+        return;
+    settings()->genericFontFamilySettings().setFixed(family, code);
+    m_page->setNeedsRecalcStyleInAllFrames();
 }
 
-void InternalSettings::setFixedFontFamily(const String& family, const String& script, ExceptionState& es)
+void InternalSettings::setCursiveFontFamily(const String& family, const String& script, ExceptionState& exceptionState)
 {
     InternalSettingsGuardForSettings();
-    setFontFamily(settings(), family, script, &Settings::setFixedFontFamily);
+    UScriptCode code = scriptNameToCode(script);
+    if (code == USCRIPT_INVALID_CODE)
+        return;
+    settings()->genericFontFamilySettings().setCursive(family, code);
+    m_page->setNeedsRecalcStyleInAllFrames();
 }
 
-void InternalSettings::setCursiveFontFamily(const String& family, const String& script, ExceptionState& es)
+void InternalSettings::setFantasyFontFamily(const String& family, const String& script, ExceptionState& exceptionState)
 {
     InternalSettingsGuardForSettings();
-    setFontFamily(settings(), family, script, &Settings::setCursiveFontFamily);
+    UScriptCode code = scriptNameToCode(script);
+    if (code == USCRIPT_INVALID_CODE)
+        return;
+    settings()->genericFontFamilySettings().setFantasy(family, code);
+    m_page->setNeedsRecalcStyleInAllFrames();
 }
 
-void InternalSettings::setFantasyFontFamily(const String& family, const String& script, ExceptionState& es)
+void InternalSettings::setPictographFontFamily(const String& family, const String& script, ExceptionState& exceptionState)
 {
     InternalSettingsGuardForSettings();
-    setFontFamily(settings(), family, script, &Settings::setFantasyFontFamily);
+    UScriptCode code = scriptNameToCode(script);
+    if (code == USCRIPT_INVALID_CODE)
+        return;
+    settings()->genericFontFamilySettings().setPictograph(family, code);
+    m_page->setNeedsRecalcStyleInAllFrames();
 }
 
-void InternalSettings::setPictographFontFamily(const String& family, const String& script, ExceptionState& es)
-{
-    InternalSettingsGuardForSettings();
-    setFontFamily(settings(), family, script, &Settings::setPictographFontFamily);
-}
-
-void InternalSettings::setTextAutosizingEnabled(bool enabled, ExceptionState& es)
+void InternalSettings::setTextAutosizingEnabled(bool enabled, ExceptionState& exceptionState)
 {
     InternalSettingsGuardForSettings();
     settings()->setTextAutosizingEnabled(enabled);
 }
 
-void InternalSettings::setTextAutosizingWindowSizeOverride(int width, int height, ExceptionState& es)
+void InternalSettings::setTextAutosizingWindowSizeOverride(int width, int height, ExceptionState& exceptionState)
 {
     InternalSettingsGuardForSettings();
     settings()->setTextAutosizingWindowSizeOverride(IntSize(width, height));
 }
 
-void InternalSettings::setMediaTypeOverride(const String& mediaType, ExceptionState& es)
+void InternalSettings::setMediaTypeOverride(const String& mediaType, ExceptionState& exceptionState)
 {
     InternalSettingsGuardForSettings();
     settings()->setMediaTypeOverride(mediaType);
 }
 
-void InternalSettings::setTextAutosizingFontScaleFactor(float fontScaleFactor, ExceptionState& es)
+void InternalSettings::setAccessibilityFontScaleFactor(float fontScaleFactor, ExceptionState& exceptionState)
 {
     InternalSettingsGuardForSettings();
-    settings()->setTextAutosizingFontScaleFactor(fontScaleFactor);
+    settings()->setAccessibilityFontScaleFactor(fontScaleFactor);
 }
 
 void InternalSettings::setCSSExclusionsEnabled(bool enabled)
@@ -269,7 +315,7 @@ void InternalSettings::setCSSExclusionsEnabled(bool enabled)
     RuntimeEnabledFeatures::setCSSExclusionsEnabled(enabled);
 }
 
-void InternalSettings::setEditingBehavior(const String& editingBehavior, ExceptionState& es)
+void InternalSettings::setEditingBehavior(const String& editingBehavior, ExceptionState& exceptionState)
 {
     InternalSettingsGuardForSettings();
     if (equalIgnoringCase(editingBehavior, "win"))
@@ -281,12 +327,7 @@ void InternalSettings::setEditingBehavior(const String& editingBehavior, Excepti
     else if (equalIgnoringCase(editingBehavior, "android"))
         settings()->setEditingBehaviorType(EditingAndroidBehavior);
     else
-        es.throwDOMException(SyntaxError);
-}
-
-void InternalSettings::setLazyLayoutEnabled(bool enabled)
-{
-    RuntimeEnabledFeatures::setLazyLayoutEnabled(enabled);
+        exceptionState.throwUninformativeAndGenericDOMException(SyntaxError);
 }
 
 void InternalSettings::setLangAttributeAwareFormControlUIEnabled(bool enabled)
@@ -294,16 +335,22 @@ void InternalSettings::setLangAttributeAwareFormControlUIEnabled(bool enabled)
     RuntimeEnabledFeatures::setLangAttributeAwareFormControlUIEnabled(enabled);
 }
 
-void InternalSettings::setImagesEnabled(bool enabled, ExceptionState& es)
+void InternalSettings::setImagesEnabled(bool enabled, ExceptionState& exceptionState)
 {
     InternalSettingsGuardForSettings();
     settings()->setImagesEnabled(enabled);
 }
 
-void InternalSettings::setDefaultVideoPosterURL(const String& url, ExceptionState& es)
+void InternalSettings::setDefaultVideoPosterURL(const String& url, ExceptionState& exceptionState)
 {
     InternalSettingsGuardForSettings();
     settings()->setDefaultVideoPosterURL(url);
+}
+
+void InternalSettings::setPasswordGenerationDecorationEnabled(bool enabled, ExceptionState& exceptionState)
+{
+    InternalSettingsGuardForSettings();
+    settings()->setPasswordGenerationDecorationEnabled(enabled);
 }
 
 }

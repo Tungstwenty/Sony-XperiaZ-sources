@@ -38,20 +38,20 @@
 #include "ApplicationCacheHostInternal.h"
 #include "WebFrameImpl.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "core/dom/ProgressEvent.h"
+#include "core/events/ProgressEvent.h"
 #include "core/inspector/InspectorApplicationCacheAgent.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
-#include "core/loader/appcache/DOMApplicationCache.h"
-#include "core/page/Frame.h"
+#include "core/loader/appcache/ApplicationCache.h"
+#include "core/frame/Frame.h"
 #include "core/page/Page.h"
-#include "core/page/Settings.h"
-#include "core/platform/chromium/support/WrappedResourceRequest.h"
-#include "core/platform/chromium/support/WrappedResourceResponse.h"
-#include "weborigin/SecurityOrigin.h"
+#include "core/frame/Settings.h"
+#include "platform/exported/WrappedResourceRequest.h"
+#include "platform/exported/WrappedResourceResponse.h"
+#include "platform/weborigin/SecurityOrigin.h"
 
-using namespace WebKit;
+using namespace blink;
 
 namespace WebCore {
 
@@ -109,8 +109,8 @@ void ApplicationCacheHost::selectCacheWithManifest(const KURL& manifestURL)
             // during navigation.
             // see WebCore::ApplicationCacheGroup::selectCache()
             Frame* frame = m_documentLoader->frame();
-            frame->navigationScheduler()->scheduleLocationChange(frame->document()->securityOrigin(),
-                frame->document()->url(), frame->loader()->referrer());
+            frame->navigationScheduler().scheduleLocationChange(frame->document(),
+                frame->document()->url(), frame->document()->referrer());
         }
     }
 }
@@ -150,21 +150,13 @@ void ApplicationCacheHost::willStartLoadingResource(ResourceRequest& request)
     }
 }
 
-void ApplicationCacheHost::willStartLoadingSynchronously(ResourceRequest& request)
-{
-    if (m_internal) {
-        WrappedResourceRequest wrapped(request);
-        m_internal->m_outerHost->willStartSubResourceRequest(wrapped);
-    }
-}
-
-void ApplicationCacheHost::setDOMApplicationCache(DOMApplicationCache* domApplicationCache)
+void ApplicationCacheHost::setApplicationCache(ApplicationCache* domApplicationCache)
 {
     ASSERT(!m_domApplicationCache || !domApplicationCache);
     m_domApplicationCache = domApplicationCache;
 }
 
-void ApplicationCacheHost::notifyDOMApplicationCache(EventID id, int total, int done)
+void ApplicationCacheHost::notifyApplicationCache(EventID id, int total, int done)
 {
     if (id != PROGRESS_EVENT)
         InspectorInstrumentation::updateApplicationCacheStatus(m_documentLoader->frame());
@@ -182,7 +174,7 @@ ApplicationCacheHost::CacheInfo ApplicationCacheHost::applicationCacheInfo()
     if (!m_internal)
         return CacheInfo(KURL(), 0, 0, 0);
 
-    WebKit::WebApplicationCacheHost::CacheInfo webInfo;
+    blink::WebApplicationCacheHost::CacheInfo webInfo;
     m_internal->m_outerHost->getAssociatedCacheInfo(&webInfo);
     return CacheInfo(webInfo.manifestURL, webInfo.creationTime, webInfo.updateTime, webInfo.totalSize);
 }
@@ -192,7 +184,7 @@ void ApplicationCacheHost::fillResourceList(ResourceInfoList* resources)
     if (!m_internal)
         return;
 
-    WebKit::WebVector<WebKit::WebApplicationCacheHost::ResourceInfo> webResources;
+    blink::WebVector<blink::WebApplicationCacheHost::ResourceInfo> webResources;
     m_internal->m_outerHost->getResourceList(&webResources);
     for (size_t i = 0; i < webResources.size(); ++i) {
         resources->append(ResourceInfo(
@@ -215,12 +207,12 @@ void ApplicationCacheHost::stopDeferringEvents()
 void ApplicationCacheHost::dispatchDOMEvent(EventID id, int total, int done)
 {
     if (m_domApplicationCache) {
-        const AtomicString& eventType = DOMApplicationCache::toEventType(id);
+        const AtomicString& eventType = ApplicationCache::toEventType(id);
         RefPtr<Event> event;
         if (id == PROGRESS_EVENT)
             event = ProgressEvent::create(eventType, true, done, total);
         else
-            event = Event::create(eventType, false, false);
+            event = Event::create(eventType);
         m_domApplicationCache->dispatchEvent(event, ASSERT_NO_EXCEPTION);
     }
 }

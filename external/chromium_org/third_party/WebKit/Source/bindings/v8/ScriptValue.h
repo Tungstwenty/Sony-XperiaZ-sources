@@ -31,52 +31,66 @@
 #ifndef ScriptValue_h
 #define ScriptValue_h
 
-#include "bindings/v8/ScriptState.h"
 #include "bindings/v8/SharedPersistent.h"
-#include <v8.h>
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
-#include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
-
-#ifndef NDEBUG
-#include "bindings/v8/V8GCController.h"
-#endif
-
-namespace WTF {
-class ArrayBuffer;
-}
+#include <v8.h>
 
 namespace WebCore {
 
 class JSONValue;
-class MessagePort;
-class SerializedScriptValue;
-typedef Vector<RefPtr<MessagePort>, 1> MessagePortArray;
-typedef Vector<RefPtr<WTF::ArrayBuffer>, 1> ArrayBufferArray;
+class ScriptState;
 
 class ScriptValue {
 public:
-    ScriptValue() { }
+    ScriptValue()
+        : m_isolate(0)
+    { }
+
     virtual ~ScriptValue();
 
-    ScriptValue(v8::Handle<v8::Value> value)
-        : m_value(value.IsEmpty() ? 0 : SharedPersistent<v8::Value>::create(value))
+    ScriptValue(v8::Handle<v8::Value> value, v8::Isolate* isolate)
+        : m_isolate(isolate)
+        , m_value(value.IsEmpty() ? 0 : SharedPersistent<v8::Value>::create(value, isolate))
     {
     }
 
     ScriptValue(const ScriptValue& value)
-        : m_value(value.m_value)
+        : m_isolate(value.m_isolate)
+        , m_value(value.m_value)
     {
     }
 
-    static ScriptValue createNull() { return ScriptValue(v8::Null()); }
-    static ScriptValue createBoolean(bool b) { return ScriptValue(b ? v8::True() : v8::False()); }
+    v8::Isolate* isolate() const
+    {
+        if (!m_isolate)
+            m_isolate = v8::Isolate::GetCurrent();
+        return m_isolate;
+    }
+
+    static ScriptValue createUndefined(v8::Isolate* isolate)
+    {
+        return ScriptValue(v8::Undefined(isolate), isolate);
+    }
+
+    static ScriptValue createNull()
+    {
+        v8::Isolate* isolate = v8::Isolate::GetCurrent();
+        return ScriptValue(v8::Null(isolate), isolate);
+    }
+    static ScriptValue createBoolean(bool b)
+    {
+        v8::Isolate* isolate = v8::Isolate::GetCurrent();
+        return ScriptValue(b ? v8::True(isolate) : v8::False(isolate), isolate);
+    }
 
     ScriptValue& operator=(const ScriptValue& value)
     {
-        if (this != &value)
+        if (this != &value) {
             m_value = value.m_value;
+            m_isolate = value.m_isolate;
+        }
         return *this;
     }
 
@@ -140,10 +154,6 @@ public:
         return !m_value.get() || m_value->isEmpty();
     }
 
-    PassRefPtr<SerializedScriptValue> serialize(ScriptState*);
-    PassRefPtr<SerializedScriptValue> serialize(ScriptState*, MessagePortArray*, ArrayBufferArray*, bool&);
-    static ScriptValue deserialize(ScriptState*, SerializedScriptValue*);
-
     void clear()
     {
         m_value = 0;
@@ -151,17 +161,16 @@ public:
 
     v8::Handle<v8::Value> v8Value() const
     {
-        return m_value.get() ? m_value->newLocal(v8::Isolate::GetCurrent()) : v8::Handle<v8::Value>();
+        return m_value.get() ? m_value->newLocal(m_isolate) : v8::Handle<v8::Value>();
     }
 
-    bool getString(ScriptState* scriptState, String& result) const { return getString(result, scriptState->isolate()); }
-    bool getString(String& result) const { return getString(result, v8::Isolate::GetCurrent()); }
-    bool getString(String& result, v8::Isolate*) const;
-    String toString(ScriptState*) const;
+    bool getString(String& result) const;
+    String toString() const;
 
     PassRefPtr<JSONValue> toJSONValue(ScriptState*) const;
 
 private:
+    mutable v8::Isolate* m_isolate;
     RefPtr<SharedPersistent<v8::Value> > m_value;
 };
 

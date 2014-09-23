@@ -65,7 +65,9 @@ AsyncStunTCPSocket::AsyncStunTCPSocket(
     : talk_base::AsyncTCPSocketBase(socket, listen, kBufSize) {
 }
 
-int AsyncStunTCPSocket::Send(const void *pv, size_t cb) {
+// TODO(mallinath) - Add support of setting DSCP code on AsyncSocket.
+int AsyncStunTCPSocket::Send(const void *pv, size_t cb,
+                             talk_base::DiffServCodePoint dscp) {
   if (cb > kBufSize || cb < kPacketLenSize + kPacketLenOffset) {
     SetError(EMSGSIZE);
     return -1;
@@ -124,7 +126,8 @@ void AsyncStunTCPSocket::ProcessInput(char* data, size_t* len) {
       return;
     }
 
-    SignalReadPacket(this, data, expected_pkt_len, remote_addr);
+    SignalReadPacket(this, data, expected_pkt_len, remote_addr,
+                     talk_base::CreatePacketTime(0));
 
     *len -= actual_length;
     if (*len > 0) {

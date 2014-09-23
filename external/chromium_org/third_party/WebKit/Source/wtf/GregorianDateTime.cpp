@@ -27,17 +27,15 @@
 
 #include "DateMath.h"
 
-#if OS(WINDOWS)
+#if OS(WIN)
 #include <windows.h>
-#else
-#include <time.h>
 #endif
 
 namespace WTF {
 
 void GregorianDateTime::setToCurrentLocalTime()
 {
-#if OS(WINDOWS)
+#if OS(WIN)
     SYSTEMTIME systemTime;
     GetLocalTime(&systemTime);
     TIME_ZONE_INFORMATION timeZoneInformation;

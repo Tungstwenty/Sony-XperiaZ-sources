@@ -33,7 +33,7 @@
 
 #include "WebCommon.h"
 
-namespace WebKit {
+namespace blink {
 
 class WebBlobData;
 class WebString;
@@ -42,38 +42,42 @@ class WebURL;
 
 class WebBlobRegistry {
 public:
-    WEBKIT_EXPORT static WebBlobRegistry* create();
-
     virtual ~WebBlobRegistry() { }
 
-    // Registers a blob URL referring to the specified blob data.
-    virtual void registerBlobURL(const WebURL&, WebBlobData&) = 0;
+    virtual void registerBlobData(const blink::WebString& uuid, const blink::WebBlobData&) { }
+    virtual void addBlobDataRef(const blink::WebString& uuid) { }
+    virtual void removeBlobDataRef(const blink::WebString& uuid) { }
+    virtual void registerPublicBlobURL(const blink::WebURL&, const blink::WebString& uuid) { }
+    virtual void revokePublicBlobURL(const blink::WebURL&) { }
 
-    // Registers a blob URL referring to the blob data identified by the
-    // specified srcURL.
-    virtual void registerBlobURL(const WebURL&, const WebURL& srcURL) = 0;
-
-    // Unregisters a blob referred by the URL.
-    virtual void unregisterBlobURL(const WebURL&) = 0;
+    // DEPRECATED - old style blob handling is being replaced
+    virtual void registerBlobURL(const WebURL&, WebBlobData&) { }
+    virtual void registerBlobURL(const WebURL&, const WebURL& srcURL) { }
+    virtual void unregisterBlobURL(const WebURL&) { }
 
     // Registers a stream URL referring to a stream with the specified media
     // type.
-    virtual void registerStreamURL(const WebURL&, const WebString&) { WEBKIT_ASSERT_NOT_REACHED(); }
+    virtual void registerStreamURL(const WebURL&, const WebString&) { BLINK_ASSERT_NOT_REACHED(); }
 
     // Registers a stream URL referring to the stream identified by the
     // specified srcURL.
-    virtual void registerStreamURL(const WebURL&, const WebURL& srcURL) { WEBKIT_ASSERT_NOT_REACHED(); };
+    virtual void registerStreamURL(const WebURL&, const WebURL& srcURL) { BLINK_ASSERT_NOT_REACHED(); };
 
     // Add data to the stream referred by the URL.
-    virtual void addDataToStream(const WebURL&, WebThreadSafeData&) { WEBKIT_ASSERT_NOT_REACHED(); }
+    virtual void addDataToStream(const WebURL&, WebThreadSafeData&) { BLINK_ASSERT_NOT_REACHED(); }
 
-    // Tell the registry that this stream won't receive any more data.
-    virtual void finalizeStream(const WebURL&) { WEBKIT_ASSERT_NOT_REACHED(); }
+    // Tell the registry that construction of this stream has completed
+    // successfully and so it won't receive any more data.
+    virtual void finalizeStream(const WebURL&) { BLINK_ASSERT_NOT_REACHED(); }
+
+    // Tell the registry that construction of this stream has been aborted and
+    // so it won't receive any more data.
+    virtual void abortStream(const WebURL&) { BLINK_ASSERT_NOT_REACHED(); }
 
     // Unregisters a stream referred by the URL.
-    virtual void unregisterStreamURL(const WebURL&) { WEBKIT_ASSERT_NOT_REACHED(); }
+    virtual void unregisterStreamURL(const WebURL&) { BLINK_ASSERT_NOT_REACHED(); }
 };
 
-} // namespace WebKit
+} // namespace blink
 
 #endif // WebBlobRegistry_h

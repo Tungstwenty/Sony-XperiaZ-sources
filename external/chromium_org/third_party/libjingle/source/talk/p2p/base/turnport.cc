@@ -52,10 +52,6 @@ static const int TURN_PERMISSION_TIMEOUT = 5 * 60 * 1000;  // 5 minutes
 
 static const size_t TURN_CHANNEL_HEADER_SIZE = 4U;
 
-enum {
-  MSG_PORT_ERROR = 1
-};
-
 inline bool IsTurnChannelData(uint16 msg_type) {
   return ((msg_type & 0xC000) == 0x4000);  // MSB are 0b01
 }
@@ -156,7 +152,8 @@ class TurnEntry : public sigslot::has_slots<> {
   void SendChannelBindRequest(int delay);
   // Sends a packet to the given destination address.
   // This will wrap the packet in STUN if necessary.
-  int Send(const void* data, size_t size, bool payload);
+  int Send(const void* data, size_t size, bool payload,
+           talk_base::DiffServCodePoint dscp);
 
   void OnCreatePermissionSuccess();
   void OnCreatePermissionError(StunMessage* response, int code);
@@ -217,6 +214,14 @@ void TurnPort::PrepareAddress() {
   if (server_address_.address.IsUnresolved()) {
     ResolveTurnAddress(server_address_.address);
   } else {
+    // If protocol family of server address doesn't match with local, return.
+    if (!IsCompatibleAddress(server_address_.address)) {
+      LOG(LS_ERROR) << "Server IP address family does not match with "
+                    << "local host address family type";
+      OnAllocateError();
+      return;
+    }
+
     LOG_J(LS_INFO, this) << "Trying to connect to TURN server via "
                          << ProtoToString(server_address_.proto) << " @ "
                          << server_address_.address.ToSensitiveString();
@@ -296,6 +301,14 @@ Connection* TurnPort::CreateConnection(const Candidate& address,
 }
 
 int TurnPort::SetOption(talk_base::Socket::Option opt, int value) {
+  // DSCP option is not passed to the socket.
+  // TODO(mallinath) - After we have the support on socket,
+  // remove this specialization.
+  if (opt == talk_base::Socket::OPT_DSCP) {
+    SetDefaultDscpValue(static_cast<talk_base::DiffServCodePoint>(value));
+    return 0;
+  }
+
   if (!socket_) {
     // If socket is not created yet, these options will be applied during socket
     // creation.
@@ -318,6 +331,7 @@ int TurnPort::GetError() {
 
 int TurnPort::SendTo(const void* data, size_t size,
                      const talk_base::SocketAddress& addr,
+                     talk_base::DiffServCodePoint dscp,
                      bool payload) {
   // Try to find an entry for this specific address; we should have one.
   TurnEntry* entry = FindEntry(addr);
@@ -332,7 +346,7 @@ int TurnPort::SendTo(const void* data, size_t size,
   }
 
   // Send the actual contents to the server using the usual mechanism.
-  int sent = entry->Send(data, size, payload);
+  int sent = entry->Send(data, size, payload, dscp);
   if (sent <= 0) {
     return SOCKET_ERROR;
   }
@@ -342,9 +356,10 @@ int TurnPort::SendTo(const void* data, size_t size,
   return static_cast<int>(size);
 }
 
-void TurnPort::OnReadPacket(talk_base::AsyncPacketSocket* socket,
-                           const char* data, size_t size,
-                           const talk_base::SocketAddress& remote_addr) {
+void TurnPort::OnReadPacket(
+    talk_base::AsyncPacketSocket* socket, const char* data, size_t size,
+    const talk_base::SocketAddress& remote_addr,
+    const talk_base::PacketTime& packet_time) {
   ASSERT(socket == socket_.get());
   ASSERT(remote_addr == server_address_.address);
 
@@ -359,9 +374,9 @@ void TurnPort::OnReadPacket(talk_base::AsyncPacketSocket* socket,
   // a response to a previous request.
   uint16 msg_type = talk_base::GetBE16(data);
   if (IsTurnChannelData(msg_type)) {
-    HandleChannelData(msg_type, data, size);
+    HandleChannelData(msg_type, data, size, packet_time);
   } else if (msg_type == TURN_DATA_INDICATION) {
-    HandleDataIndication(data, size);
+    HandleDataIndication(data, size, packet_time);
   } else {
     // This must be a response for one of our requests.
     // Check success responses, but not errors, for MESSAGE-INTEGRITY.
@@ -385,28 +400,27 @@ void TurnPort::ResolveTurnAddress(const talk_base::SocketAddress& address) {
   if (resolver_)
     return;
 
-  resolver_ = new talk_base::AsyncResolver();
-  resolver_->SignalWorkDone.connect(this, &TurnPort::OnResolveResult);
-  resolver_->set_address(address);
-  resolver_->Start();
+  resolver_ = socket_factory()->CreateAsyncResolver();
+  resolver_->SignalDone.connect(this, &TurnPort::OnResolveResult);
+  resolver_->Start(address);
 }
 
-void TurnPort::OnResolveResult(talk_base::SignalThread* signal_thread) {
-  ASSERT(signal_thread == resolver_);
-  if (resolver_->error() != 0) {
+void TurnPort::OnResolveResult(talk_base::AsyncResolverInterface* resolver) {
+  ASSERT(resolver == resolver_);
+  if (resolver_->GetError() != 0 ||
+      !resolver_->GetResolvedAddress(ip().family(), &server_address_.address)) {
     LOG_J(LS_WARNING, this) << "TURN host lookup received error "
-                            << resolver_->error();
+                            << resolver_->GetError();
     OnAllocateError();
     return;
   }
 
-  server_address_.address = resolver_->address();
   PrepareAddress();
 }
 
 void TurnPort::OnSendStunPacket(const void* data, size_t size,
                                 StunRequest* request) {
-  if (Send(data, size) < 0) {
+  if (Send(data, size, DefaultDscpValue()) < 0) {
     LOG_J(LS_ERROR, this) << "Failed to send TURN message, err="
                           << socket_->GetError();
   }
@@ -431,22 +445,24 @@ void TurnPort::OnAllocateError() {
   // We will send SignalPortError asynchronously as this can be sent during
   // port initialization. This way it will not be blocking other port
   // creation.
-  thread()->Post(this, MSG_PORT_ERROR);
+  thread()->Post(this, MSG_ERROR);
 }
 
 void TurnPort::OnMessage(talk_base::Message* message) {
-  if (message->message_id == MSG_PORT_ERROR) {
+  if (message->message_id == MSG_ERROR) {
     SignalPortError(this);
-  } else {
-    Port::OnMessage(message);
+    return;
   }
+
+  Port::OnMessage(message);
 }
 
 void TurnPort::OnAllocateRequestTimeout() {
   OnAllocateError();
 }
 
-void TurnPort::HandleDataIndication(const char* data, size_t size) {
+void TurnPort::HandleDataIndication(const char* data, size_t size,
+                                    const talk_base::PacketTime& packet_time) {
   // Read in the message, and process according to RFC5766, Section 10.4.
   talk_base::ByteBuffer buf(data, size);
   TurnMessage msg;
@@ -481,11 +497,13 @@ void TurnPort::HandleDataIndication(const char* data, size_t size) {
     return;
   }
 
-  DispatchPacket(data_attr->bytes(), data_attr->length(), ext_addr, PROTO_UDP);
+  DispatchPacket(data_attr->bytes(), data_attr->length(), ext_addr,
+                 PROTO_UDP, packet_time);
 }
 
 void TurnPort::HandleChannelData(int channel_id, const char* data,
-                                 size_t size) {
+                                 size_t size,
+                                 const talk_base::PacketTime& packet_time) {
   // Read the message, and process according to RFC5766, Section 11.6.
   //    0                   1                   2                   3
   //    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -517,13 +535,14 @@ void TurnPort::HandleChannelData(int channel_id, const char* data,
   }
 
   DispatchPacket(data + TURN_CHANNEL_HEADER_SIZE, len, entry->address(),
-                 PROTO_UDP);
+                 PROTO_UDP, packet_time);
 }
 
 void TurnPort::DispatchPacket(const char* data, size_t size,
-    const talk_base::SocketAddress& remote_addr, ProtocolType proto) {
+    const talk_base::SocketAddress& remote_addr,
+    ProtocolType proto, const talk_base::PacketTime& packet_time) {
   if (Connection* conn = GetConnection(remote_addr)) {
-    conn->OnReadPacket(data, size);
+    conn->OnReadPacket(data, size, packet_time);
   } else {
     Port::OnReadPacket(data, size, remote_addr, proto);
   }
@@ -557,8 +576,9 @@ void TurnPort::AddRequestAuthInfo(StunMessage* msg) {
   VERIFY(msg->AddMessageIntegrity(hash()));
 }
 
-int TurnPort::Send(const void* data, size_t len) {
-  return socket_->SendTo(data, len, server_address_.address);
+int TurnPort::Send(const void* data, size_t len,
+                   talk_base::DiffServCodePoint dscp) {
+  return socket_->SendTo(data, len, server_address_.address, dscp);
 }
 
 void TurnPort::UpdateHash() {
@@ -890,7 +910,8 @@ void TurnEntry::SendChannelBindRequest(int delay) {
       port_, this, channel_id_, ext_addr_), delay);
 }
 
-int TurnEntry::Send(const void* data, size_t size, bool payload) {
+int TurnEntry::Send(const void* data, size_t size, bool payload,
+                    talk_base::DiffServCodePoint dscp) {
   talk_base::ByteBuffer buf;
   if (state_ != STATE_BOUND) {
     // If we haven't bound the channel yet, we have to use a Send Indication.
@@ -915,7 +936,7 @@ int TurnEntry::Send(const void* data, size_t size, bool payload) {
     buf.WriteUInt16(static_cast<uint16>(size));
     buf.WriteBytes(reinterpret_cast<const char*>(data), size);
   }
-  return port_->Send(buf.Data(), buf.Length());
+  return port_->Send(buf.Data(), buf.Length(), dscp);
 }
 
 void TurnEntry::OnCreatePermissionSuccess() {

@@ -31,7 +31,7 @@
 #ifndef WebRTCPeerConnectionHandler_h
 #define WebRTCPeerConnectionHandler_h
 
-namespace WebKit {
+namespace blink {
 class WebMediaConstraints;
 class WebMediaStream;
 class WebMediaStreamTrack;
@@ -60,7 +60,11 @@ public:
     virtual WebRTCSessionDescription localDescription() = 0;
     virtual WebRTCSessionDescription remoteDescription() = 0;
     virtual bool updateICE(const WebRTCConfiguration&, const WebMediaConstraints&) = 0;
-    virtual bool addICECandidate(const WebRTCICECandidate&) = 0;
+
+    // DEPRECATED
+    virtual bool addICECandidate(const WebRTCICECandidate&) { return false; }
+
+    virtual bool addICECandidate(const WebRTCVoidRequest&, const WebRTCICECandidate&) { return false; }
     virtual bool addStream(const WebMediaStream&, const WebMediaConstraints&) = 0;
     virtual void removeStream(const WebMediaStream&) = 0;
     virtual void getStats(const WebRTCStatsRequest&) = 0;
@@ -69,6 +73,6 @@ public:
     virtual void stop() = 0;
 };
 
-} // namespace WebKit
+} // namespace blink
 
 #endif // WebRTCPeerConnectionHandler_h

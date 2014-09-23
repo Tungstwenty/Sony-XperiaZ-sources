@@ -44,25 +44,23 @@
 #include "bindings/v8/V8DOMWrapper.h"
 #include "bindings/v8/V8Utilities.h"
 #include "core/dom/Document.h"
-#include "core/dom/Event.h"
+#include "core/events/Event.h"
 #include "core/dom/Node.h"
 #include "core/inspector/InspectorController.h"
 #include "core/inspector/InspectorFrontendHost.h"
 #include "core/page/ContextMenuController.h"
-#include "core/page/DOMWindow.h"
-#include "core/page/Frame.h"
+#include "core/frame/DOMWindow.h"
+#include "core/frame/Frame.h"
 #include "core/page/Page.h"
-#include "core/page/Settings.h"
-#include "core/platform/ContextMenuItem.h"
+#include "core/frame/Settings.h"
 #include "core/platform/Pasteboard.h"
-#include "weborigin/SecurityOrigin.h"
+#include "platform/ContextMenuItem.h"
+#include "platform/weborigin/SecurityOrigin.h"
 #include "wtf/OwnPtr.h"
-#include "wtf/Vector.h"
-#include "wtf/text/WTFString.h"
 
 using namespace WebCore;
 
-namespace WebKit {
+namespace blink {
 
 class WebDevToolsFrontendImpl::InspectorFrontendResumeObserver : public ActiveDOMObject {
     WTF_MAKE_NONCOPYABLE(InspectorFrontendResumeObserver);
@@ -75,11 +73,6 @@ public:
     }
 
 private:
-    virtual bool canSuspend() const OVERRIDE
-    {
-        return true;
-    }
-
     virtual void resume() OVERRIDE
     {
         m_webDevToolsFrontendImpl->resume();
@@ -93,10 +86,7 @@ WebDevToolsFrontend* WebDevToolsFrontend::create(
     WebDevToolsFrontendClient* client,
     const WebString& applicationLocale)
 {
-    return new WebDevToolsFrontendImpl(
-      static_cast<WebViewImpl*>(view),
-      client,
-      applicationLocale);
+    return new WebDevToolsFrontendImpl(toWebViewImpl(view), client, applicationLocale);
 }
 
 WebDevToolsFrontendImpl::WebDevToolsFrontendImpl(
@@ -108,12 +98,7 @@ WebDevToolsFrontendImpl::WebDevToolsFrontendImpl(
     , m_applicationLocale(applicationLocale)
     , m_inspectorFrontendDispatchTimer(this, &WebDevToolsFrontendImpl::maybeDispatch)
 {
-    InspectorController* ic = m_webViewImpl->page()->inspectorController();
-    ic->setInspectorFrontendClient(adoptPtr(new InspectorFrontendClientImpl(m_webViewImpl->page(), m_client, this)));
-
-    // Put each DevTools frontend Page into a private group so that it's not
-    // deferred along with the inspected page.
-    m_webViewImpl->page()->setGroupType(Page::InspectorPageGroup);
+    m_webViewImpl->page()->inspectorController().setInspectorFrontendClient(adoptPtr(new InspectorFrontendClientImpl(m_webViewImpl->page(), m_client, this)));
 }
 
 WebDevToolsFrontendImpl::~WebDevToolsFrontendImpl()
@@ -129,7 +114,7 @@ void WebDevToolsFrontendImpl::dispatchOnInspectorFrontend(const WebString& messa
 void WebDevToolsFrontendImpl::resume()
 {
     // We should call maybeDispatch asynchronously here because we are not allowed to update activeDOMObjects list in
-    // resume (See ScriptExecutionContext::resumeActiveDOMObjects).
+    // resume (See ExecutionContext::resumeActiveDOMObjects).
     if (!m_inspectorFrontendDispatchTimer.isActive())
         m_inspectorFrontendDispatchTimer.startOneShot(0);
 }
@@ -150,24 +135,35 @@ void WebDevToolsFrontendImpl::maybeDispatch(WebCore::Timer<WebDevToolsFrontendIm
 void WebDevToolsFrontendImpl::doDispatchOnInspectorFrontend(const WebString& message)
 {
     WebFrameImpl* frame = m_webViewImpl->mainFrameImpl();
-    v8::Isolate* isolate = v8::Isolate::GetCurrent();
-    v8::HandleScope scope;
-    v8::Handle<v8::Context> frameContext = frame->frame() ? frame->frame()->script()->currentWorldContext() : v8::Local<v8::Context>();
+    if (!frame->frame())
+        return;
+    v8::Isolate* isolate = toIsolate(frame->frame());
+    v8::HandleScope scope(isolate);
+    v8::Handle<v8::Context> frameContext = frame->frame()->script().currentWorldContext();
     v8::Context::Scope contextScope(frameContext);
-    v8::Handle<v8::Value> inspectorFrontendApiValue = frameContext->Global()->Get(v8::String::New("InspectorFrontendAPI"));
+    v8::Handle<v8::Value> inspectorFrontendApiValue = frameContext->Global()->Get(v8::String::NewFromUtf8(isolate, "InspectorFrontendAPI"));
     if (!inspectorFrontendApiValue->IsObject())
         return;
-    v8::Handle<v8::Object> inspectorFrontendApi = v8::Handle<v8::Object>::Cast(inspectorFrontendApiValue);
-    v8::Handle<v8::Value> dispatchFunction = inspectorFrontendApi->Get(v8::String::New("dispatchMessage"));
-     // The frame might have navigated away from the front-end page (which is still weird).
-    if (!dispatchFunction->IsFunction())
-        return;
+    v8::Handle<v8::Object> dispatcherObject = v8::Handle<v8::Object>::Cast(inspectorFrontendApiValue);
+    v8::Handle<v8::Value> dispatchFunction = dispatcherObject->Get(v8::String::NewFromUtf8(isolate, "dispatchMessage"));
+    // The frame might have navigated away from the front-end page (which is still weird),
+    // OR the older version of frontend might have a dispatch method in a different place.
+    // FIXME(kaznacheev): Remove when Chrome for Android M18 is retired.
+    if (!dispatchFunction->IsFunction()) {
+        v8::Handle<v8::Value> inspectorBackendApiValue = frameContext->Global()->Get(v8::String::NewFromUtf8(isolate, "InspectorBackend"));
+        if (!inspectorBackendApiValue->IsObject())
+            return;
+        dispatcherObject = v8::Handle<v8::Object>::Cast(inspectorBackendApiValue);
+        dispatchFunction = dispatcherObject->Get(v8::String::NewFromUtf8(isolate, "dispatch"));
+        if (!dispatchFunction->IsFunction())
+            return;
+    }
     v8::Handle<v8::Function> function = v8::Handle<v8::Function>::Cast(dispatchFunction);
     Vector< v8::Handle<v8::Value> > args;
-    args.append(v8String(message, isolate));
+    args.append(v8String(isolate, message));
     v8::TryCatch tryCatch;
     tryCatch.SetVerbose(true);
-    ScriptController::callFunctionWithInstrumentation(frame->frame() ? frame->frame()->document() : 0, function, inspectorFrontendApi, args.size(), args.data());
+    ScriptController::callFunction(frame->frame()->document(), function, dispatcherObject, args.size(), args.data(), isolate);
 }
 
-} // namespace WebKit
+} // namespace blink

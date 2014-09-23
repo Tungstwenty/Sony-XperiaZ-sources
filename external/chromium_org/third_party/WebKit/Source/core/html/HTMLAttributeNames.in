@@ -4,7 +4,7 @@ namespaceURI="http://www.w3.org/1999/xhtml"
 attrsNullNamespace
 
 abbr
-accept_charset
+accept-charset
 accept
 accesskey
 action
@@ -121,7 +121,7 @@ high
 href
 hreflang
 hspace
-http_equiv
+http-equiv
 id
 incremental
 indeterminate
@@ -169,6 +169,9 @@ novalidate
 nowrap
 object
 onabort
+onanimationstart
+onanimationiteration
+onanimationend
 onautocomplete
 onautocompleteerror
 onbeforecopy
@@ -177,12 +180,15 @@ onbeforeload
 onbeforepaste
 onbeforeunload
 onblur
+oncancel
 oncanplay
 oncanplaythrough
 onchange
 onclick
+onclose
 oncontextmenu
 oncopy
+oncuechange
 oncut
 ondblclick
 ondrag
@@ -209,6 +215,7 @@ onload
 onloadeddata
 onloadedmetadata
 onloadstart
+onmessage
 onmousedown
 onmouseenter
 onmouseleave
@@ -239,6 +246,7 @@ onselect
 onselectstart
 onselectionchange
 onwebkitspeechchange
+onshow
 onstalled
 onstorage
 onsuspend
@@ -265,9 +273,9 @@ onwebkitsourceclose
 onwebkitsourceended
 onwebkitsourceopen
 onwebkittransitionend
+onwheel
 open
 optimum
-part
 pattern
 placeholder
 pluginspage
@@ -312,6 +320,7 @@ x-webkit-speech
 x-webkit-grammar
 spellcheck
 src
+srcset
 srcdoc
 srclang
 standby
@@ -334,7 +343,6 @@ valign
 value
 valuetype
 version
-viewsource
 vlink
 vspace
 webkitallowfullscreen

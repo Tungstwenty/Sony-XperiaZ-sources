@@ -18,6 +18,10 @@
 #include <fontconfig/fontconfig.h>
 #include <unistd.h>
 
+// Defined in SkFontHost_FreeType.cpp
+bool find_name_and_attributes(SkStream* stream, SkString* name,
+                              SkTypeface::Style* style, bool* isFixedWidth);
+
 // borrow this global from SkFontHost_fontconfig. eventually that file should
 // go away, and be replaced with this one.
 extern SkFontConfigInterface* SkFontHost_fontconfig_ref_global();
@@ -272,9 +276,14 @@ protected:
             return NULL;  // don't accept too large fonts (>= 1GB) for safety.
         }
 
-        // TODO should the caller give us the style?
+        // TODO should the caller give us the style or should we get it from freetype?
         SkTypeface::Style style = SkTypeface::kNormal;
-        SkTypeface* face = SkNEW_ARGS(FontConfigTypeface, (style, stream));
+        bool isFixedWidth = false;
+        if (!find_name_and_attributes(stream, NULL, &style, &isFixedWidth)) {
+            return NULL;
+        }
+
+        SkTypeface* face = SkNEW_ARGS(FontConfigTypeface, (style, isFixedWidth, stream));
         return face;
     }
 

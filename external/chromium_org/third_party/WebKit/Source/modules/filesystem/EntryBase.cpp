@@ -31,12 +31,10 @@
 #include "config.h"
 #include "modules/filesystem/EntryBase.h"
 
-#include "core/platform/AsyncFileSystem.h"
 #include "modules/filesystem/DOMFilePath.h"
 #include "modules/filesystem/DOMFileSystemBase.h"
-#include "weborigin/SecurityOrigin.h"
+#include "platform/weborigin/SecurityOrigin.h"
 #include "wtf/PassRefPtr.h"
-#include "wtf/text/WTFString.h"
 
 namespace WebCore {
 

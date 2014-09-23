@@ -18,9 +18,9 @@ $(gyp_shared_intermediate_dir)/blink/InjectedScriptSource.h: gyp_local_path := $
 $(gyp_shared_intermediate_dir)/blink/InjectedScriptSource.h: gyp_intermediate_dir := $(abspath $(gyp_intermediate_dir))
 $(gyp_shared_intermediate_dir)/blink/InjectedScriptSource.h: gyp_shared_intermediate_dir := $(abspath $(gyp_shared_intermediate_dir))
 $(gyp_shared_intermediate_dir)/blink/InjectedScriptSource.h: export PATH := $(subst $(ANDROID_BUILD_PATHS),,$(PATH))
-$(gyp_shared_intermediate_dir)/blink/InjectedScriptSource.h: $(LOCAL_PATH)/third_party/WebKit/Source/core/inspector/xxd.pl $(LOCAL_PATH)/third_party/WebKit/Source/core/inspector/InjectedScriptSource.js $(GYP_TARGET_DEPENDENCIES)
+$(gyp_shared_intermediate_dir)/blink/InjectedScriptSource.h: $(LOCAL_PATH)/third_party/WebKit/Source/build/scripts/xxd.py $(LOCAL_PATH)/third_party/WebKit/Source/core/inspector/InjectedScriptSource.js $(GYP_TARGET_DEPENDENCIES)
 	@echo "Gyp action: Generating $(gyp_shared_intermediate_dir)/blink/InjectedScriptSource.h from inspector/InjectedScriptSource.js ($@)"
-	$(hide)cd $(gyp_local_path)/third_party/WebKit/Source/core; mkdir -p $(gyp_shared_intermediate_dir)/blink; perl inspector/xxd.pl InjectedScriptSource_js inspector/InjectedScriptSource.js "$(gyp_shared_intermediate_dir)/blink/InjectedScriptSource.h"
+	$(hide)cd $(gyp_local_path)/third_party/WebKit/Source/core; mkdir -p $(gyp_shared_intermediate_dir)/blink; python ../build/scripts/xxd.py InjectedScriptSource_js inspector/InjectedScriptSource.js "$(gyp_shared_intermediate_dir)/blink/InjectedScriptSource.h"
 
 
 

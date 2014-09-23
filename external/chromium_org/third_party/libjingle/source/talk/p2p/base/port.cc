@@ -112,7 +112,7 @@ const int RTT_RATIO = 3;  // 3 : 1
 // The delay before we begin checking if this port is useless.
 const int kPortTimeoutDelay = 30 * 1000;  // 30 seconds
 
-const uint32 MSG_CHECKTIMEOUT = 1;
+// Used by the Connection.
 const uint32 MSG_DELETE = 1;
 }
 
@@ -162,11 +162,11 @@ static std::string ComputeFoundation(
   return talk_base::ToString<uint32>(talk_base::ComputeCrc32(ost.str()));
 }
 
-Port::Port(talk_base::Thread* thread, talk_base::Network* network,
-           const talk_base::IPAddress& ip,
+Port::Port(talk_base::Thread* thread, talk_base::PacketSocketFactory* factory,
+           talk_base::Network* network, const talk_base::IPAddress& ip,
            const std::string& username_fragment, const std::string& password)
     : thread_(thread),
-      factory_(NULL),
+      factory_(factory),
       send_retransmit_count_attribute_(false),
       network_(network),
       ip_(ip),
@@ -181,7 +181,8 @@ Port::Port(talk_base::Thread* thread, talk_base::Network* network,
       ice_protocol_(ICEPROTO_GOOGLE),
       ice_role_(ICEROLE_UNKNOWN),
       tiebreaker_(0),
-      shared_socket_(true) {
+      shared_socket_(true),
+      default_dscp_(talk_base::DSCP_NO_CHANGE) {
   Construct();
 }
 
@@ -207,7 +208,8 @@ Port::Port(talk_base::Thread* thread, const std::string& type,
       ice_protocol_(ICEPROTO_GOOGLE),
       ice_role_(ICEROLE_UNKNOWN),
       tiebreaker_(0),
-      shared_socket_(false) {
+      shared_socket_(false),
+      default_dscp_(talk_base::DSCP_NO_CHANGE) {
   ASSERT(factory_ != NULL);
   Construct();
 }
@@ -606,7 +608,7 @@ void Port::SendBindingResponse(StunMessage* request,
   // Send the response message.
   talk_base::ByteBuffer buf;
   response.Write(&buf);
-  if (SendTo(buf.Data(), buf.Length(), addr, false) < 0) {
+  if (SendTo(buf.Data(), buf.Length(), addr, DefaultDscpValue(), false) < 0) {
     LOG_J(LS_ERROR, this) << "Failed to send STUN ping response to "
                           << addr.ToSensitiveString();
   }
@@ -660,7 +662,7 @@ void Port::SendBindingErrorResponse(StunMessage* request,
   // Send the response message.
   talk_base::ByteBuffer buf;
   response.Write(&buf);
-  SendTo(buf.Data(), buf.Length(), addr, false);
+  SendTo(buf.Data(), buf.Length(), addr, DefaultDscpValue(), false);
   LOG_J(LS_INFO, this) << "Sending STUN binding error: reason=" << reason
                        << " to " << addr.ToSensitiveString();
 }
@@ -916,12 +918,14 @@ void Connection::set_use_candidate_attr(bool enable) {
 
 void Connection::OnSendStunPacket(const void* data, size_t size,
                                   StunRequest* req) {
-  if (port_->SendTo(data, size, remote_candidate_.address(), false) < 0) {
+  if (port_->SendTo(data, size, remote_candidate_.address(),
+                    port_->DefaultDscpValue(), false) < 0) {
     LOG_J(LS_WARNING, this) << "Failed to send STUN ping " << req->id();
   }
 }
 
-void Connection::OnReadPacket(const char* data, size_t size) {
+void Connection::OnReadPacket(
+  const char* data, size_t size, const talk_base::PacketTime& packet_time) {
   talk_base::scoped_ptr<IceMessage> msg;
   std::string remote_ufrag;
   const talk_base::SocketAddress& addr(remote_candidate_.address());
@@ -935,7 +939,7 @@ void Connection::OnReadPacket(const char* data, size_t size) {
 
       last_data_received_ = talk_base::Time();
       recv_rate_tracker_.Update(size);
-      SignalReadPacket(this, data, size);
+      SignalReadPacket(this, data, size, packet_time);
 
       // If timed out sending writability checks, start up again
       if (!pruned_ && (write_state_ == STATE_WRITE_TIMEOUT)) {
@@ -1069,7 +1073,12 @@ void Connection::UpdateState(uint32 now) {
   // test we can do is a simple window.
   // If other side has not sent ping after connection has become readable, use
   // |last_data_received_| as the indication.
-  if ((read_state_ == STATE_READABLE) &&
+  // If remote endpoint is doing RFC 5245, it's not required to send ping
+  // after connection is established. If this connection is serving a data
+  // channel, it may not be in a position to send media continuously. Do not
+  // mark connection timeout if it's in RFC5245 mode.
+  // Below check will be performed with end point if it's doing google-ice.
+  if (port_->IsGoogleIce() && (read_state_ == STATE_READABLE) &&
       (last_ping_received_ + CONNECTION_READ_TIMEOUT <= now) &&
       (last_data_received_ + CONNECTION_READ_TIMEOUT <= now)) {
     LOG_J(LS_INFO, this) << "Unreadable after "
@@ -1384,12 +1393,13 @@ ProxyConnection::ProxyConnection(Port* port, size_t index,
   : Connection(port, index, candidate), error_(0) {
 }
 
-int ProxyConnection::Send(const void* data, size_t size) {
+int ProxyConnection::Send(const void* data, size_t size,
+                          talk_base::DiffServCodePoint dscp) {
   if (write_state_ == STATE_WRITE_INIT || write_state_ == STATE_WRITE_TIMEOUT) {
     error_ = EWOULDBLOCK;
     return SOCKET_ERROR;
   }
-  int sent = port_->SendTo(data, size, remote_candidate_.address(), true);
+  int sent = port_->SendTo(data, size, remote_candidate_.address(), dscp, true);
   if (sent <= 0) {
     ASSERT(sent < 0);
     error_ = port_->GetError();

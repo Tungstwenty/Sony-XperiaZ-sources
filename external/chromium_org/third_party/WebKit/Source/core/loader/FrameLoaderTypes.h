@@ -31,79 +31,79 @@
 
 namespace WebCore {
 
-    enum FrameState {
-        FrameStateProvisional,
-        // This state indicates we are ready to commit to a page,
-        // which means the view will transition to use the new data source.
-        FrameStateCommittedPage,
-        FrameStateComplete
-    };
+enum FrameState {
+    FrameStateProvisional,
+    // This state indicates we are ready to commit to a page,
+    // which means the view will transition to use the new data source.
+    FrameStateCommittedPage,
+    FrameStateComplete
+};
 
-    enum FrameLoadType {
-        FrameLoadTypeStandard,
-        FrameLoadTypeBackForward,
-        FrameLoadTypeReload,
-        FrameLoadTypeSame, // user loads same URL again (but not reload button)
-        FrameLoadTypeRedirectWithLockedBackForwardList,
-        FrameLoadTypeInitialInChildFrame,
-        FrameLoadTypeReloadFromOrigin,
-    };
+enum FrameLoadType {
+    FrameLoadTypeStandard,
+    FrameLoadTypeBackForward,
+    FrameLoadTypeReload,
+    FrameLoadTypeSame, // user loads same URL again (but not reload button)
+    FrameLoadTypeRedirectWithLockedBackForwardList,
+    FrameLoadTypeInitialInChildFrame,
+    FrameLoadTypeReloadFromOrigin,
+};
 
-    enum NavigationType {
-        NavigationTypeLinkClicked,
-        NavigationTypeFormSubmitted,
-        NavigationTypeBackForward,
-        NavigationTypeReload,
-        NavigationTypeFormResubmitted,
-        NavigationTypeOther
-    };
+enum NavigationType {
+    NavigationTypeLinkClicked,
+    NavigationTypeFormSubmitted,
+    NavigationTypeBackForward,
+    NavigationTypeReload,
+    NavigationTypeFormResubmitted,
+    NavigationTypeOther
+};
 
-    enum ClearProvisionalItemPolicy {
-        ShouldClearProvisionalItem,
-        ShouldNotClearProvisionalItem
-    };
+enum ObjectContentType {
+    ObjectContentNone,
+    ObjectContentImage,
+    ObjectContentFrame,
+    ObjectContentNetscapePlugin,
+    ObjectContentOtherPlugin
+};
 
-    enum ObjectContentType {
-        ObjectContentNone,
-        ObjectContentImage,
-        ObjectContentFrame,
-        ObjectContentNetscapePlugin,
-        ObjectContentOtherPlugin
-    };
+enum ClearOption {
+    ClearWindowProperties = 1 << 0,
+    ClearScriptObjects = 1 << 1,
+    ClearWindowObject = 1 << 2,
+};
+typedef int ClearOptions;
 
-    enum UnloadEventPolicy {
-        UnloadEventPolicyNone,
-        UnloadEventPolicyUnloadOnly,
-        UnloadEventPolicyUnloadAndPageHide
-    };
+enum ShouldSendReferrer {
+    MaybeSendReferrer,
+    NeverSendReferrer
+};
 
-    enum ClearOption {
-        ClearWindowProperties = 1 << 0,
-        ClearScriptObjects = 1 << 1,
-        ClearWindowObject = 1 << 2,
-    };
-    typedef int ClearOptions;
+enum ReasonForCallingAllowPlugins {
+    AboutToInstantiatePlugin,
+    NotAboutToInstantiatePlugin
+};
 
-    enum ShouldSendReferrer {
-        MaybeSendReferrer,
-        NeverSendReferrer
-    };
+enum ReloadPolicy {
+    NormalReload,
+    EndToEndReload
+};
 
-    enum ReasonForCallingAllowPlugins {
-        AboutToInstantiatePlugin,
-        NotAboutToInstantiatePlugin
-    };
+enum SameDocumentNavigationSource {
+    SameDocumentNavigationDefault,
+    SameDocumentNavigationPushState,
+    SameDocumentNavigationReplaceState
+};
 
-    enum ReloadPolicy {
-        NormalReload,
-        EndToEndReload
-    };
+enum ClientRedirectPolicy {
+    NotClientRedirect,
+    ClientRedirect
+};
 
-    enum SameDocumentNavigationSource {
-        SameDocumentNavigationDefault,
-        SameDocumentNavigationPushState,
-        SameDocumentNavigationReplaceState
-    };
+enum HistoryLoadType {
+    HistorySameDocumentLoad,
+    HistoryDifferentDocumentLoad
+};
+
 }
 
 #endif

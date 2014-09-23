@@ -31,9 +31,7 @@
 #include "config.h"
 #include "WebDocument.h"
 
-#include "public/platform/WebURL.h"
-#include "wtf/PassRefPtr.h"
-#include "WebAccessibilityObject.h"
+#include "WebAXObject.h"
 #include "WebDOMEvent.h"
 #include "WebDocumentType.h"
 #include "WebElement.h"
@@ -48,12 +46,13 @@
 #include "core/accessibility/AXObjectCache.h"
 #include "core/css/CSSParserMode.h"
 #include "core/css/StyleSheetContents.h"
+#include "core/dom/CSSSelectorWatch.h"
 #include "core/dom/Document.h"
-#include "core/dom/DocumentStyleSheetCollection.h"
 #include "core/dom/DocumentType.h"
 #include "core/dom/Element.h"
 #include "core/dom/FullscreenElementStack.h"
 #include "core/dom/NodeList.h"
+#include "core/dom/StyleEngine.h"
 #include "core/html/HTMLAllCollection.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/html/HTMLCollection.h"
@@ -62,12 +61,14 @@
 #include "core/html/HTMLHeadElement.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/rendering/RenderObject.h"
-#include "weborigin/SecurityOrigin.h"
+#include "platform/weborigin/SecurityOrigin.h"
+#include "public/platform/WebURL.h"
+#include "wtf/PassRefPtr.h"
 #include <v8.h>
 
 using namespace WebCore;
 
-namespace WebKit {
+namespace blink {
 
 WebURL WebDocument::url() const
 {
@@ -83,12 +84,17 @@ WebSecurityOrigin WebDocument::securityOrigin() const
 
 WebString WebDocument::encoding() const
 {
-    return constUnwrap<Document>()->encoding();
+    return constUnwrap<Document>()->encodingName();
 }
 
 WebString WebDocument::contentLanguage() const
 {
     return constUnwrap<Document>()->contentLanguage();
+}
+
+WebString WebDocument::referrer() const
+{
+    return constUnwrap<Document>()->referrer();
 }
 
 WebURL WebDocument::openSearchDescriptionURL() const
@@ -200,17 +206,26 @@ WebDocumentType WebDocument::doctype() const
     return WebDocumentType(constUnwrap<Document>()->doctype());
 }
 
-void WebDocument::insertUserStyleSheet(const WebString& sourceCode, UserStyleLevel styleLevel)
+void WebDocument::insertUserStyleSheet(const WebString& sourceCode, UserStyleLevel)
+{
+    insertStyleSheet(sourceCode);
+}
+
+void WebDocument::insertStyleSheet(const WebString& sourceCode)
 {
     RefPtr<Document> document = unwrap<Document>();
-
-    RefPtr<StyleSheetContents> parsedSheet = StyleSheetContents::create(document.get());
-    parsedSheet->setIsUserStyleSheet(styleLevel == UserStyleUserLevel);
+    ASSERT(document);
+    RefPtr<StyleSheetContents> parsedSheet = StyleSheetContents::create(*document.get());
     parsedSheet->parseString(sourceCode);
-    if (parsedSheet->isUserStyleSheet())
-        document->styleSheetCollection()->addUserSheet(parsedSheet);
-    else
-        document->styleSheetCollection()->addAuthorSheet(parsedSheet);
+    document->styleEngine()->addAuthorSheet(parsedSheet);
+}
+
+void WebDocument::watchCSSSelectors(const WebVector<WebString>& webSelectors)
+{
+    RefPtr<Document> document = unwrap<Document>();
+    Vector<String> selectors;
+    selectors.append(webSelectors.data(), webSelectors.size());
+    CSSSelectorWatch::from(*document).watchCSSSelectors(selectors);
 }
 
 void WebDocument::cancelFullScreen()
@@ -229,9 +244,9 @@ WebElement WebDocument::fullScreenElement() const
 
 WebDOMEvent WebDocument::createEvent(const WebString& eventType)
 {
-    TrackExceptionState es;
-    WebDOMEvent event(unwrap<Document>()->createEvent(eventType, es));
-    if (es.hadException())
+    TrackExceptionState exceptionState;
+    WebDOMEvent event(unwrap<Document>()->createEvent(eventType, exceptionState));
+    if (exceptionState.hadException())
         return WebDOMEvent();
     return event;
 }
@@ -243,25 +258,23 @@ WebReferrerPolicy WebDocument::referrerPolicy() const
 
 WebElement WebDocument::createElement(const WebString& tagName)
 {
-    TrackExceptionState es;
-    WebElement element(unwrap<Document>()->createElement(tagName, es));
-    if (es.hadException())
+    TrackExceptionState exceptionState;
+    WebElement element(unwrap<Document>()->createElement(tagName, exceptionState));
+    if (exceptionState.hadException())
         return WebElement();
     return element;
 }
 
-WebAccessibilityObject WebDocument::accessibilityObject() const
+WebAXObject WebDocument::accessibilityObject() const
 {
     const Document* document = constUnwrap<Document>();
-    return WebAccessibilityObject(
-        document->axObjectCache()->getOrCreate(document->renderer()));
+    return WebAXObject(document->axObjectCache()->getOrCreate(document->renderer()));
 }
 
-WebAccessibilityObject WebDocument::accessibilityObjectFromID(int axID) const
+WebAXObject WebDocument::accessibilityObjectFromID(int axID) const
 {
     const Document* document = constUnwrap<Document>();
-    return WebAccessibilityObject(
-        document->axObjectCache()->objectFromAXID(axID));
+    return WebAXObject(document->axObjectCache()->objectFromAXID(axID));
 }
 
 WebVector<WebDraggableRegion> WebDocument::draggableRegions() const
@@ -284,10 +297,10 @@ v8::Handle<v8::Value> WebDocument::registerEmbedderCustomElement(const WebString
 {
     Document* document = unwrap<Document>();
     Dictionary dictionary(options, v8::Isolate::GetCurrent());
-    TrackExceptionState es;
-    ScriptValue constructor = document->registerElement(ScriptState::current(), name, dictionary, es, CustomElement::EmbedderNames);
-    ec = es.code();
-    if (es.hadException())
+    TrackExceptionState exceptionState;
+    ScriptValue constructor = document->registerElement(ScriptState::current(), name, dictionary, exceptionState, CustomElement::EmbedderNames);
+    ec = exceptionState.code();
+    if (exceptionState.hadException())
         return v8::Handle<v8::Value>();
     return constructor.v8Value();
 }
@@ -308,4 +321,4 @@ WebDocument::operator PassRefPtr<Document>() const
     return toDocument(m_private.get());
 }
 
-} // namespace WebKit
+} // namespace blink

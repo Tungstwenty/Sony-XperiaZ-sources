@@ -38,15 +38,14 @@
 #include "core/inspector/InspectorPageAgent.h"
 #include "core/inspector/InspectorState.h"
 #include "core/inspector/InstrumentingAgents.h"
-#include "core/page/DOMWindow.h"
-#include "core/page/Frame.h"
+#include "core/frame/DOMWindow.h"
+#include "core/frame/Frame.h"
 #include "core/page/Page.h"
 #include "core/page/PageGroup.h"
-#include "core/platform/JSONValues.h"
 #include "core/storage/Storage.h"
-#include "core/storage/StorageArea.h"
 #include "core/storage/StorageNamespace.h"
-#include "weborigin/SecurityOrigin.h"
+#include "platform/JSONValues.h"
+#include "platform/weborigin/SecurityOrigin.h"
 
 namespace WebCore {
 
@@ -54,12 +53,12 @@ namespace DOMStorageAgentState {
 static const char domStorageAgentEnabled[] = "domStorageAgentEnabled";
 };
 
-static bool hadException(ExceptionState& es, ErrorString* errorString)
+static bool hadException(ExceptionState& exceptionState, ErrorString* errorString)
 {
-    if (!es.hadException())
+    if (!exceptionState.hadException())
         return false;
 
-    switch (es.code()) {
+    switch (exceptionState.code()) {
     case SecurityError:
         *errorString = "Security error";
         return true;
@@ -108,22 +107,6 @@ void InspectorDOMStorageAgent::disable(ErrorString*)
     m_state->setBoolean(DOMStorageAgentState::domStorageAgentEnabled, false);
 }
 
-void InspectorDOMStorageAgent::getValue(ErrorString* errorString, const RefPtr<JSONObject>& storageId, const String& key, TypeBuilder::OptOutput<WTF::String>* value)
-{
-    Frame* frame;
-    OwnPtr<StorageArea> storageArea = findStorageArea(errorString, storageId, frame);
-    if (!storageArea)
-        return;
-
-    TrackExceptionState es;
-    bool keyPresent = storageArea->contains(key, es, frame);
-    if (hadException(es, errorString) || !keyPresent)
-        return;
-
-    *value = storageArea->getItem(key, es, frame);
-    hadException(es, errorString);
-}
-
 void InspectorDOMStorageAgent::getDOMStorageItems(ErrorString* errorString, const RefPtr<JSONObject>& storageId, RefPtr<TypeBuilder::Array<TypeBuilder::Array<String> > >& items)
 {
     Frame* frame;
@@ -133,13 +116,13 @@ void InspectorDOMStorageAgent::getDOMStorageItems(ErrorString* errorString, cons
 
     RefPtr<TypeBuilder::Array<TypeBuilder::Array<String> > > storageItems = TypeBuilder::Array<TypeBuilder::Array<String> >::create();
 
-    TrackExceptionState es;
-    for (unsigned i = 0; i < storageArea->length(es, frame); ++i) {
-        String name(storageArea->key(i, es, frame));
-        if (hadException(es, errorString))
+    TrackExceptionState exceptionState;
+    for (unsigned i = 0; i < storageArea->length(exceptionState, frame); ++i) {
+        String name(storageArea->key(i, exceptionState, frame));
+        if (hadException(exceptionState, errorString))
             return;
-        String value(storageArea->getItem(name, es, frame));
-        if (hadException(es, errorString))
+        String value(storageArea->getItem(name, exceptionState, frame));
+        if (hadException(exceptionState, errorString))
             return;
         RefPtr<TypeBuilder::Array<String> > entry = TypeBuilder::Array<String>::create();
         entry->addItem(name);
@@ -149,10 +132,10 @@ void InspectorDOMStorageAgent::getDOMStorageItems(ErrorString* errorString, cons
     items = storageItems.release();
 }
 
-static String toErrorString(ExceptionState& es)
+static String toErrorString(ExceptionState& exceptionState)
 {
-    if (es.hadException())
-        return DOMException::getErrorName(es.code());
+    if (exceptionState.hadException())
+        return DOMException::getErrorName(exceptionState.code());
     return "";
 }
 
@@ -165,9 +148,9 @@ void InspectorDOMStorageAgent::setDOMStorageItem(ErrorString* errorString, const
         return;
     }
 
-    TrackExceptionState es;
-    storageArea->setItem(key, value, es, frame);
-    *errorString = toErrorString(es);
+    TrackExceptionState exceptionState;
+    storageArea->setItem(key, value, exceptionState, frame);
+    *errorString = toErrorString(exceptionState);
 }
 
 void InspectorDOMStorageAgent::removeDOMStorageItem(ErrorString* errorString, const RefPtr<JSONObject>& storageId, const String& key)
@@ -179,9 +162,9 @@ void InspectorDOMStorageAgent::removeDOMStorageItem(ErrorString* errorString, co
         return;
     }
 
-    TrackExceptionState es;
-    storageArea->removeItem(key, es, frame);
-    *errorString = toErrorString(es);
+    TrackExceptionState exceptionState;
+    storageArea->removeItem(key, exceptionState, frame);
+    *errorString = toErrorString(exceptionState);
 }
 
 String InspectorDOMStorageAgent::storageId(Storage* storage)

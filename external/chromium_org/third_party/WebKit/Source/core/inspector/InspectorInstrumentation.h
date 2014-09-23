@@ -33,19 +33,22 @@
 
 #include "bindings/v8/ScriptString.h"
 #include "core/css/CSSSelector.h"
+#include "core/css/CSSStyleDeclaration.h"
 #include "core/css/CSSStyleSheet.h"
+#include "core/dom/CharacterData.h"
 #include "core/dom/Element.h"
-#include "core/dom/EventContext.h"
-#include "core/dom/ScriptExecutionContext.h"
+#include "core/dom/ExecutionContext.h"
+#include "core/events/EventContext.h"
+#include "core/frame/Frame.h"
 #include "core/inspector/ConsoleAPITypes.h"
-#include "core/page/Frame.h"
 #include "core/page/Page.h"
-#include "core/platform/network/FormData.h"
 #include "core/rendering/HitTestResult.h"
+#include "core/rendering/RenderImage.h"
 #include "core/storage/StorageArea.h"
 #include "modules/websockets/WebSocketFrame.h"
-#include "modules/websockets/WebSocketHandshakeRequest.h"
-#include "modules/websockets/WebSocketHandshakeResponse.h"
+#include "platform/network/FormData.h"
+#include "platform/network/WebSocketHandshakeRequest.h"
+#include "platform/network/WebSocketHandshakeResponse.h"
 #include "wtf/RefPtr.h"
 
 namespace WebCore {
@@ -56,10 +59,11 @@ class Element;
 class DeviceOrientationData;
 class GeolocationPosition;
 class GraphicsContext;
+class GraphicsLayer;
 class InspectorTimelineAgent;
 class InstrumentingAgents;
 class RenderLayer;
-class ScriptExecutionContext;
+class ExecutionContext;
 class ThreadableLoaderClient;
 class WorkerGlobalScope;
 class WorkerGlobalScopeProxy;
@@ -102,69 +106,78 @@ void unregisterInstrumentingAgents(InstrumentingAgents*);
 
 InspectorTimelineAgent* retrieveTimelineAgent(const InspectorInstrumentationCookie&);
 
-InstrumentingAgents* instrumentingAgentsForPage(Page*);
-InstrumentingAgents* instrumentingAgentsForFrame(Frame*);
-InstrumentingAgents* instrumentingAgentsForScriptExecutionContext(ScriptExecutionContext*);
-InstrumentingAgents* instrumentingAgentsForDocument(Document*);
-InstrumentingAgents* instrumentingAgentsForRenderObject(RenderObject*);
-InstrumentingAgents* instrumentingAgentsForElement(Element*);
+// Called from generated instrumentation code.
+InstrumentingAgents* instrumentingAgentsFor(Page*);
+InstrumentingAgents* instrumentingAgentsFor(Frame*);
+InstrumentingAgents* instrumentingAgentsFor(ExecutionContext*);
+InstrumentingAgents* instrumentingAgentsFor(Document&);
+InstrumentingAgents* instrumentingAgentsFor(Document*);
+InstrumentingAgents* instrumentingAgentsFor(RenderObject*);
+InstrumentingAgents* instrumentingAgentsFor(Node*);
+InstrumentingAgents* instrumentingAgentsFor(WorkerGlobalScope*);
 
-InstrumentingAgents* instrumentingAgentsForWorkerGlobalScope(WorkerGlobalScope*);
-InstrumentingAgents* instrumentingAgentsForNonDocumentContext(ScriptExecutionContext*);
+// Helper for the one above.
+InstrumentingAgents* instrumentingAgentsForNonDocumentContext(ExecutionContext*);
 
 }  // namespace InspectorInstrumentation
 
 namespace InstrumentationEvents {
 extern const char PaintSetup[];
-extern const char PaintLayer[];
 extern const char RasterTask[];
-extern const char ImageDecodeTask[];
 extern const char Paint[];
 extern const char Layer[];
 extern const char BeginFrame[];
-extern const char UpdateLayer[];
+extern const char ActivateLayerTree[];
 };
 
 namespace InstrumentationEventArguments {
+extern const char FrameId[];
 extern const char LayerId[];
 extern const char LayerTreeId[];
-extern const char NodeId[];
 extern const char PageId[];
 };
 
 namespace InspectorInstrumentation {
 
-inline InstrumentingAgents* instrumentingAgentsForScriptExecutionContext(ScriptExecutionContext* context)
+inline InstrumentingAgents* instrumentingAgentsFor(ExecutionContext* context)
 {
     if (!context)
         return 0;
-    if (context->isDocument())
-        return instrumentingAgentsForPage(toDocument(context)->page());
-    return instrumentingAgentsForNonDocumentContext(context);
+    return context->isDocument() ? instrumentingAgentsFor(*toDocument(context)) : instrumentingAgentsForNonDocumentContext(context);
 }
 
-inline InstrumentingAgents* instrumentingAgentsForFrame(Frame* frame)
+inline InstrumentingAgents* instrumentingAgentsFor(Frame* frame)
 {
-    return frame ? instrumentingAgentsForPage(frame->page()) : 0;
+    return frame ? instrumentingAgentsFor(frame->page()) : 0;
 }
 
-inline InstrumentingAgents* instrumentingAgentsForDocument(Document* document)
+inline InstrumentingAgents* instrumentingAgentsFor(Document& document)
 {
-    if (document) {
-        Page* page = document->page();
-        if (!page && document->templateDocumentHost())
-            page = document->templateDocumentHost()->page();
-        return instrumentingAgentsForPage(page);
-    }
-    return 0;
+    Page* page = document.page();
+    if (!page && document.templateDocumentHost())
+        page = document.templateDocumentHost()->page();
+    return instrumentingAgentsFor(page);
 }
 
-inline InstrumentingAgents* instrumentingAgentsForElement(Element* element)
+inline InstrumentingAgents* instrumentingAgentsFor(Document* document)
 {
-    return element ? instrumentingAgentsForDocument(element->document()) : 0;
+    return document ? instrumentingAgentsFor(*document) : 0;
 }
 
-bool cssErrorFilter(const CSSParserString& content, int propertyId, int errorType);
+inline InstrumentingAgents* instrumentingAgentsFor(CSSStyleSheet* styleSheet)
+{
+    return styleSheet ? instrumentingAgentsFor(styleSheet->ownerDocument()) : 0;
+}
+
+inline InstrumentingAgents* instrumentingAgentsFor(Node* node)
+{
+    return node ? instrumentingAgentsFor(node->document()) : 0;
+}
+
+inline InstrumentingAgents* instrumentingAgentsFor(CSSStyleDeclaration* declaration)
+{
+    return declaration ? instrumentingAgentsFor(declaration->parentStyleSheet()) : 0;
+}
 
 } // namespace InspectorInstrumentation
 

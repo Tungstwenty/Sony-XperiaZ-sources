@@ -36,40 +36,54 @@ namespace WebCore {
 
 class V8DOMConfiguration {
 public:
-    // The following Batch structs and methods are used for setting multiple
-    // properties on an ObjectTemplate, used from the generated bindings
-    // initialization (ConfigureXXXTemplate). This greatly reduces the binary
-    // size by moving from code driven setup to data table driven setup.
+    // The following Configuration structs and install methods are used for
+    // setting multiple properties on an ObjectTemplate, used from the
+    // generated bindings initialization (ConfigureXXXTemplate). This greatly
+    // reduces the binary size by moving from code driven setup to data table
+    // driven setup.
 
-    // BatchedAttribute translates into calls to SetAccessor() on either the
-    // instance or the prototype ObjectTemplate, based on |onPrototype|.
-    struct BatchedAttribute {
+    // AttributeConfiguration translates into calls to SetAccessor() on either
+    // the instance or the prototype ObjectTemplate, based on |onPrototype|.
+    struct AttributeConfiguration {
         const char* const name;
         v8::AccessorGetterCallback getter;
         v8::AccessorSetterCallback setter;
         v8::AccessorGetterCallback getterForMainWorld;
         v8::AccessorSetterCallback setterForMainWorld;
-        WrapperTypeInfo* data;
+        const WrapperTypeInfo* data;
         v8::AccessControl settings;
         v8::PropertyAttribute attribute;
         bool onPrototype;
     };
 
-    static void batchConfigureAttributes(v8::Handle<v8::ObjectTemplate>, v8::Handle<v8::ObjectTemplate>, const BatchedAttribute*, size_t attributeCount, v8::Isolate*, WrapperWorldType currentWorldType);
+    // AccessorConfiguration translates into calls to SetAccessorProperty()
+    // on prototype ObjectTemplate.
+    struct AccessorConfiguration {
+        const char* const name;
+        v8::FunctionCallback getter;
+        v8::FunctionCallback setter;
+        v8::FunctionCallback getterForMainWorld;
+        v8::FunctionCallback setterForMainWorld;
+        const WrapperTypeInfo* data;
+        v8::AccessControl settings;
+        v8::PropertyAttribute attribute;
+    };
+
+    static void installAttributes(v8::Handle<v8::ObjectTemplate>, v8::Handle<v8::ObjectTemplate>, const AttributeConfiguration*, size_t attributeCount, v8::Isolate*, WrapperWorldType currentWorldType);
 
     template<class ObjectOrTemplate>
-    static inline void configureAttribute(v8::Handle<ObjectOrTemplate> instance, v8::Handle<ObjectOrTemplate> prototype, const BatchedAttribute& attribute, v8::Isolate*)
+    static inline void installAttribute(v8::Handle<ObjectOrTemplate> instanceTemplate, v8::Handle<ObjectOrTemplate> prototype, const AttributeConfiguration& attribute, v8::Isolate* isolate)
     {
-        (attribute.onPrototype ? prototype : instance)->SetAccessor(v8::String::NewSymbol(attribute.name),
+        (attribute.onPrototype ? prototype : instanceTemplate)->SetAccessor(v8::String::NewFromUtf8(isolate, attribute.name, v8::String::kInternalizedString),
                                                                     attribute.getter,
                                                                     attribute.setter,
-                                                                    v8::External::New(attribute.data),
+                                                                    v8::External::New(isolate, const_cast<WrapperTypeInfo*>(attribute.data)),
                                                                     attribute.settings,
                                                                     attribute.attribute);
     }
 
     template<class ObjectOrTemplate>
-    static inline void configureAttribute(v8::Handle<ObjectOrTemplate> instance, v8::Handle<ObjectOrTemplate> prototype, const BatchedAttribute& attribute, v8::Isolate*, WrapperWorldType currentWorldType)
+    static inline void installAttribute(v8::Handle<ObjectOrTemplate> instanceTemplate, v8::Handle<ObjectOrTemplate> prototype, const AttributeConfiguration& attribute, v8::Isolate* isolate, WrapperWorldType currentWorldType)
     {
         v8::AccessorGetterCallback getter = attribute.getter;
         v8::AccessorSetterCallback setter = attribute.setter;
@@ -79,35 +93,42 @@ public:
             if (attribute.setterForMainWorld)
                 setter = attribute.setterForMainWorld;
         }
-        (attribute.onPrototype ? prototype : instance)->SetAccessor(v8::String::NewSymbol(attribute.name),
+        (attribute.onPrototype ? prototype : instanceTemplate)->SetAccessor(v8::String::NewFromUtf8(isolate, attribute.name, v8::String::kInternalizedString),
             getter,
             setter,
-            v8::External::New(attribute.data),
+            v8::External::New(isolate, const_cast<WrapperTypeInfo*>(attribute.data)),
             attribute.settings,
             attribute.attribute);
     }
 
-    // BatchedConstant translates into calls to Set() for setting up an object's
-    // constants. It sets the constant on both the FunctionTemplate and the
-    // ObjectTemplate. PropertyAttributes is always ReadOnly.
-    struct BatchedConstant {
+    // ConstantConfiguration translates into calls to Set() for setting up an
+    // object's constants. It sets the constant on both the FunctionTemplate and
+    // the ObjectTemplate. PropertyAttributes is always ReadOnly.
+    struct ConstantConfiguration {
         const char* const name;
         int value;
     };
 
-    static void batchConfigureConstants(v8::Handle<v8::FunctionTemplate>, v8::Handle<v8::ObjectTemplate>, const BatchedConstant*, size_t constantCount, v8::Isolate*);
+    static void installConstants(v8::Handle<v8::FunctionTemplate>, v8::Handle<v8::ObjectTemplate>, const ConstantConfiguration*, size_t constantCount, v8::Isolate*);
 
-    // BatchedMethod translates into calls to Set() on the prototype ObjectTemplate.
-    struct BatchedMethod {
+    // MethodConfiguration translates into calls to Set() on the prototype
+    // ObjectTemplate.
+    struct MethodConfiguration {
         const char* const name;
         v8::FunctionCallback callback;
         v8::FunctionCallback callbackForMainWorld;
         int length;
     };
 
-    static void batchConfigureCallbacks(v8::Handle<v8::ObjectTemplate>, v8::Handle<v8::Signature>, v8::PropertyAttribute, const BatchedMethod*, size_t callbackCount, v8::Isolate*, WrapperWorldType);
+    static void installCallbacks(v8::Handle<v8::ObjectTemplate>, v8::Handle<v8::Signature>, v8::PropertyAttribute, const MethodConfiguration*, size_t callbackCount, v8::Isolate*, WrapperWorldType);
 
-    static v8::Local<v8::Signature> configureTemplate(v8::Handle<v8::FunctionTemplate>, const char* interfaceName, v8::Handle<v8::FunctionTemplate> parentClass, size_t fieldCount, const BatchedAttribute*, size_t attributeCount, const BatchedMethod*, size_t callbackCount, v8::Isolate*, WrapperWorldType);
+    static void installAccessors(v8::Handle<v8::ObjectTemplate>, v8::Handle<v8::Signature>, const AccessorConfiguration*, size_t accessorCount, v8::Isolate*, WrapperWorldType);
+
+    static v8::Local<v8::Signature> installDOMClassTemplate(v8::Handle<v8::FunctionTemplate>, const char* interfaceName, v8::Handle<v8::FunctionTemplate> parentClass, size_t fieldCount,
+        const AttributeConfiguration*, size_t attributeCount,
+        const AccessorConfiguration*, size_t accessorCount,
+        const MethodConfiguration*, size_t callbackCount,
+        v8::Isolate*, WrapperWorldType);
 };
 
 } // namespace WebCore

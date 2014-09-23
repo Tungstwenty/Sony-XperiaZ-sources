@@ -31,109 +31,133 @@
 #ifndef ScriptPromiseResolver_h
 #define ScriptPromiseResolver_h
 
+#include "bindings/v8/DOMWrapperWorld.h"
 #include "bindings/v8/ScopedPersistent.h"
 #include "bindings/v8/ScriptObject.h"
+#include "bindings/v8/ScriptPromise.h"
 #include "bindings/v8/ScriptState.h"
 #include "bindings/v8/ScriptValue.h"
+#include "bindings/v8/V8Binding.h"
 #include "wtf/RefPtr.h"
 
 #include <v8.h>
 
 namespace WebCore {
 
-class ScriptExecutionContext;
+class ExecutionContext;
 
-// ScriptPromiseResolver is a class for accessing PromiseResolver methods
-// (fulfill / resolve / reject) from C++ world.
-// ScriptPromiseResolver holds a Promise and a PromiseResolver.
-// All methods of this class must be called from the main thread.
+// ScriptPromiseResolver is a class for performing operations on Promise
+// (resolve / reject) from C++ world.
+// ScriptPromiseResolver holds a PromiseResolver.
 // Here is a typical usage:
-//  1. Create a ScriptPromiseResolver.
+//  1. Create a ScriptPromiseResolver from a ScriptPromise.
 //  2. Pass the promise object of the holder to a JavaScript program
 //     (such as XMLHttpRequest return value).
-//  3. Detach the promise object if you no long need it.
-//  4. Call fulfill or reject when the operation completes or
+//  3. Call resolve or reject when the operation completes or
 //     the operation fails respectively.
 //
 // Most methods including constructors must be called within a v8 context.
 // To use ScriptPromiseResolver out of a v8 context the caller must
 // enter a v8 context, for example by using ScriptScope and ScriptState.
 //
+// To prevent memory leaks, you should release the reference manually
+// by calling resolve or reject.
+// Destroying the object will also release the reference.
+//
 class ScriptPromiseResolver : public RefCounted<ScriptPromiseResolver> {
     WTF_MAKE_NONCOPYABLE(ScriptPromiseResolver);
 public:
-    static PassRefPtr<ScriptPromiseResolver> create(ScriptExecutionContext*);
-    static PassRefPtr<ScriptPromiseResolver> create();
+    static PassRefPtr<ScriptPromiseResolver> create(ScriptPromise, ExecutionContext*);
+    static PassRefPtr<ScriptPromiseResolver> create(ScriptPromise);
 
-    // A ScriptPromiseResolver should be fulfilled / resolved / rejected before
+    // A ScriptPromiseResolver should be resolved / rejected before
     // its destruction.
     // A ScriptPromiseResolver can be destructed safely without
     // entering a v8 context.
     ~ScriptPromiseResolver();
 
-    // Detach the promise object and reject the resolver object with undefined.
-    void detach();
-
-    // Detach the promise object.
-    void detachPromise() { m_promise.clear(); }
-
-    // Return true if the following conditions are met:
-    //  - The resolver object is not detached.
-    //  - The resolver's promise object is in pending state.
-    //  - The resolver's resolved flag is not set.
+    // Return true if the promise object is in pending state.
     bool isPending() const;
 
-    ScriptObject promise()
+    ScriptPromise promise()
     {
-        ASSERT(v8::Context::InContext());
-        return ScriptObject(ScriptState::current(), m_promise.newLocal(m_isolate));
+        ASSERT(m_promise.isolate()->InContext());
+        return m_promise;
     }
 
-    // Fulfill with a C++ object which can be converted to a v8 object by toV8.
-    template<typename T>
-    inline void fulfill(PassRefPtr<T>);
-    // Resolve with a C++ object which can be converted to a v8 object by toV8.
-    template<typename T>
-    inline void resolve(PassRefPtr<T>);
-    // Reject with a C++ object which can be converted to a v8 object by toV8.
-    template<typename T>
-    inline void reject(PassRefPtr<T>);
+    // To use following template methods, T must be a DOM class.
 
-    void fulfill(ScriptValue);
+    // This method will be implemented by the code generator.
+    template<typename T>
+    void resolve(T* value, v8::Handle<v8::Object> creationContext) { resolve(toV8NoInline(value, creationContext, m_isolate)); }
+    template<typename T>
+    void reject(T* value, v8::Handle<v8::Object> creationContext) { reject(toV8NoInline(value, creationContext, m_isolate)); }
+
+    template<typename T>
+    void resolve(PassRefPtr<T> value, v8::Handle<v8::Object> creationContext) { resolve(value.get(), creationContext); }
+    template<typename T>
+    void reject(PassRefPtr<T> value, v8::Handle<v8::Object> creationContext) { reject(value.get(), creationContext); }
+
+    template<typename T>
+    inline void resolve(T* value, ExecutionContext*);
+    template<typename T>
+    inline void reject(T* value, ExecutionContext*);
+
+    template<typename T>
+    void resolve(PassRefPtr<T> value, ExecutionContext* context) { resolve(value.get(), context); }
+    template<typename T>
+    void reject(PassRefPtr<T> value, ExecutionContext* context) { reject(value.get(), context); }
+
+    template<typename T>
+    inline void resolve(T* value);
+    template<typename T>
+    inline void reject(T* value);
+
+    template<typename T>
+    void resolve(PassRefPtr<T> value) { resolve(value.get()); }
+    template<typename T>
+    void reject(PassRefPtr<T> value) { reject(value.get()); }
+
     void resolve(ScriptValue);
     void reject(ScriptValue);
 
 private:
-    ScriptPromiseResolver(v8::Handle<v8::Object> creationContext, v8::Isolate*);
-    void fulfill(v8::Handle<v8::Value>);
+    ScriptPromiseResolver(ScriptPromise);
     void resolve(v8::Handle<v8::Value>);
     void reject(v8::Handle<v8::Value>);
 
     v8::Isolate* m_isolate;
-    ScopedPersistent<v8::Object> m_promise;
-    ScopedPersistent<v8::Object> m_resolver;
-    bool isPendingInternal() const;
+    ScriptPromise m_promise;
 };
 
 template<typename T>
-void ScriptPromiseResolver::fulfill(PassRefPtr<T> value)
+void ScriptPromiseResolver::resolve(T* value, ExecutionContext* context)
 {
-    ASSERT(v8::Context::InContext());
-    fulfill(toV8(value.get(), v8::Object::New(), m_isolate));
+    ASSERT(m_isolate->InContext());
+    v8::Handle<v8::Context> v8Context = toV8Context(context, DOMWrapperWorld::current());
+    resolve(value, v8Context->Global());
 }
 
 template<typename T>
-void ScriptPromiseResolver::resolve(PassRefPtr<T> value)
+void ScriptPromiseResolver::reject(T* value, ExecutionContext* context)
 {
-    ASSERT(v8::Context::InContext());
-    resolve(toV8(value.get(), v8::Object::New(), m_isolate));
+    ASSERT(m_isolate->InContext());
+    v8::Handle<v8::Context> v8Context = toV8Context(context, DOMWrapperWorld::current());
+    reject(value, v8Context->Global());
 }
 
 template<typename T>
-void ScriptPromiseResolver::reject(PassRefPtr<T> value)
+void ScriptPromiseResolver::resolve(T* value)
 {
-    ASSERT(v8::Context::InContext());
-    reject(toV8(value.get(), v8::Object::New(), m_isolate));
+    ASSERT(m_isolate->InContext());
+    resolve(value, v8::Object::New(m_isolate));
+}
+
+template<typename T>
+void ScriptPromiseResolver::reject(T* value)
+{
+    ASSERT(m_isolate->InContext());
+    reject(value, v8::Object::New(m_isolate));
 }
 
 } // namespace WebCore

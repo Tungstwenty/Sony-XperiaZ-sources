@@ -36,7 +36,7 @@ namespace WebCore {
 #if !ASSERT_DISABLED
 
 NoExceptionStateAssertionChecker::NoExceptionStateAssertionChecker(const char* file, int line)
-    : ExceptionState(0)
+    : ExceptionState(v8::Handle<v8::Object>(), 0)
     , m_file(file)
     , m_line(line) { }
 
@@ -46,6 +46,11 @@ void NoExceptionStateAssertionChecker::throwDOMException(const ExceptionCode&, c
 }
 
 void NoExceptionStateAssertionChecker::throwTypeError(const String&)
+{
+    ASSERT_AT(false, m_file, m_line, "");
+}
+
+void NoExceptionStateAssertionChecker::throwSecurityError(const String&, const String&)
 {
     ASSERT_AT(false, m_file, m_line, "");
 }

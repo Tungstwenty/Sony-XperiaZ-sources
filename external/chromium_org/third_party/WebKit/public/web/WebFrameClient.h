@@ -31,22 +31,22 @@
 #ifndef WebFrameClient_h
 #define WebFrameClient_h
 
-#include "../platform/WebCommon.h"
-#include "../platform/WebFileSystem.h"
-#include "../platform/WebFileSystemType.h"
-#include "../platform/WebURLError.h"
-#include "../platform/WebURLRequest.h"
 #include "WebDOMMessageEvent.h"
 #include "WebDataSource.h"
 #include "WebIconURL.h"
 #include "WebNavigationPolicy.h"
 #include "WebNavigationType.h"
 #include "WebSecurityOrigin.h"
-#include "WebStorageQuotaType.h"
 #include "WebTextDirection.h"
+#include "public/platform/WebCommon.h"
+#include "public/platform/WebFileSystem.h"
+#include "public/platform/WebFileSystemType.h"
+#include "public/platform/WebStorageQuotaType.h"
+#include "public/platform/WebURLError.h"
+#include "public/platform/WebURLRequest.h"
 #include <v8.h>
 
-namespace WebKit {
+namespace blink {
 
 class WebApplicationCacheHost;
 class WebApplicationCacheHostClient;
@@ -58,6 +58,8 @@ class WebFormElement;
 class WebFrame;
 class WebMediaPlayer;
 class WebMediaPlayerClient;
+class WebServiceWorkerProvider;
+class WebServiceWorkerProviderClient;
 class WebNode;
 class WebPlugin;
 class WebRTCPeerConnectionHandler;
@@ -69,7 +71,7 @@ class WebString;
 class WebURL;
 class WebURLLoader;
 class WebURLResponse;
-class WebWorker;
+class WebWorkerPermissionClientProxy;
 struct WebPluginParams;
 struct WebRect;
 struct WebSize;
@@ -83,13 +85,16 @@ public:
     virtual WebPlugin* createPlugin(WebFrame*, const WebPluginParams&) { return 0; }
 
     // May return null.
-    virtual WebSharedWorker* createSharedWorker(WebFrame*, const WebURL&, const WebString&, unsigned long long) { return 0; }
-
-    // May return null.
     virtual WebMediaPlayer* createMediaPlayer(WebFrame*, const WebURL&, WebMediaPlayerClient*) { return 0; }
 
     // May return null.
     virtual WebApplicationCacheHost* createApplicationCacheHost(WebFrame*, WebApplicationCacheHostClient*) { return 0; }
+
+    // May return null. Takes ownership of the client.
+    virtual WebServiceWorkerProvider* createServiceWorkerProvider(WebFrame*, WebServiceWorkerProviderClient*) { return 0; }
+
+    // May return null.
+    virtual WebWorkerPermissionClientProxy* createWorkerPermissionClientProxy(WebFrame*) { return 0; }
 
 
     // Services ------------------------------------------------------------
@@ -107,7 +112,11 @@ public:
     virtual void didAccessInitialDocument(WebFrame*) { }
 
     // A child frame was created in this frame. This is called when the frame
-    // is created and initialized.
+    // is created and initialized. Takes the name of the new frame, the parent
+    // frame and returns a new WebFrame. The WebFrame is considered in-use
+    // until frameDetached() is called on it.
+    virtual WebFrame* createChildFrame(WebFrame* parent, const WebString& frameName) { return 0; }
+    // FIXME: Remove when all embedders use createChildFrame().
     virtual void didCreateFrame(WebFrame* parent, WebFrame* child) { }
 
     // This frame set its opener to null, disowning it.
@@ -123,6 +132,9 @@ public:
 
     // This frame's name has changed.
     virtual void didChangeName(WebFrame*, const WebString&) { }
+
+    // Called when a watched CSS selector matches or stops matching.
+    virtual void didMatchCSS(WebFrame*, const WebVector<WebString>& newlyMatchingSelectors, const WebVector<WebString>& stoppedMatchingSelectors) { }
 
     // Load commands -------------------------------------------------------
 
@@ -141,7 +153,6 @@ public:
         WebFrame*, WebDataSource::ExtraData*, const WebURLRequest&, WebNavigationType,
         WebNavigationPolicy defaultPolicy, bool isRedirect) { return defaultPolicy; }
 
-    virtual bool shouldAbortNavigationAfterUrlResolve(const WebURL& base, const WebString& fragment, const WebURL& result) { return false; }
 
     // Navigational notifications ------------------------------------------
 
@@ -229,7 +240,7 @@ public:
         WebFrame*, unsigned identifier, const WebURLResponse&) { }
 
     virtual void didChangeResourcePriority(
-        WebFrame*, unsigned identifier, const WebKit::WebURLRequest::Priority&) { }
+        WebFrame*, unsigned identifier, const blink::WebURLRequest::Priority&) { }
 
     // The resource request given by identifier succeeded.
     virtual void didFinishResourceLoad(
@@ -254,6 +265,9 @@ public:
     // A PingLoader was created, and a request dispatched to a URL.
     virtual void didDispatchPingLoader(WebFrame*, const WebURL&) { }
 
+    // The loaders in this frame have been stopped.
+    virtual void didAbortLoading(WebFrame*) { }
+
     // Script notifications ------------------------------------------------
 
     // Script in the page tried to allocate too much memory.
@@ -268,9 +282,6 @@ public:
     virtual void willReleaseScriptContext(WebFrame*, v8::Handle<v8::Context>, int worldId) { }
 
     // Geometry notifications ----------------------------------------------
-
-    // The frame's document finished the initial layout of a page.
-    virtual void didFirstLayout(WebFrame*) { }
 
     // The frame's document finished the initial non-empty layout of a page.
     virtual void didFirstVisuallyNonEmptyLayout(WebFrame*) { }
@@ -301,29 +312,6 @@ public:
     // where on the screen the selection rect is currently located.
     virtual void reportFindInPageSelection(
         int identifier, int activeMatchOrdinal, const WebRect& selection) { }
-
-    // FileSystem ----------------------------------------------------
-
-    // Requests to open a FileSystem.
-    // |size| indicates how much storage space (in bytes) the caller expects
-    // to need.
-    // WebFileSystemCallbacks::didOpenFileSystem() must be called with
-    // a name and root path for the requested FileSystem when the operation
-    // is completed successfully. WebFileSystemCallbacks::didFail() must be
-    // called otherwise. The create bool is for indicating whether or not to
-    // create root path for file systems if it do not exist.
-    virtual void openFileSystem(
-        WebFrame*, WebFileSystemType, long long size,
-        bool create, WebFileSystemCallbacks*) { }
-
-    // Deletes FileSystem.
-    // WebFileSystemCallbacks::didSucceed() must be called when the operation
-    // is completed successfully. WebFileSystemCallbacks::didFail() must be
-    // called otherwise.
-    // All in-flight operations and following operations may fail after the
-    // FileSystem is deleted.
-    virtual void deleteFileSystem(
-        WebFrame*, WebFileSystemType, WebFileSystemCallbacks*) { }
 
     // Quota ---------------------------------------------------------
 
@@ -389,6 +377,6 @@ protected:
     ~WebFrameClient() { }
 };
 
-} // namespace WebKit
+} // namespace blink
 
 #endif

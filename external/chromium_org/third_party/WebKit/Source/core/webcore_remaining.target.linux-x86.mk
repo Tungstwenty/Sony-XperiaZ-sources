@@ -25,41 +25,67 @@ GYP_COPIED_SOURCE_ORIGIN_DIRS :=
 LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/Init.cpp \
 	third_party/WebKit/Source/core/accessibility/AXObjectCache.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityARIAGrid.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityARIAGridCell.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityARIAGridRow.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityImageMapLink.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityList.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityListBox.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityListBoxOption.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityMediaControls.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityMenuList.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityMenuListOption.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityMenuListPopup.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityMockObject.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityNodeObject.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityObject.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityProgressIndicator.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityRenderObject.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityScrollView.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityScrollbar.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilitySlider.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilitySpinButton.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilitySVGRoot.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityTable.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityTableCell.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityTableColumn.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityTableHeaderContainer.cpp \
-	third_party/WebKit/Source/core/accessibility/AccessibilityTableRow.cpp \
-	third_party/WebKit/Source/core/animation/AnimatableNumber.cpp \
+	third_party/WebKit/Source/core/accessibility/AXARIAGrid.cpp \
+	third_party/WebKit/Source/core/accessibility/AXARIAGridCell.cpp \
+	third_party/WebKit/Source/core/accessibility/AXARIAGridRow.cpp \
+	third_party/WebKit/Source/core/accessibility/AXImageMapLink.cpp \
+	third_party/WebKit/Source/core/accessibility/AXInlineTextBox.cpp \
+	third_party/WebKit/Source/core/accessibility/AXList.cpp \
+	third_party/WebKit/Source/core/accessibility/AXListBox.cpp \
+	third_party/WebKit/Source/core/accessibility/AXListBoxOption.cpp \
+	third_party/WebKit/Source/core/accessibility/AXMediaControls.cpp \
+	third_party/WebKit/Source/core/accessibility/AXMenuList.cpp \
+	third_party/WebKit/Source/core/accessibility/AXMenuListOption.cpp \
+	third_party/WebKit/Source/core/accessibility/AXMenuListPopup.cpp \
+	third_party/WebKit/Source/core/accessibility/AXMockObject.cpp \
+	third_party/WebKit/Source/core/accessibility/AXNodeObject.cpp \
+	third_party/WebKit/Source/core/accessibility/AXObject.cpp \
+	third_party/WebKit/Source/core/accessibility/AXProgressIndicator.cpp \
+	third_party/WebKit/Source/core/accessibility/AXRenderObject.cpp \
+	third_party/WebKit/Source/core/accessibility/AXScrollView.cpp \
+	third_party/WebKit/Source/core/accessibility/AXScrollbar.cpp \
+	third_party/WebKit/Source/core/accessibility/AXSlider.cpp \
+	third_party/WebKit/Source/core/accessibility/AXSpinButton.cpp \
+	third_party/WebKit/Source/core/accessibility/AXSVGRoot.cpp \
+	third_party/WebKit/Source/core/accessibility/AXTable.cpp \
+	third_party/WebKit/Source/core/accessibility/AXTableCell.cpp \
+	third_party/WebKit/Source/core/accessibility/AXTableColumn.cpp \
+	third_party/WebKit/Source/core/accessibility/AXTableHeaderContainer.cpp \
+	third_party/WebKit/Source/core/accessibility/AXTableRow.cpp \
+	third_party/WebKit/Source/core/animation/ActiveAnimations.cpp \
+	third_party/WebKit/Source/core/animation/AnimatableClipPathOperation.cpp \
+	third_party/WebKit/Source/core/animation/AnimatableColor.cpp \
+	third_party/WebKit/Source/core/animation/AnimatableDouble.cpp \
+	third_party/WebKit/Source/core/animation/AnimatableFilterOperations.cpp \
+	third_party/WebKit/Source/core/animation/AnimatableImage.cpp \
+	third_party/WebKit/Source/core/animation/AnimatableLength.cpp \
+	third_party/WebKit/Source/core/animation/AnimatableLengthBox.cpp \
+	third_party/WebKit/Source/core/animation/AnimatableLengthBoxAndBool.cpp \
+	third_party/WebKit/Source/core/animation/AnimatableLengthPoint.cpp \
+	third_party/WebKit/Source/core/animation/AnimatableLengthSize.cpp \
+	third_party/WebKit/Source/core/animation/AnimatableRepeatable.cpp \
+	third_party/WebKit/Source/core/animation/AnimatableSVGLength.cpp \
+	third_party/WebKit/Source/core/animation/AnimatableSVGPaint.cpp \
+	third_party/WebKit/Source/core/animation/AnimatableShadow.cpp \
+	third_party/WebKit/Source/core/animation/AnimatableShapeValue.cpp \
+	third_party/WebKit/Source/core/animation/AnimatableStrokeDasharrayList.cpp \
+	third_party/WebKit/Source/core/animation/AnimatableTransform.cpp \
 	third_party/WebKit/Source/core/animation/AnimatableValue.cpp \
+	third_party/WebKit/Source/core/animation/AnimatableVisibility.cpp \
+	third_party/WebKit/Source/core/animation/ElementAnimation.cpp \
 	third_party/WebKit/Source/core/animation/Animation.cpp \
+	third_party/WebKit/Source/core/animation/AnimationStack.cpp \
+	third_party/WebKit/Source/core/animation/CompositorAnimations.cpp \
+	third_party/WebKit/Source/core/animation/DocumentAnimations.cpp \
 	third_party/WebKit/Source/core/animation/DocumentTimeline.cpp \
+	third_party/WebKit/Source/core/animation/InertAnimation.cpp \
 	third_party/WebKit/Source/core/animation/KeyframeAnimationEffect.cpp \
 	third_party/WebKit/Source/core/animation/Player.cpp \
 	third_party/WebKit/Source/core/animation/TimedItem.cpp \
 	third_party/WebKit/Source/core/animation/css/CSSAnimatableValueFactory.cpp \
 	third_party/WebKit/Source/core/animation/css/CSSAnimations.cpp \
+	third_party/WebKit/Source/core/animation/css/CSSPendingAnimations.cpp \
+	third_party/WebKit/Source/core/animation/css/TransitionTimeline.cpp \
 	third_party/WebKit/Source/core/css/BasicShapeFunctions.cpp \
 	third_party/WebKit/Source/core/css/CSSArrayFunctionValue.cpp \
 	third_party/WebKit/Source/core/css/CSSAspectRatioValue.cpp \
@@ -80,12 +106,14 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/css/CSSFontFaceRule.cpp \
 	third_party/WebKit/Source/core/css/CSSFontFaceSource.cpp \
 	third_party/WebKit/Source/core/css/CSSFontFaceSrcValue.cpp \
+	third_party/WebKit/Source/core/css/CSSFontFeatureValue.cpp \
 	third_party/WebKit/Source/core/css/CSSFontSelector.cpp \
+	third_party/WebKit/Source/core/css/CSSFontValue.cpp \
 	third_party/WebKit/Source/core/css/CSSFunctionValue.cpp \
 	third_party/WebKit/Source/core/css/CSSGradientValue.cpp \
+	third_party/WebKit/Source/core/css/CSSGridLineNamesValue.cpp \
 	third_party/WebKit/Source/core/css/CSSGridTemplateValue.cpp \
 	third_party/WebKit/Source/core/css/CSSGroupingRule.cpp \
-	third_party/WebKit/Source/core/css/CSSHostRule.cpp \
 	third_party/WebKit/Source/core/css/CSSImageGeneratorValue.cpp \
 	third_party/WebKit/Source/core/css/CSSImageSetValue.cpp \
 	third_party/WebKit/Source/core/css/CSSImageValue.cpp \
@@ -94,12 +122,14 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/css/CSSInitialValue.cpp \
 	third_party/WebKit/Source/core/css/CSSKeyframeRule.cpp \
 	third_party/WebKit/Source/core/css/CSSKeyframesRule.cpp \
+	third_party/WebKit/Source/core/css/CSSLengthFunctions.cpp \
 	third_party/WebKit/Source/core/css/CSSLineBoxContainValue.cpp \
 	third_party/WebKit/Source/core/css/CSSMatrix.cpp \
 	third_party/WebKit/Source/core/css/CSSMediaRule.cpp \
 	third_party/WebKit/Source/core/css/CSSMixFunctionValue.cpp \
 	third_party/WebKit/Source/core/css/CSSOMUtils.cpp \
 	third_party/WebKit/Source/core/css/CSSPageRule.cpp \
+	third_party/WebKit/Source/core/css/CSSParserMode.cpp \
 	third_party/WebKit/Source/core/css/CSSParserValues.cpp \
 	third_party/WebKit/Source/core/css/CSSPrimitiveValue.cpp \
 	third_party/WebKit/Source/core/css/CSSProperty.cpp \
@@ -109,16 +139,18 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/css/CSSRule.cpp \
 	third_party/WebKit/Source/core/css/CSSRuleList.cpp \
 	third_party/WebKit/Source/core/css/CSSSegmentedFontFace.cpp \
+	third_party/WebKit/Source/core/css/CSSSegmentedFontFaceCache.cpp \
 	third_party/WebKit/Source/core/css/CSSSelector.cpp \
 	third_party/WebKit/Source/core/css/CSSSelectorList.cpp \
 	third_party/WebKit/Source/core/css/CSSShaderValue.cpp \
+	third_party/WebKit/Source/core/css/CSSShadowValue.cpp \
 	third_party/WebKit/Source/core/css/CSSStyleDeclaration.cpp \
 	third_party/WebKit/Source/core/css/CSSStyleRule.cpp \
 	third_party/WebKit/Source/core/css/CSSStyleSheet.cpp \
 	third_party/WebKit/Source/core/css/CSSSupportsRule.cpp \
 	third_party/WebKit/Source/core/css/CSSSVGDocumentValue.cpp \
 	third_party/WebKit/Source/core/css/CSSTimingFunctionValue.cpp \
-	third_party/WebKit/Source/core/css/CSSToStyleMap.cpp \
+	third_party/WebKit/Source/core/css/CSSToLengthConversionData.cpp \
 	third_party/WebKit/Source/core/css/CSSTransformValue.cpp \
 	third_party/WebKit/Source/core/css/CSSUnicodeRangeValue.cpp \
 	third_party/WebKit/Source/core/css/CSSValue.cpp \
@@ -127,14 +159,12 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/css/CSSVariablesMap.cpp \
 	third_party/WebKit/Source/core/css/CSSViewportRule.cpp \
 	third_party/WebKit/Source/core/css/DOMWindowCSS.cpp \
-	third_party/WebKit/Source/core/css/DocumentRuleSets.cpp \
+	third_party/WebKit/Source/core/css/DocumentFontFaceSet.cpp \
 	third_party/WebKit/Source/core/css/ElementRuleCollector.cpp \
-	third_party/WebKit/Source/core/css/FontFeatureValue.cpp \
-	third_party/WebKit/Source/core/css/FontLoader.cpp \
+	third_party/WebKit/Source/core/css/FontFaceSet.cpp \
+	third_party/WebKit/Source/core/css/FontFace.cpp \
 	third_party/WebKit/Source/core/css/FontSize.cpp \
-	third_party/WebKit/Source/core/css/FontValue.cpp \
 	third_party/WebKit/Source/core/css/InspectorCSSOMWrappers.cpp \
-	third_party/WebKit/Source/core/css/LengthFunctions.cpp \
 	third_party/WebKit/Source/core/css/MediaFeatureNames.cpp \
 	third_party/WebKit/Source/core/css/MediaList.cpp \
 	third_party/WebKit/Source/core/css/MediaQuery.cpp \
@@ -153,8 +183,6 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/css/SelectorChecker.cpp \
 	third_party/WebKit/Source/core/css/SelectorCheckerFastPath.cpp \
 	third_party/WebKit/Source/core/css/SelectorFilter.cpp \
-	third_party/WebKit/Source/core/css/ShadowValue.cpp \
-	third_party/WebKit/Source/core/css/StyleColor.cpp \
 	third_party/WebKit/Source/core/css/StyleInvalidationAnalysis.cpp \
 	third_party/WebKit/Source/core/css/StyleMedia.cpp \
 	third_party/WebKit/Source/core/css/StylePropertySerializer.cpp \
@@ -165,7 +193,9 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/css/StyleSheet.cpp \
 	third_party/WebKit/Source/core/css/StyleSheetContents.cpp \
 	third_party/WebKit/Source/core/css/StyleSheetList.cpp \
+	third_party/WebKit/Source/core/css/TreeBoundaryCrossingRules.cpp \
 	third_party/WebKit/Source/core/css/resolver/AnimatedStyleBuilder.cpp \
+	third_party/WebKit/Source/core/css/resolver/CSSToStyleMap.cpp \
 	third_party/WebKit/Source/core/css/resolver/ElementResolveContext.cpp \
 	third_party/WebKit/Source/core/css/resolver/ElementStyleResources.cpp \
 	third_party/WebKit/Source/core/css/resolver/FilterOperationResolver.cpp \
@@ -173,11 +203,14 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/css/resolver/MatchedPropertiesCache.cpp \
 	third_party/WebKit/Source/core/css/resolver/MatchResult.cpp \
 	third_party/WebKit/Source/core/css/resolver/ScopedStyleResolver.cpp \
+	third_party/WebKit/Source/core/css/resolver/ScopedStyleTree.cpp \
 	third_party/WebKit/Source/core/css/resolver/SharedStyleFinder.cpp \
 	third_party/WebKit/Source/core/css/resolver/StyleAdjuster.cpp \
+	third_party/WebKit/Source/core/css/resolver/StyleBuilderConverter.cpp \
 	third_party/WebKit/Source/core/css/resolver/StyleBuilderCustom.cpp \
 	third_party/WebKit/Source/core/css/resolver/StyleResolver.cpp \
 	third_party/WebKit/Source/core/css/resolver/StyleResolverState.cpp \
+	third_party/WebKit/Source/core/css/resolver/StyleResolverStats.cpp \
 	third_party/WebKit/Source/core/css/resolver/StyleResourceLoader.cpp \
 	third_party/WebKit/Source/core/css/resolver/TransformBuilder.cpp \
 	third_party/WebKit/Source/core/css/resolver/ViewportStyleResolver.cpp \
@@ -194,6 +227,7 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/editing/EditingStyle.cpp \
 	third_party/WebKit/Source/core/editing/Editor.cpp \
 	third_party/WebKit/Source/core/editing/EditorCommand.cpp \
+	third_party/WebKit/Source/core/editing/EditorKeyBindings.cpp \
 	third_party/WebKit/Source/core/editing/FormatBlockCommand.cpp \
 	third_party/WebKit/Source/core/editing/FrameSelection.cpp \
 	third_party/WebKit/Source/core/editing/HTMLInterchange.cpp \
@@ -209,6 +243,7 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/editing/MergeIdenticalElementsCommand.cpp \
 	third_party/WebKit/Source/core/editing/ModifySelectionListLevel.cpp \
 	third_party/WebKit/Source/core/editing/MoveSelectionCommand.cpp \
+	third_party/WebKit/Source/core/editing/PlainTextRange.cpp \
 	third_party/WebKit/Source/core/editing/RemoveCSSPropertyCommand.cpp \
 	third_party/WebKit/Source/core/editing/RemoveFormatCommand.cpp \
 	third_party/WebKit/Source/core/editing/RemoveNodeCommand.cpp \
@@ -221,6 +256,7 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/editing/SimplifyMarkupCommand.cpp \
 	third_party/WebKit/Source/core/editing/SmartReplaceICU.cpp \
 	third_party/WebKit/Source/core/editing/SpellChecker.cpp \
+	third_party/WebKit/Source/core/editing/SpellCheckRequester.cpp \
 	third_party/WebKit/Source/core/editing/SpellingCorrectionCommand.cpp \
 	third_party/WebKit/Source/core/editing/SplitElementCommand.cpp \
 	third_party/WebKit/Source/core/editing/SplitTextNodeCommand.cpp \
@@ -230,18 +266,36 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/editing/TextInsertionBaseCommand.cpp \
 	third_party/WebKit/Source/core/editing/TextIterator.cpp \
 	third_party/WebKit/Source/core/editing/TypingCommand.cpp \
+	third_party/WebKit/Source/core/editing/UndoStack.cpp \
 	third_party/WebKit/Source/core/editing/UnlinkCommand.cpp \
 	third_party/WebKit/Source/core/editing/VisiblePosition.cpp \
 	third_party/WebKit/Source/core/editing/VisibleSelection.cpp \
 	third_party/WebKit/Source/core/editing/VisibleUnits.cpp \
 	third_party/WebKit/Source/core/editing/WrapContentsInDummySpanCommand.cpp \
-	third_party/WebKit/Source/core/editing/chromium/EditorChromium.cpp \
 	third_party/WebKit/Source/core/editing/htmlediting.cpp \
 	third_party/WebKit/Source/core/editing/markup.cpp \
+	third_party/WebKit/Source/core/fetch/CachedMetadata.cpp \
+	third_party/WebKit/Source/core/fetch/CrossOriginAccessControl.cpp \
+	third_party/WebKit/Source/core/fetch/CSSStyleSheetResource.cpp \
+	third_party/WebKit/Source/core/fetch/DocumentResource.cpp \
+	third_party/WebKit/Source/core/fetch/FetchContext.cpp \
+	third_party/WebKit/Source/core/fetch/FetchRequest.cpp \
+	third_party/WebKit/Source/core/fetch/FontResource.cpp \
+	third_party/WebKit/Source/core/fetch/ImageResource.cpp \
+	third_party/WebKit/Source/core/fetch/RawResource.cpp \
+	third_party/WebKit/Source/core/fetch/Resource.cpp \
+	third_party/WebKit/Source/core/fetch/ResourceFetcher.cpp \
+	third_party/WebKit/Source/core/fetch/ResourceLoader.cpp \
+	third_party/WebKit/Source/core/fetch/ResourceLoaderSet.cpp \
+	third_party/WebKit/Source/core/fetch/ResourceLoadPriorityOptimizer.cpp \
+	third_party/WebKit/Source/core/fetch/ResourcePtr.cpp \
+	third_party/WebKit/Source/core/fetch/ScriptResource.cpp \
+	third_party/WebKit/Source/core/fetch/ShaderResource.cpp \
+	third_party/WebKit/Source/core/fetch/TextResourceDecoder.cpp \
+	third_party/WebKit/Source/core/fetch/XSLStyleSheetResource.cpp \
+	third_party/WebKit/Source/core/fetch/MemoryCache.cpp \
 	third_party/WebKit/Source/core/fileapi/Blob.cpp \
 	third_party/WebKit/Source/core/fileapi/BlobBuilder.cpp \
-	third_party/WebKit/Source/core/fileapi/BlobRegistry.cpp \
-	third_party/WebKit/Source/core/fileapi/BlobURL.cpp \
 	third_party/WebKit/Source/core/fileapi/File.cpp \
 	third_party/WebKit/Source/core/fileapi/FileError.cpp \
 	third_party/WebKit/Source/core/fileapi/FileList.cpp \
@@ -249,8 +303,8 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/fileapi/FileReaderLoader.cpp \
 	third_party/WebKit/Source/core/fileapi/FileReaderSync.cpp \
 	third_party/WebKit/Source/core/fileapi/Stream.cpp \
-	third_party/WebKit/Source/core/history/BackForwardController.cpp \
 	third_party/WebKit/Source/core/history/HistoryItem.cpp \
+	third_party/WebKit/Source/core/inspector/AsyncCallStackTracker.cpp \
 	third_party/WebKit/Source/core/inspector/ConsoleMessage.cpp \
 	third_party/WebKit/Source/core/inspector/ContentSearchUtils.cpp \
 	third_party/WebKit/Source/core/inspector/DOMEditor.cpp \
@@ -308,14 +362,12 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/inspector/ScriptCallStack.cpp \
 	third_party/WebKit/Source/core/inspector/ScriptProfile.cpp \
 	third_party/WebKit/Source/core/inspector/TimelineRecordFactory.cpp \
-	third_party/WebKit/Source/core/inspector/TimelineTraceEventProcessor.cpp \
+	third_party/WebKit/Source/core/inspector/TraceEventDispatcher.cpp \
 	third_party/WebKit/Source/core/inspector/WorkerConsoleAgent.cpp \
 	third_party/WebKit/Source/core/inspector/WorkerDebuggerAgent.cpp \
 	third_party/WebKit/Source/core/inspector/WorkerInspectorController.cpp \
 	third_party/WebKit/Source/core/inspector/WorkerRuntimeAgent.cpp \
-	third_party/WebKit/Source/core/loader/CachedMetadata.cpp \
 	third_party/WebKit/Source/core/loader/CookieJar.cpp \
-	third_party/WebKit/Source/core/loader/CrossOriginAccessControl.cpp \
 	third_party/WebKit/Source/core/loader/CrossOriginPreflightResultCache.cpp \
 	third_party/WebKit/Source/core/loader/DocumentLoadTiming.cpp \
 	third_party/WebKit/Source/core/loader/DocumentLoader.cpp \
@@ -324,10 +376,10 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/loader/EmptyClients.cpp \
 	third_party/WebKit/Source/core/loader/FormState.cpp \
 	third_party/WebKit/Source/core/loader/FormSubmission.cpp \
+	third_party/WebKit/Source/core/loader/FrameFetchContext.cpp \
 	third_party/WebKit/Source/core/loader/FrameLoader.cpp \
 	third_party/WebKit/Source/core/loader/FrameLoaderStateMachine.cpp \
 	third_party/WebKit/Source/core/loader/HistoryController.cpp \
-	third_party/WebKit/Source/core/loader/IconController.cpp \
 	third_party/WebKit/Source/core/loader/ImageLoader.cpp \
 	third_party/WebKit/Source/core/loader/LinkLoader.cpp \
 	third_party/WebKit/Source/core/loader/MixedContentChecker.cpp \
@@ -335,72 +387,55 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/loader/NavigationPolicy.cpp \
 	third_party/WebKit/Source/core/loader/NavigationScheduler.cpp \
 	third_party/WebKit/Source/core/loader/PingLoader.cpp \
-	third_party/WebKit/Source/core/loader/Prerenderer.cpp \
+	third_party/WebKit/Source/core/loader/PrerenderHandle.cpp \
 	third_party/WebKit/Source/core/loader/PrerendererClient.cpp \
 	third_party/WebKit/Source/core/loader/ProgressTracker.cpp \
-	third_party/WebKit/Source/core/loader/ResourceLoadNotifier.cpp \
-	third_party/WebKit/Source/core/loader/ResourceLoader.cpp \
 	third_party/WebKit/Source/core/loader/SinkDocument.cpp \
-	third_party/WebKit/Source/core/loader/TextResourceDecoder.cpp \
 	third_party/WebKit/Source/core/loader/TextResourceDecoderBuilder.cpp \
 	third_party/WebKit/Source/core/loader/TextTrackLoader.cpp \
 	third_party/WebKit/Source/core/loader/ThreadableLoader.cpp \
 	third_party/WebKit/Source/core/loader/UniqueIdentifier.cpp \
 	third_party/WebKit/Source/core/loader/WorkerThreadableLoader.cpp \
-	third_party/WebKit/Source/core/loader/appcache/DOMApplicationCache.cpp \
-	third_party/WebKit/Source/core/loader/archive/ArchiveResource.cpp \
-	third_party/WebKit/Source/core/loader/archive/ArchiveResourceCollection.cpp \
-	third_party/WebKit/Source/core/loader/archive/MHTMLArchive.cpp \
-	third_party/WebKit/Source/core/loader/archive/MHTMLParser.cpp \
-	third_party/WebKit/Source/core/loader/cache/CSSStyleSheetResource.cpp \
-	third_party/WebKit/Source/core/loader/cache/DocumentResource.cpp \
-	third_party/WebKit/Source/core/loader/cache/FontResource.cpp \
-	third_party/WebKit/Source/core/loader/cache/ImageResource.cpp \
-	third_party/WebKit/Source/core/loader/cache/RawResource.cpp \
-	third_party/WebKit/Source/core/loader/cache/Resource.cpp \
-	third_party/WebKit/Source/core/loader/cache/ResourcePtr.cpp \
-	third_party/WebKit/Source/core/loader/cache/ResourceFetcher.cpp \
-	third_party/WebKit/Source/core/loader/cache/FetchRequest.cpp \
-	third_party/WebKit/Source/core/loader/cache/ScriptResource.cpp \
-	third_party/WebKit/Source/core/loader/cache/ShaderResource.cpp \
-	third_party/WebKit/Source/core/loader/cache/TextTrackResource.cpp \
-	third_party/WebKit/Source/core/loader/cache/XSLStyleSheetResource.cpp \
-	third_party/WebKit/Source/core/loader/cache/MemoryCache.cpp \
+	third_party/WebKit/Source/core/loader/appcache/ApplicationCache.cpp \
 	third_party/WebKit/Source/core/page/AutoscrollController.cpp \
-	third_party/WebKit/Source/core/page/BarProp.cpp \
+	third_party/WebKit/Source/core/frame/BarProp.cpp \
 	third_party/WebKit/Source/core/page/Chrome.cpp \
-	third_party/WebKit/Source/core/page/Console.cpp \
-	third_party/WebKit/Source/core/page/ContentSecurityPolicy.cpp \
-	third_party/WebKit/Source/core/page/ContentSecurityPolicyResponseHeaders.cpp \
+	third_party/WebKit/Source/core/frame/Console.cpp \
+	third_party/WebKit/Source/core/frame/ConsoleBase.cpp \
+	third_party/WebKit/Source/core/frame/ContentSecurityPolicy.cpp \
+	third_party/WebKit/Source/core/frame/ContentSecurityPolicyResponseHeaders.cpp \
 	third_party/WebKit/Source/core/page/ContextMenuController.cpp \
 	third_party/WebKit/Source/core/page/CreateWindow.cpp \
-	third_party/WebKit/Source/core/page/DeviceController.cpp \
-	third_party/WebKit/Source/core/page/DiagnosticLoggingKeys.cpp \
-	third_party/WebKit/Source/core/page/DOMSecurityPolicy.cpp \
+	third_party/WebKit/Source/core/frame/DOMSecurityPolicy.cpp \
 	third_party/WebKit/Source/core/page/DOMSelection.cpp \
-	third_party/WebKit/Source/core/page/DOMTimer.cpp \
-	third_party/WebKit/Source/core/page/DOMWindow.cpp \
-	third_party/WebKit/Source/core/page/DOMWindowBase64.cpp \
-	third_party/WebKit/Source/core/page/DOMWindowTimers.cpp \
+	third_party/WebKit/Source/core/frame/DOMTimer.cpp \
+	third_party/WebKit/Source/core/frame/DOMWindow.cpp \
+	third_party/WebKit/Source/core/frame/DOMWindowBase64.cpp \
+	third_party/WebKit/Source/core/frame/DOMWindowLifecycleNotifier.cpp \
+	third_party/WebKit/Source/core/frame/DOMWindowLifecycleObserver.cpp \
+	third_party/WebKit/Source/core/frame/DOMWindowTimers.cpp \
 	third_party/WebKit/Source/core/page/DOMWindowPagePopup.cpp \
-	third_party/WebKit/Source/core/page/DOMWindowProperty.cpp \
+	third_party/WebKit/Source/core/frame/DOMWindowProperty.cpp \
 	third_party/WebKit/Source/core/page/DragController.cpp \
+	third_party/WebKit/Source/core/page/DragData.cpp \
 	third_party/WebKit/Source/core/page/EventHandler.cpp \
 	third_party/WebKit/Source/core/page/EventSource.cpp \
 	third_party/WebKit/Source/core/page/FocusController.cpp \
-	third_party/WebKit/Source/core/page/Frame.cpp \
-	third_party/WebKit/Source/core/page/FrameActionScheduler.cpp \
-	third_party/WebKit/Source/core/page/FrameDestructionObserver.cpp \
+	third_party/WebKit/Source/core/frame/Frame.cpp \
+	third_party/WebKit/Source/core/frame/FrameDestructionObserver.cpp \
 	third_party/WebKit/Source/core/page/FrameTree.cpp \
-	third_party/WebKit/Source/core/page/FrameView.cpp \
-	third_party/WebKit/Source/core/page/History.cpp \
-	third_party/WebKit/Source/core/page/ImageBitmap.cpp \
-	third_party/WebKit/Source/core/page/ImageBitmapFactories.cpp \
-	third_party/WebKit/Source/core/page/Location.cpp \
-	third_party/WebKit/Source/core/page/MemoryInfo.cpp \
+	third_party/WebKit/Source/core/frame/FrameView.cpp \
+	third_party/WebKit/Source/core/frame/GraphicsLayerDebugInfo.cpp \
+	third_party/WebKit/Source/core/frame/History.cpp \
+	third_party/WebKit/Source/core/frame/ImageBitmap.cpp \
+	third_party/WebKit/Source/core/frame/Location.cpp \
+	third_party/WebKit/Source/core/timing/MemoryInfo.cpp \
 	third_party/WebKit/Source/core/page/MouseEventWithHitTestResults.cpp \
-	third_party/WebKit/Source/core/page/Navigator.cpp \
-	third_party/WebKit/Source/core/page/NavigatorBase.cpp \
+	third_party/WebKit/Source/core/frame/SmartClip.cpp \
+	third_party/WebKit/Source/core/frame/Navigator.cpp \
+	third_party/WebKit/Source/core/frame/NavigatorID.cpp \
+	third_party/WebKit/Source/core/frame/SettingsDelegate.cpp \
+	third_party/WebKit/Source/core/page/NetworkStateNotifier.cpp \
 	third_party/WebKit/Source/core/page/Page.cpp \
 	third_party/WebKit/Source/core/page/PageConsole.cpp \
 	third_party/WebKit/Source/core/page/PageGroup.cpp \
@@ -410,49 +445,44 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/page/PagePopupController.cpp \
 	third_party/WebKit/Source/core/page/PagePopupClient.cpp \
 	third_party/WebKit/Source/core/page/PageScaleConstraints.cpp \
-	third_party/WebKit/Source/core/page/PageScaleConstraintsSet.cpp \
 	third_party/WebKit/Source/core/page/PageSerializer.cpp \
 	third_party/WebKit/Source/core/page/PageVisibilityState.cpp \
-	third_party/WebKit/Source/core/page/Performance.cpp \
-	third_party/WebKit/Source/core/page/PerformanceEntry.cpp \
-	third_party/WebKit/Source/core/page/PerformanceNavigation.cpp \
-	third_party/WebKit/Source/core/page/PerformanceResourceTiming.cpp \
-	third_party/WebKit/Source/core/page/PerformanceTiming.cpp \
-	third_party/WebKit/Source/core/page/PerformanceUserTiming.cpp \
+	third_party/WebKit/Source/core/timing/Performance.cpp \
+	third_party/WebKit/Source/core/timing/PerformanceEntry.cpp \
+	third_party/WebKit/Source/core/timing/PerformanceNavigation.cpp \
+	third_party/WebKit/Source/core/timing/PerformanceResourceTiming.cpp \
+	third_party/WebKit/Source/core/timing/PerformanceTiming.cpp \
+	third_party/WebKit/Source/core/timing/PerformanceUserTiming.cpp \
 	third_party/WebKit/Source/core/page/PointerLockController.cpp \
 	third_party/WebKit/Source/core/page/PrintContext.cpp \
-	third_party/WebKit/Source/core/page/RuntimeCSSEnabled.cpp \
-	third_party/WebKit/Source/core/page/RuntimeEnabledFeaturesCustom.cpp \
-	third_party/WebKit/Source/core/page/Screen.cpp \
-	third_party/WebKit/Source/core/page/Settings.cpp \
+	third_party/WebKit/Source/core/css/RuntimeCSSEnabled.cpp \
+	third_party/WebKit/Source/core/frame/Screen.cpp \
+	third_party/WebKit/Source/core/frame/Settings.cpp \
 	third_party/WebKit/Source/core/page/SpatialNavigation.cpp \
-	third_party/WebKit/Source/core/page/SpeechInput.cpp \
-	third_party/WebKit/Source/core/page/SpeechInputEvent.cpp \
-	third_party/WebKit/Source/core/page/SpeechInputResult.cpp \
-	third_party/WebKit/Source/core/page/SpeechInputResultList.cpp \
-	third_party/WebKit/Source/core/page/SuspendableTimer.cpp \
+	third_party/WebKit/Source/core/frame/SuspendableTimer.cpp \
 	third_party/WebKit/Source/core/page/TouchAdjustment.cpp \
 	third_party/WebKit/Source/core/page/TouchDisambiguation.cpp \
-	third_party/WebKit/Source/core/page/UseCounter.cpp \
-	third_party/WebKit/Source/core/page/UserContentURLPattern.cpp \
+	third_party/WebKit/Source/core/frame/UseCounter.cpp \
 	third_party/WebKit/Source/core/page/WindowFeatures.cpp \
 	third_party/WebKit/Source/core/page/WindowFocusAllowedIndicator.cpp \
-	third_party/WebKit/Source/core/page/WorkerNavigator.cpp \
-	third_party/WebKit/Source/core/page/animation/AnimationBase.cpp \
-	third_party/WebKit/Source/core/page/animation/AnimationController.cpp \
-	third_party/WebKit/Source/core/page/animation/CompositeAnimation.cpp \
-	third_party/WebKit/Source/core/page/animation/CSSPropertyAnimation.cpp \
-	third_party/WebKit/Source/core/page/animation/ImplicitAnimation.cpp \
-	third_party/WebKit/Source/core/page/animation/KeyframeAnimation.cpp \
+	third_party/WebKit/Source/core/workers/WorkerNavigator.cpp \
+	third_party/WebKit/Source/core/frame/animation/AnimationBase.cpp \
+	third_party/WebKit/Source/core/frame/animation/AnimationController.cpp \
+	third_party/WebKit/Source/core/frame/animation/CompositeAnimation.cpp \
+	third_party/WebKit/Source/core/frame/animation/CSSPropertyAnimation.cpp \
+	third_party/WebKit/Source/core/frame/animation/ImplicitAnimation.cpp \
+	third_party/WebKit/Source/core/frame/animation/KeyframeAnimation.cpp \
 	third_party/WebKit/Source/core/page/scrolling/ScrollingConstraints.cpp \
 	third_party/WebKit/Source/core/page/scrolling/ScrollingCoordinator.cpp \
 	third_party/WebKit/Source/core/plugins/DOMMimeType.cpp \
 	third_party/WebKit/Source/core/plugins/DOMMimeTypeArray.cpp \
 	third_party/WebKit/Source/core/plugins/DOMPlugin.cpp \
 	third_party/WebKit/Source/core/plugins/DOMPluginArray.cpp \
-	third_party/WebKit/Source/core/plugins/IFrameShimSupport.cpp \
-	third_party/WebKit/Source/core/plugins/PluginData.cpp \
-	third_party/WebKit/Source/core/plugins/PluginListBuilder.cpp \
+	third_party/WebKit/Source/core/plugins/PluginOcclusionSupport.cpp \
+	third_party/WebKit/Source/core/speech/SpeechInput.cpp \
+	third_party/WebKit/Source/core/speech/SpeechInputEvent.cpp \
+	third_party/WebKit/Source/core/speech/SpeechInputResult.cpp \
+	third_party/WebKit/Source/core/speech/SpeechInputResultList.cpp \
 	third_party/WebKit/Source/core/storage/Storage.cpp \
 	third_party/WebKit/Source/core/storage/StorageEvent.cpp \
 	third_party/WebKit/Source/core/workers/AbstractWorker.cpp \
@@ -462,11 +492,12 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/workers/SharedWorkerGlobalScope.cpp \
 	third_party/WebKit/Source/core/workers/SharedWorkerThread.cpp \
 	third_party/WebKit/Source/core/workers/Worker.cpp \
+	third_party/WebKit/Source/core/workers/WorkerConsole.cpp \
 	third_party/WebKit/Source/core/workers/WorkerEventQueue.cpp \
-	third_party/WebKit/Source/core/workers/WorkerGlobalScopeProxy.cpp \
+	third_party/WebKit/Source/core/workers/WorkerGlobalScopeProxyProvider.cpp \
 	third_party/WebKit/Source/core/workers/WorkerGlobalScope.cpp \
-	third_party/WebKit/Source/core/workers/WorkerLocation.cpp \
 	third_party/WebKit/Source/core/workers/WorkerMessagingProxy.cpp \
+	third_party/WebKit/Source/core/workers/WorkerObjectProxy.cpp \
 	third_party/WebKit/Source/core/workers/WorkerRunLoop.cpp \
 	third_party/WebKit/Source/core/workers/WorkerScriptLoader.cpp \
 	third_party/WebKit/Source/core/workers/WorkerThread.cpp \
@@ -507,15 +538,16 @@ LOCAL_SRC_FILES := \
 # Flags passed to both C and C++ files.
 MY_CFLAGS_Debug := \
 	--param=ssp-buffer-size=4 \
+	-Werror \
 	-fno-exceptions \
 	-fno-strict-aliasing \
+	-Wall \
 	-Wno-unused-parameter \
 	-Wno-missing-field-initializers \
 	-fvisibility=hidden \
 	-pipe \
 	-fPIC \
 	-fno-strict-aliasing \
-	-Wno-format \
 	-m32 \
 	-mmmx \
 	-march=pentium4 \
@@ -532,10 +564,6 @@ MY_CFLAGS_Debug := \
 	-Wno-extra \
 	-Wno-ignored-qualifiers \
 	-Wno-type-limits \
-	-Wno-address \
-	-Wno-format-security \
-	-Wno-return-type \
-	-Wno-sequence-point \
 	-fno-stack-protector \
 	-Os \
 	-g \
@@ -544,51 +572,46 @@ MY_CFLAGS_Debug := \
 	-ffunction-sections
 
 MY_DEFS_Debug := \
-	'-DANGLE_DX11' \
+	'-DV8_DEPRECATION_WARNINGS' \
 	'-D_FILE_OFFSET_BITS=64' \
 	'-DNO_TCMALLOC' \
-	'-DDISCARDABLE_MEMORY_ALWAYS_SUPPORTED_NATIVELY' \
-	'-DSYSTEM_NATIVELY_SIGNALS_MEMORY_PRESSURE' \
 	'-DDISABLE_NACL' \
 	'-DCHROMIUM_BUILD' \
 	'-DUSE_LIBJPEG_TURBO=1' \
 	'-DUSE_PROPRIETARY_CODECS' \
 	'-DENABLE_CONFIGURATION_POLICY' \
-	'-DLOGGING_IS_OFFICIAL_BUILD=1' \
-	'-DTRACING_IS_OFFICIAL_BUILD=1' \
-	'-DENABLE_GPU=1' \
+	'-DDISCARDABLE_MEMORY_ALWAYS_SUPPORTED_NATIVELY' \
+	'-DSYSTEM_NATIVELY_SIGNALS_MEMORY_PRESSURE' \
+	'-DICU_UTIL_DATA_IMPL=ICU_UTIL_DATA_STATIC' \
 	'-DUSE_OPENSSL=1' \
 	'-DENABLE_EGLIMAGE=1' \
+	'-DCLD_VERSION=1' \
 	'-DENABLE_PRINTING=1' \
-	'-DWEBCORE_NAVIGATOR_VENDOR="Google Inc."' \
-	'-DWEBKIT_IMPLEMENTATION=1' \
-	'-DINSIDE_WEBKIT' \
-	'-DENABLE_CSS3_TEXT=0' \
-	'-DENABLE_CSS_EXCLUSIONS=1' \
-	'-DENABLE_CSS_REGIONS=1' \
+	'-DENABLE_MANAGED_USERS=1' \
+	'-DBLINK_IMPLEMENTATION=1' \
+	'-DINSIDE_BLINK' \
 	'-DENABLE_CUSTOM_SCHEME_HANDLER=0' \
-	'-DENABLE_ENCRYPTED_MEDIA_V2=1' \
 	'-DENABLE_SVG_FONTS=1' \
-	'-DENABLE_TOUCH_ICON_LOADING=1' \
-	'-DENABLE_GDI_FONTS_ON_WINDOWS=1' \
+	'-DENABLE_GDI_FONTS_ON_WINDOWS=0' \
+	'-DENABLE_HARFBUZZ_ON_WINDOWS=1' \
 	'-DWTF_USE_CONCATENATED_IMPULSE_RESPONSES=1' \
-	'-DENABLE_CALENDAR_PICKER=0' \
 	'-DENABLE_FAST_MOBILE_SCROLLING=1' \
 	'-DENABLE_INPUT_SPEECH=0' \
 	'-DENABLE_LEGACY_NOTIFICATIONS=0' \
 	'-DENABLE_MEDIA_CAPTURE=1' \
-	'-DENABLE_NOTIFICATIONS=0' \
 	'-DENABLE_ORIENTATION_EVENTS=1' \
+	'-DENABLE_TOUCH_ICON_LOADING=1' \
 	'-DENABLE_NAVIGATOR_CONTENT_UTILS=0' \
-	'-DWTF_USE_NATIVE_FULLSCREEN_VIDEO=1' \
 	'-DENABLE_OPENTYPE_VERTICAL=1' \
-	'-DWTF_USE_HARFBUZZ=1' \
 	'-DU_USING_ICU_NAMESPACE=0' \
+	'-DSK_ATTR_DEPRECATED=SK_NOTHING_ARG1' \
 	'-DCHROME_PNG_WRITE_SUPPORT' \
 	'-DPNG_USER_CONFIG' \
+	'-DCHROME_PNG_READ_PACK_SUPPORT' \
 	'-DLIBXML_STATIC' \
 	'-DLIBXSLT_STATIC' \
-	'-DUSE_SYSTEM_LIBJPEG' \
+	'-D__STDC_CONSTANT_MACROS' \
+	'-D__STDC_FORMAT_MACROS' \
 	'-DANDROID' \
 	'-D__GNU_SOURCE=1' \
 	'-DUSE_STLPORT=1' \
@@ -601,20 +624,23 @@ MY_DEFS_Debug := \
 
 # Include paths placed before CFLAGS/CPPFLAGS
 LOCAL_C_INCLUDES_Debug := \
-	$(gyp_shared_intermediate_dir)/shim_headers/skia_library/target \
 	$(gyp_shared_intermediate_dir)/shim_headers/ashmem/target \
+	$(gyp_shared_intermediate_dir)/shim_headers/skia_library/target \
 	$(gyp_shared_intermediate_dir)/shim_headers/icuuc/target \
 	$(gyp_shared_intermediate_dir)/shim_headers/icui18n/target \
+	$(LOCAL_PATH)/third_party/WebKit/Source \
+	$(LOCAL_PATH) \
+	$(LOCAL_PATH)/skia/config \
 	$(LOCAL_PATH)/third_party/khronos \
 	$(LOCAL_PATH)/gpu \
-	$(LOCAL_PATH) \
 	$(LOCAL_PATH)/third_party/WebKit \
-	$(LOCAL_PATH)/third_party/WebKit/Source \
 	$(gyp_shared_intermediate_dir)/blink \
 	$(gyp_shared_intermediate_dir)/blink/bindings \
-	$(LOCAL_PATH)/third_party/angle_dx11/include/GLSLANG \
+	$(LOCAL_PATH)/third_party/angle/include \
 	$(PWD)/external/icu4c/common \
 	$(PWD)/external/icu4c/i18n \
+	$(PWD)/external/skia/include \
+	$(PWD)/external/skia/include/core \
 	$(LOCAL_PATH)/third_party/skia/src/core \
 	$(LOCAL_PATH)/skia/ext \
 	$(LOCAL_PATH)/third_party/iccjpeg \
@@ -630,7 +656,6 @@ LOCAL_C_INCLUDES_Debug := \
 	$(LOCAL_PATH)/third_party/sqlite \
 	$(LOCAL_PATH)/third_party/zlib \
 	$(LOCAL_PATH)/v8/include \
-	$(PWD)/external/jpeg \
 	$(PWD)/frameworks/wilhelm/include \
 	$(PWD)/bionic \
 	$(PWD)/external/stlport/stlport
@@ -641,26 +666,26 @@ LOCAL_CPPFLAGS_Debug := \
 	-fno-rtti \
 	-fno-threadsafe-statics \
 	-fvisibility-inlines-hidden \
+	-Wsign-compare \
 	-Wno-c++0x-compat \
-	-Wno-deprecated \
 	-Wno-error=c++0x-compat \
 	-Wno-non-virtual-dtor \
-	-Wno-sign-promo \
-	-Wno-non-virtual-dtor
+	-Wno-sign-promo
 
 
 # Flags passed to both C and C++ files.
 MY_CFLAGS_Release := \
 	--param=ssp-buffer-size=4 \
+	-Werror \
 	-fno-exceptions \
 	-fno-strict-aliasing \
+	-Wall \
 	-Wno-unused-parameter \
 	-Wno-missing-field-initializers \
 	-fvisibility=hidden \
 	-pipe \
 	-fPIC \
 	-fno-strict-aliasing \
-	-Wno-format \
 	-m32 \
 	-mmmx \
 	-march=pentium4 \
@@ -677,10 +702,6 @@ MY_CFLAGS_Release := \
 	-Wno-extra \
 	-Wno-ignored-qualifiers \
 	-Wno-type-limits \
-	-Wno-address \
-	-Wno-format-security \
-	-Wno-return-type \
-	-Wno-sequence-point \
 	-fno-stack-protector \
 	-Os \
 	-fno-ident \
@@ -691,51 +712,46 @@ MY_CFLAGS_Release := \
 	-fno-asynchronous-unwind-tables
 
 MY_DEFS_Release := \
-	'-DANGLE_DX11' \
+	'-DV8_DEPRECATION_WARNINGS' \
 	'-D_FILE_OFFSET_BITS=64' \
 	'-DNO_TCMALLOC' \
-	'-DDISCARDABLE_MEMORY_ALWAYS_SUPPORTED_NATIVELY' \
-	'-DSYSTEM_NATIVELY_SIGNALS_MEMORY_PRESSURE' \
 	'-DDISABLE_NACL' \
 	'-DCHROMIUM_BUILD' \
 	'-DUSE_LIBJPEG_TURBO=1' \
 	'-DUSE_PROPRIETARY_CODECS' \
 	'-DENABLE_CONFIGURATION_POLICY' \
-	'-DLOGGING_IS_OFFICIAL_BUILD=1' \
-	'-DTRACING_IS_OFFICIAL_BUILD=1' \
-	'-DENABLE_GPU=1' \
+	'-DDISCARDABLE_MEMORY_ALWAYS_SUPPORTED_NATIVELY' \
+	'-DSYSTEM_NATIVELY_SIGNALS_MEMORY_PRESSURE' \
+	'-DICU_UTIL_DATA_IMPL=ICU_UTIL_DATA_STATIC' \
 	'-DUSE_OPENSSL=1' \
 	'-DENABLE_EGLIMAGE=1' \
+	'-DCLD_VERSION=1' \
 	'-DENABLE_PRINTING=1' \
-	'-DWEBCORE_NAVIGATOR_VENDOR="Google Inc."' \
-	'-DWEBKIT_IMPLEMENTATION=1' \
-	'-DINSIDE_WEBKIT' \
-	'-DENABLE_CSS3_TEXT=0' \
-	'-DENABLE_CSS_EXCLUSIONS=1' \
-	'-DENABLE_CSS_REGIONS=1' \
+	'-DENABLE_MANAGED_USERS=1' \
+	'-DBLINK_IMPLEMENTATION=1' \
+	'-DINSIDE_BLINK' \
 	'-DENABLE_CUSTOM_SCHEME_HANDLER=0' \
-	'-DENABLE_ENCRYPTED_MEDIA_V2=1' \
 	'-DENABLE_SVG_FONTS=1' \
-	'-DENABLE_TOUCH_ICON_LOADING=1' \
-	'-DENABLE_GDI_FONTS_ON_WINDOWS=1' \
+	'-DENABLE_GDI_FONTS_ON_WINDOWS=0' \
+	'-DENABLE_HARFBUZZ_ON_WINDOWS=1' \
 	'-DWTF_USE_CONCATENATED_IMPULSE_RESPONSES=1' \
-	'-DENABLE_CALENDAR_PICKER=0' \
 	'-DENABLE_FAST_MOBILE_SCROLLING=1' \
 	'-DENABLE_INPUT_SPEECH=0' \
 	'-DENABLE_LEGACY_NOTIFICATIONS=0' \
 	'-DENABLE_MEDIA_CAPTURE=1' \
-	'-DENABLE_NOTIFICATIONS=0' \
 	'-DENABLE_ORIENTATION_EVENTS=1' \
+	'-DENABLE_TOUCH_ICON_LOADING=1' \
 	'-DENABLE_NAVIGATOR_CONTENT_UTILS=0' \
-	'-DWTF_USE_NATIVE_FULLSCREEN_VIDEO=1' \
 	'-DENABLE_OPENTYPE_VERTICAL=1' \
-	'-DWTF_USE_HARFBUZZ=1' \
 	'-DU_USING_ICU_NAMESPACE=0' \
+	'-DSK_ATTR_DEPRECATED=SK_NOTHING_ARG1' \
 	'-DCHROME_PNG_WRITE_SUPPORT' \
 	'-DPNG_USER_CONFIG' \
+	'-DCHROME_PNG_READ_PACK_SUPPORT' \
 	'-DLIBXML_STATIC' \
 	'-DLIBXSLT_STATIC' \
-	'-DUSE_SYSTEM_LIBJPEG' \
+	'-D__STDC_CONSTANT_MACROS' \
+	'-D__STDC_FORMAT_MACROS' \
 	'-DANDROID' \
 	'-D__GNU_SOURCE=1' \
 	'-DUSE_STLPORT=1' \
@@ -743,25 +759,29 @@ MY_DEFS_Release := \
 	'-DCHROME_BUILD_ID=""' \
 	'-DNDEBUG' \
 	'-DNVALGRIND' \
-	'-DDYNAMIC_ANNOTATIONS_ENABLED=0'
+	'-DDYNAMIC_ANNOTATIONS_ENABLED=0' \
+	'-D_FORTIFY_SOURCE=2'
 
 
 # Include paths placed before CFLAGS/CPPFLAGS
 LOCAL_C_INCLUDES_Release := \
-	$(gyp_shared_intermediate_dir)/shim_headers/skia_library/target \
 	$(gyp_shared_intermediate_dir)/shim_headers/ashmem/target \
+	$(gyp_shared_intermediate_dir)/shim_headers/skia_library/target \
 	$(gyp_shared_intermediate_dir)/shim_headers/icuuc/target \
 	$(gyp_shared_intermediate_dir)/shim_headers/icui18n/target \
+	$(LOCAL_PATH)/third_party/WebKit/Source \
+	$(LOCAL_PATH) \
+	$(LOCAL_PATH)/skia/config \
 	$(LOCAL_PATH)/third_party/khronos \
 	$(LOCAL_PATH)/gpu \
-	$(LOCAL_PATH) \
 	$(LOCAL_PATH)/third_party/WebKit \
-	$(LOCAL_PATH)/third_party/WebKit/Source \
 	$(gyp_shared_intermediate_dir)/blink \
 	$(gyp_shared_intermediate_dir)/blink/bindings \
-	$(LOCAL_PATH)/third_party/angle_dx11/include/GLSLANG \
+	$(LOCAL_PATH)/third_party/angle/include \
 	$(PWD)/external/icu4c/common \
 	$(PWD)/external/icu4c/i18n \
+	$(PWD)/external/skia/include \
+	$(PWD)/external/skia/include/core \
 	$(LOCAL_PATH)/third_party/skia/src/core \
 	$(LOCAL_PATH)/skia/ext \
 	$(LOCAL_PATH)/third_party/iccjpeg \
@@ -777,7 +797,6 @@ LOCAL_C_INCLUDES_Release := \
 	$(LOCAL_PATH)/third_party/sqlite \
 	$(LOCAL_PATH)/third_party/zlib \
 	$(LOCAL_PATH)/v8/include \
-	$(PWD)/external/jpeg \
 	$(PWD)/frameworks/wilhelm/include \
 	$(PWD)/bionic \
 	$(PWD)/external/stlport/stlport
@@ -788,12 +807,11 @@ LOCAL_CPPFLAGS_Release := \
 	-fno-rtti \
 	-fno-threadsafe-statics \
 	-fvisibility-inlines-hidden \
+	-Wsign-compare \
 	-Wno-c++0x-compat \
-	-Wno-deprecated \
 	-Wno-error=c++0x-compat \
 	-Wno-non-virtual-dtor \
-	-Wno-sign-promo \
-	-Wno-non-virtual-dtor
+	-Wno-sign-promo
 
 
 LOCAL_CFLAGS := $(MY_CFLAGS_$(GYP_CONFIGURATION)) $(MY_DEFS_$(GYP_CONFIGURATION))

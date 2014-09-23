@@ -23,9 +23,9 @@
 #include "core/rendering/RenderTextControl.h"
 
 #include "core/html/HTMLTextFormControlElement.h"
-#include "core/platform/ScrollbarTheme.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/RenderTheme.h"
+#include "platform/scroll/ScrollbarTheme.h"
 #include "wtf/unicode/CharacterNames.h"
 
 using namespace std;
@@ -33,7 +33,7 @@ using namespace std;
 namespace WebCore {
 
 RenderTextControl::RenderTextControl(HTMLTextFormControlElement* element)
-    : RenderBlock(element)
+    : RenderBlockFlow(element)
 {
     ASSERT(element);
 }
@@ -50,6 +50,17 @@ HTMLTextFormControlElement* RenderTextControl::textFormControlElement() const
 HTMLElement* RenderTextControl::innerTextElement() const
 {
     return textFormControlElement()->innerTextElement();
+}
+
+void RenderTextControl::addChild(RenderObject* newChild, RenderObject* beforeChild)
+{
+    // FIXME: This is a terrible hack to get the caret over the placeholder text since it'll
+    // make us paint the placeholder first. (See https://trac.webkit.org/changeset/118733)
+    Node* node = newChild->node();
+    if (node && node->isElementNode() && toElement(node)->pseudo() == "-webkit-input-placeholder")
+        RenderBlock::addChild(newChild, firstChild());
+    else
+        RenderBlock::addChild(newChild, beforeChild);
 }
 
 void RenderTextControl::styleDidChange(StyleDifference diff, const RenderStyle* oldStyle)
@@ -147,7 +158,7 @@ void RenderTextControl::hitInnerTextElement(HitTestResult& result, const LayoutP
     result.setLocalPoint(localPoint);
 }
 
-static const char* fontFamiliesWithInvalidCharWidth[] = {
+static const char* const fontFamiliesWithInvalidCharWidth[] = {
     "American Typewriter",
     "Arial Hebrew",
     "Chalkboard",
@@ -264,7 +275,7 @@ void RenderTextControl::computePreferredLogicalWidths()
     m_minPreferredLogicalWidth += toAdd;
     m_maxPreferredLogicalWidth += toAdd;
 
-    setPreferredLogicalWidthsDirty(false);
+    clearPreferredLogicalWidthsDirty();
 }
 
 void RenderTextControl::addFocusRingRects(Vector<IntRect>& rects, const LayoutPoint& additionalOffset, const RenderLayerModelObject*)
@@ -273,24 +284,15 @@ void RenderTextControl::addFocusRingRects(Vector<IntRect>& rects, const LayoutPo
         rects.append(pixelSnappedIntRect(additionalOffset, size()));
 }
 
-RenderObject* RenderTextControl::layoutSpecialExcludedChild(bool relayoutChildren)
+RenderObject* RenderTextControl::layoutSpecialExcludedChild(bool relayoutChildren, SubtreeLayoutScope& layoutScope)
 {
     HTMLElement* placeholder = toHTMLTextFormControlElement(node())->placeholderElement();
     RenderObject* placeholderRenderer = placeholder ? placeholder->renderer() : 0;
     if (!placeholderRenderer)
         return 0;
-    if (relayoutChildren) {
-        // The markParents arguments should be false because this function is
-        // called from layout() of the parent and the placeholder layout doesn't
-        // affect the parent layout.
-        placeholderRenderer->setChildNeedsLayout(MarkOnlyThis);
-    }
+    if (relayoutChildren)
+        layoutScope.setChildNeedsLayout(placeholderRenderer);
     return placeholderRenderer;
-}
-
-bool RenderTextControl::canBeReplacedWithInlineRunIn() const
-{
-    return false;
 }
 
 } // namespace WebCore

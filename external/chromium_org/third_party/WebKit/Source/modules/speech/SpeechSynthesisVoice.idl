@@ -25,7 +25,7 @@
 
 [
     NoInterfaceObject,
-    EnabledAtRuntime=speechSynthesis
+    RuntimeEnabled=SpeechSynthesis
 ] interface SpeechSynthesisVoice {
     readonly attribute DOMString voiceURI;
     readonly attribute DOMString name;

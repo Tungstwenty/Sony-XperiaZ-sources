@@ -60,17 +60,14 @@ struct LineSegmentRange {
 
 typedef Vector<LineSegmentRange> SegmentRangeList;
 
-class ShapeInsideInfo : public ShapeInfo<RenderBlock, &RenderStyle::resolvedShapeInside, &Shape::getIncludedIntervals> {
+class ShapeInsideInfo FINAL : public ShapeInfo<RenderBlock> {
 public:
     static PassOwnPtr<ShapeInsideInfo> createInfo(const RenderBlock* renderer) { return adoptPtr(new ShapeInsideInfo(renderer)); }
 
     static bool isEnabledFor(const RenderBlock* renderer);
 
-    virtual bool computeSegmentsForLine(LayoutUnit lineTop, LayoutUnit lineHeight) OVERRIDE
-    {
-        m_segmentRanges.clear();
-        return ShapeInfo<RenderBlock, &RenderStyle::resolvedShapeInside, &Shape::getIncludedIntervals>::computeSegmentsForLine(lineTop, lineHeight);
-    }
+    bool updateSegmentsForLine(LayoutSize lineOffset, LayoutUnit lineHeight);
+    bool updateSegmentsForLine(LayoutUnit lineTop, LayoutUnit lineHeight);
 
     bool hasSegments() const
     {
@@ -90,22 +87,35 @@ public:
         ASSERT(m_segmentRanges.size() < m_segments.size());
         return &m_segments[m_segmentRanges.size()];
     }
+    void clearSegments() { m_segments.clear(); }
     bool adjustLogicalLineTop(float minSegmentWidth);
+    LayoutUnit computeFirstFitPositionForFloat(const LayoutSize) const;
 
     void setNeedsLayout(bool value) { m_needsLayout = value; }
     bool needsLayout() { return m_needsLayout; }
 
+    virtual bool lineOverlapsShapeBounds() const OVERRIDE
+    {
+        return computedShape()->lineOverlapsShapePaddingBounds(m_shapeLineTop, m_lineHeight);
+    }
+
 protected:
     virtual LayoutRect computedShapeLogicalBoundingBox() const OVERRIDE { return computedShape()->shapePaddingLogicalBoundingBox(); }
+    virtual ShapeValue* shapeValue() const OVERRIDE;
+    virtual void getIntervals(LayoutUnit lineTop, LayoutUnit lineHeight, SegmentList& segments) const OVERRIDE
+    {
+        return computedShape()->getIncludedIntervals(lineTop, lineHeight, segments);
+    }
 
 private:
     ShapeInsideInfo(const RenderBlock* renderer)
-    : ShapeInfo<RenderBlock, &RenderStyle::resolvedShapeInside, &Shape::getIncludedIntervals> (renderer)
+    : ShapeInfo<RenderBlock> (renderer)
     , m_needsLayout(false)
     { }
 
     SegmentRangeList m_segmentRanges;
     bool m_needsLayout;
+    SegmentList m_segments;
 };
 
 }

@@ -27,16 +27,16 @@ namespace WebCore {
 
 class SVGTitleElement FINAL : public SVGElement {
 public:
-    static PassRefPtr<SVGTitleElement> create(const QualifiedName&, Document*);
+    static PassRefPtr<SVGTitleElement> create(Document&);
 
 private:
-    SVGTitleElement(const QualifiedName&, Document*);
+    explicit SVGTitleElement(Document&);
 
     virtual InsertionNotificationRequest insertedInto(ContainerNode*) OVERRIDE;
     virtual void removedFrom(ContainerNode*) OVERRIDE;
     virtual void childrenChanged(bool changedByParser = false, Node* beforeChange = 0, Node* afterChange = 0, int childCountDelta = 0);
 
-    virtual bool rendererIsNeeded(const NodeRenderingContext&) { return false; }
+    virtual bool rendererIsNeeded(const RenderStyle&) { return false; }
 };
 
 } // namespace WebCore

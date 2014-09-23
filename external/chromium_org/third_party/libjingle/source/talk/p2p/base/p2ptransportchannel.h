@@ -40,6 +40,7 @@
 #include <map>
 #include <vector>
 #include <string>
+#include "talk/base/asyncpacketsocket.h"
 #include "talk/base/sigslot.h"
 #include "talk/p2p/base/candidate.h"
 #include "talk/p2p/base/portinterface.h"
@@ -90,7 +91,8 @@ class P2PTransportChannel : public TransportChannelImpl,
   virtual void OnCandidate(const Candidate& candidate);
 
   // From TransportChannel:
-  virtual int SendPacket(const char *data, size_t len, int flags);
+  virtual int SendPacket(const char *data, size_t len,
+                         talk_base::DiffServCodePoint dscp, int flags);
   virtual int SetOption(talk_base::Socket::Option opt, int value);
   virtual int GetError() { return error_; }
   virtual bool GetStats(std::vector<ConnectionInfo>* stats);
@@ -103,6 +105,63 @@ class P2PTransportChannel : public TransportChannelImpl,
   const std::vector<PortInterface *>& ports() { return ports_; }
 
   IceMode remote_ice_mode() const { return remote_ice_mode_; }
+
+  // DTLS methods.
+  virtual bool IsDtlsActive() const { return false; }
+
+  // Default implementation.
+  virtual bool GetSslRole(talk_base::SSLRole* role) const {
+    return false;
+  }
+
+  virtual bool SetSslRole(talk_base::SSLRole role) {
+    return false;
+  }
+
+  // Set up the ciphers to use for DTLS-SRTP.
+  virtual bool SetSrtpCiphers(const std::vector<std::string>& ciphers) {
+    return false;
+  }
+
+  // Find out which DTLS-SRTP cipher was negotiated
+  virtual bool GetSrtpCipher(std::string* cipher) {
+    return false;
+  }
+
+  // Returns false because the channel is not encrypted by default.
+  virtual bool GetLocalIdentity(talk_base::SSLIdentity** identity) const {
+    return false;
+  }
+
+  virtual bool GetRemoteCertificate(talk_base::SSLCertificate** cert) const {
+    return false;
+  }
+
+  // Allows key material to be extracted for external encryption.
+  virtual bool ExportKeyingMaterial(
+      const std::string& label,
+      const uint8* context,
+      size_t context_len,
+      bool use_context,
+      uint8* result,
+      size_t result_len) {
+    return false;
+  }
+
+  virtual bool SetLocalIdentity(talk_base::SSLIdentity* identity) {
+    return false;
+  }
+
+  // Set DTLS Remote fingerprint. Must be after local identity set.
+  virtual bool SetRemoteFingerprint(
+    const std::string& digest_alg,
+    const uint8* digest,
+    size_t digest_len) {
+    return false;
+  }
+
+  // Helper method used only in unittest.
+  talk_base::DiffServCodePoint DefaultDscpValue() const;
 
  private:
   talk_base::Thread* thread() { return worker_thread_; }
@@ -149,8 +208,9 @@ class P2PTransportChannel : public TransportChannelImpl,
   void OnPortDestroyed(PortInterface* port);
   void OnRoleConflict(PortInterface* port);
 
-  void OnConnectionStateChange(Connection *connection);
-  void OnReadPacket(Connection *connection, const char *data, size_t len);
+  void OnConnectionStateChange(Connection* connection);
+  void OnReadPacket(Connection *connection, const char *data, size_t len,
+                    const talk_base::PacketTime& packet_time);
   void OnReadyToSend(Connection* connection);
   void OnConnectionDestroyed(Connection *connection);
 

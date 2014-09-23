@@ -40,7 +40,7 @@ struct SameSizeAsFillLayer {
 
 COMPILE_ASSERT(sizeof(FillLayer) == sizeof(SameSizeAsFillLayer), FillLayer_should_stay_small);
 
-FillLayer::FillLayer(EFillLayerType type)
+FillLayer::FillLayer(EFillLayerType type, bool useInitialValues)
     : m_next(0)
     , m_image(FillLayer::initialFillImage(type))
     , m_xPosition(FillLayer::initialFillXPosition(type))
@@ -52,21 +52,24 @@ FillLayer::FillLayer(EFillLayerType type)
     , m_repeatX(FillLayer::initialFillRepeatX(type))
     , m_repeatY(FillLayer::initialFillRepeatY(type))
     , m_composite(FillLayer::initialFillComposite(type))
-    , m_sizeType(FillLayer::initialFillSizeType(type))
+    , m_sizeType(useInitialValues ? FillLayer::initialFillSizeType(type) : SizeNone)
     , m_blendMode(FillLayer::initialFillBlendMode(type))
-    , m_imageSet(false)
-    , m_attachmentSet(false)
-    , m_clipSet(false)
-    , m_originSet(false)
-    , m_repeatXSet(false)
-    , m_repeatYSet(false)
-    , m_xPosSet(false)
-    , m_yPosSet(false)
-    , m_backgroundOriginSet(false)
+    , m_maskSourceType(FillLayer::initialFillMaskSourceType(type))
     , m_backgroundXOrigin(LeftEdge)
     , m_backgroundYOrigin(TopEdge)
-    , m_compositeSet(type == MaskFillLayer)
-    , m_blendModeSet(false)
+    , m_imageSet(useInitialValues)
+    , m_attachmentSet(useInitialValues)
+    , m_clipSet(useInitialValues)
+    , m_originSet(useInitialValues)
+    , m_repeatXSet(useInitialValues)
+    , m_repeatYSet(useInitialValues)
+    , m_xPosSet(useInitialValues)
+    , m_yPosSet(useInitialValues)
+    , m_backgroundXOriginSet(false)
+    , m_backgroundYOriginSet(false)
+    , m_compositeSet(useInitialValues || type == MaskFillLayer)
+    , m_blendModeSet(useInitialValues)
+    , m_maskSourceTypeSet(useInitialValues)
     , m_type(type)
 {
 }
@@ -85,6 +88,9 @@ FillLayer::FillLayer(const FillLayer& o)
     , m_composite(o.m_composite)
     , m_sizeType(o.m_sizeType)
     , m_blendMode(o.m_blendMode)
+    , m_maskSourceType(o.m_maskSourceType)
+    , m_backgroundXOrigin(o.m_backgroundXOrigin)
+    , m_backgroundYOrigin(o.m_backgroundYOrigin)
     , m_imageSet(o.m_imageSet)
     , m_attachmentSet(o.m_attachmentSet)
     , m_clipSet(o.m_clipSet)
@@ -93,11 +99,11 @@ FillLayer::FillLayer(const FillLayer& o)
     , m_repeatYSet(o.m_repeatYSet)
     , m_xPosSet(o.m_xPosSet)
     , m_yPosSet(o.m_yPosSet)
-    , m_backgroundOriginSet(o.m_backgroundOriginSet)
-    , m_backgroundXOrigin(o.m_backgroundXOrigin)
-    , m_backgroundYOrigin(o.m_backgroundYOrigin)
+    , m_backgroundXOriginSet(o.m_backgroundXOriginSet)
+    , m_backgroundYOriginSet(o.m_backgroundYOriginSet)
     , m_compositeSet(o.m_compositeSet)
     , m_blendModeSet(o.m_blendModeSet)
+    , m_maskSourceTypeSet(o.m_maskSourceTypeSet)
     , m_type(o.m_type)
 {
 }
@@ -119,7 +125,8 @@ FillLayer& FillLayer::operator=(const FillLayer& o)
     m_yPosition = o.m_yPosition;
     m_backgroundXOrigin = o.m_backgroundXOrigin;
     m_backgroundYOrigin = o.m_backgroundYOrigin;
-    m_backgroundOriginSet = o.m_backgroundOriginSet;
+    m_backgroundXOriginSet = o.m_backgroundXOriginSet;
+    m_backgroundYOriginSet = o.m_backgroundYOriginSet;
     m_sizeLength = o.m_sizeLength;
     m_attachment = o.m_attachment;
     m_clip = o.m_clip;
@@ -129,6 +136,7 @@ FillLayer& FillLayer::operator=(const FillLayer& o)
     m_repeatX = o.m_repeatX;
     m_repeatY = o.m_repeatY;
     m_sizeType = o.m_sizeType;
+    m_maskSourceType = o.m_maskSourceType;
 
     m_imageSet = o.m_imageSet;
     m_attachmentSet = o.m_attachmentSet;
@@ -140,6 +148,7 @@ FillLayer& FillLayer::operator=(const FillLayer& o)
     m_repeatYSet = o.m_repeatYSet;
     m_xPosSet = o.m_xPosSet;
     m_yPosSet = o.m_yPosSet;
+    m_maskSourceTypeSet = o.m_maskSourceTypeSet;
 
     m_type = o.m_type;
 
@@ -154,8 +163,9 @@ bool FillLayer::operator==(const FillLayer& o) const
             && m_backgroundXOrigin == o.m_backgroundXOrigin && m_backgroundYOrigin == o.m_backgroundYOrigin
             && m_attachment == o.m_attachment && m_clip == o.m_clip && m_composite == o.m_composite
             && m_blendMode == o.m_blendMode && m_origin == o.m_origin && m_repeatX == o.m_repeatX
-            && m_repeatY == o.m_repeatY && m_sizeType == o.m_sizeType && m_sizeLength == o.m_sizeLength
-            && m_type == o.m_type && ((m_next && o.m_next) ? *m_next == *o.m_next : m_next == o.m_next);
+            && m_repeatY == o.m_repeatY && m_sizeType == o.m_sizeType && m_maskSourceType == o.m_maskSourceType
+            && m_sizeLength == o.m_sizeLength && m_type == o.m_type
+            && ((m_next && o.m_next) ? *m_next == *o.m_next : m_next == o.m_next);
 }
 
 void FillLayer::fillUnsetProperties()
@@ -166,10 +176,10 @@ void FillLayer::fillUnsetProperties()
         // We need to fill in the remaining values with the pattern specified.
         for (FillLayer* pattern = this; curr; curr = curr->next()) {
             curr->m_xPosition = pattern->m_xPosition;
-            if (pattern->isBackgroundOriginSet()) {
+            if (pattern->isBackgroundXOriginSet())
                 curr->m_backgroundXOrigin = pattern->m_backgroundXOrigin;
+            if (pattern->isBackgroundYOriginSet())
                 curr->m_backgroundYOrigin = pattern->m_backgroundYOrigin;
-            }
             pattern = pattern->next();
             if (pattern == curr || !pattern)
                 pattern = this;
@@ -181,10 +191,10 @@ void FillLayer::fillUnsetProperties()
         // We need to fill in the remaining values with the pattern specified.
         for (FillLayer* pattern = this; curr; curr = curr->next()) {
             curr->m_yPosition = pattern->m_yPosition;
-            if (pattern->isBackgroundOriginSet()) {
+            if (pattern->isBackgroundXOriginSet())
                 curr->m_backgroundXOrigin = pattern->m_backgroundXOrigin;
+            if (pattern->isBackgroundYOriginSet())
                 curr->m_backgroundYOrigin = pattern->m_backgroundYOrigin;
-            }
             pattern = pattern->next();
             if (pattern == curr || !pattern)
                 pattern = this;
@@ -351,7 +361,7 @@ bool FillLayer::hasOpaqueImage(const RenderObject* renderer) const
     if (m_composite == CompositeClear || m_composite == CompositeCopy)
         return true;
 
-    if (m_blendMode != BlendModeNormal)
+    if (m_blendMode != blink::WebBlendModeNormal)
         return false;
 
     if (m_composite == CompositeSourceOver)

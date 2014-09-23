@@ -34,18 +34,14 @@
 #include "bindings/v8/ScriptScope.h"
 #include "bindings/v8/ScriptState.h"
 
-#include "V8InjectedScriptHost.h"
 #include "V8InspectorFrontendHost.h"
-#include "bindings/v8/V8Binding.h"
-#include "core/dom/Document.h"
-#include "core/page/Frame.h"
 
 #include <v8.h>
 
 namespace WebCore {
 
 ScriptObject::ScriptObject(ScriptState* scriptState, v8::Handle<v8::Object> v8Object)
-    : ScriptValue(v8Object)
+    : ScriptValue(v8Object, scriptState->isolate())
     , m_scriptState(scriptState)
 {
 }
@@ -65,14 +61,14 @@ v8::Handle<v8::Object> ScriptObject::v8Object() const
 bool ScriptGlobalObject::set(ScriptState* scriptState, const char* name, InspectorFrontendHost* value)
 {
     ScriptScope scope(scriptState);
-    scope.global()->Set(v8::String::NewSymbol(name), toV8(value, v8::Handle<v8::Object>(), scriptState->isolate()));
+    scope.global()->Set(v8AtomicString(scriptState->isolate(), name), toV8(value, v8::Handle<v8::Object>(), scriptState->isolate()));
     return scope.success();
 }
 
 bool ScriptGlobalObject::get(ScriptState* scriptState, const char* name, ScriptObject& value)
 {
     ScriptScope scope(scriptState);
-    v8::Local<v8::Value> v8Value = scope.global()->Get(v8::String::NewSymbol(name));
+    v8::Local<v8::Value> v8Value = scope.global()->Get(v8AtomicString(scriptState->isolate(), name));
     if (v8Value.IsEmpty())
         return false;
 

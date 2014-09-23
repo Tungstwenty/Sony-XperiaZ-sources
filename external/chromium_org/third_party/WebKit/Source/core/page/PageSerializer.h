@@ -31,22 +31,27 @@
 #ifndef PageSerializer_h
 #define PageSerializer_h
 
-#include "weborigin/KURL.h"
-#include "weborigin/KURLHash.h"
+#include "platform/weborigin/KURL.h"
+#include "platform/weborigin/KURLHash.h"
 #include "wtf/HashMap.h"
 #include "wtf/ListHashSet.h"
 #include "wtf/Vector.h"
 
 namespace WebCore {
 
+class FontResource;
 class ImageResource;
 class CSSStyleSheet;
+class CSSValue;
 class Document;
 class Frame;
 class Page;
 class RenderObject;
+class Resource;
+class SharedBuffer;
 class StylePropertySet;
 class StyleRule;
+class StyleRuleFontFace;
 
 struct SerializedResource;
 
@@ -70,9 +75,14 @@ private:
     // It also adds any resources included in that stylesheet (including any imported stylesheets and their own resources).
     void serializeCSSStyleSheet(CSSStyleSheet*, const KURL&);
 
+    bool shouldAddURL(const KURL&);
+
+    void addToResources(Resource *, PassRefPtr<SharedBuffer>, const KURL&);
     void addImageToResources(ImageResource*, RenderObject*, const KURL&);
+    void addFontToResources(FontResource*);
+
     void retrieveResourcesForProperties(const StylePropertySet*, Document*);
-    void retrieveResourcesForRule(StyleRule*, Document*);
+    void retrieveResourcesForCSSValue(CSSValue*, Document*);
 
     Vector<SerializedResource>* m_resources;
     ListHashSet<KURL> m_resourceURLs;

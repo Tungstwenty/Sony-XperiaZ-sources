@@ -26,8 +26,7 @@
 #ifndef AutoscrollController_h
 #define AutoscrollController_h
 
-#include "core/platform/Timer.h"
-#include "core/platform/graphics/IntPoint.h"
+#include "platform/geometry/IntPoint.h"
 #include "wtf/PassOwnPtr.h"
 
 namespace WebCore {
@@ -36,6 +35,7 @@ class EventHandler;
 class Frame;
 class FrameView;
 class Node;
+class Page;
 class PlatformMouseEvent;
 class RenderBox;
 class RenderObject;
@@ -44,7 +44,7 @@ enum AutoscrollType {
     NoAutoscroll,
     AutoscrollForDragAndDrop,
     AutoscrollForSelection,
-#if OS(WINDOWS)
+#if OS(WIN)
     AutoscrollForPanCanStop,
     AutoscrollForPan,
 #endif
@@ -53,34 +53,37 @@ enum AutoscrollType {
 // AutscrollController handels autoscroll and pan scroll for EventHandler.
 class AutoscrollController {
 public:
+    static PassOwnPtr<AutoscrollController> create(Page&);
+
+    void animate(double monotonicFrameBeginTime);
     bool autoscrollInProgress() const;
     bool autoscrollInProgress(const RenderBox*) const;
-    static PassOwnPtr<AutoscrollController> create();
     bool panScrollInProgress() const;
     void startAutoscrollForSelection(RenderObject*);
-    void stopAutoscrollTimer();
+    void stopAutoscroll();
     void stopAutoscrollIfNeeded(RenderObject*);
     void updateAutoscrollRenderer();
     void updateDragAndDrop(Node* targetNode, const IntPoint& eventPosition, double eventTime);
-#if OS(WINDOWS)
+#if OS(WIN)
     void handleMouseReleaseForPanScrolling(Frame*, const PlatformMouseEvent&);
     void startPanScrolling(RenderBox*, const IntPoint&);
 #endif
 
 private:
-    AutoscrollController();
-    void autoscrollTimerFired(Timer<AutoscrollController>*);
-    void startAutoscrollTimer();
-#if OS(WINDOWS)
-    void updatePanScrollState(FrameView*, const IntPoint&);
+    explicit AutoscrollController(Page&);
+
+    void startAutoscroll();
+
+#if OS(WIN)
+    void updatePanScrollState(FrameView*, const IntPoint& lastKnownMousePosition);
 #endif
 
-    Timer<AutoscrollController> m_autoscrollTimer;
+    Page& m_page;
     RenderBox* m_autoscrollRenderer;
     AutoscrollType m_autoscrollType;
     IntPoint m_dragAndDropAutoscrollReferencePosition;
     double m_dragAndDropAutoscrollStartTime;
-#if OS(WINDOWS)
+#if OS(WIN)
     IntPoint m_panScrollStartPos;
 #endif
 };

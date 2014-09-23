@@ -32,34 +32,35 @@
 #include "WebFrameImpl.h"
 #include "WebView.h"
 #include "core/dom/Document.h"
-#include "core/page/Frame.h"
+#include "core/frame/Frame.h"
 
 #include <gtest/gtest.h>
 
-using namespace WebKit;
+using namespace blink;
 
 namespace WebCore {
 
 namespace {
 
 class RenderTableCellDeathTest : public testing::Test {
-    // It's unfortunate that we have to get the whole browser stack to test one RenderObject
-    // but the code needs it.
-    static Frame* frame()
+protected:
+    static void SetUpTestCase()
     {
-        static WebView* webView;
+        // It's unfortunate that we have to get the whole browser stack to test one RenderObject
+        // but the code needs it.
+        s_webViewHelper = new FrameTestHelpers::WebViewHelper();
+        s_webViewHelper->initializeAndLoad("about:blank");
+        s_webViewHelper->webView()->setFocus(true);
+    }
 
-        if (webView)
-            return static_cast<WebFrameImpl*>(webView->mainFrame())->frame();
-
-        webView = FrameTestHelpers::createWebViewAndLoad("about:blank");
-        webView->setFocus(true);
-        return static_cast<WebFrameImpl*>(webView->mainFrame())->frame();
+    static void TearDownTestCase()
+    {
+        delete s_webViewHelper;
     }
 
     static Document* document()
     {
-        return frame()->document();
+        return toWebFrameImpl(s_webViewHelper->webView()->mainFrame())->frame()->document();
     }
 
     virtual void SetUp()
@@ -72,9 +73,13 @@ class RenderTableCellDeathTest : public testing::Test {
         m_cell->destroy();
     }
 
-protected:
     RenderTableCell* m_cell;
+
+private:
+    static FrameTestHelpers::WebViewHelper* s_webViewHelper;
 };
+
+FrameTestHelpers::WebViewHelper* RenderTableCellDeathTest::s_webViewHelper = 0;
 
 TEST_F(RenderTableCellDeathTest, CanSetColumn)
 {

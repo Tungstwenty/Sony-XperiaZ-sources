@@ -29,11 +29,11 @@
 
 namespace WebCore {
 
-class ScriptExecutionContext;
+class ExecutionContext;
 
 class DocumentFragment : public ContainerNode {
 public:
-    static PassRefPtr<DocumentFragment> create(Document*);
+    static PassRefPtr<DocumentFragment> create(Document&);
 
     void parseHTML(const String&, Element* contextElement, ParserContentPolicy = AllowScriptingContent);
     bool parseXML(const String&, Element* contextElement, ParserContentPolicy = AllowScriptingContent);
@@ -51,6 +51,8 @@ private:
     virtual bool childTypeAllowed(NodeType) const;
 };
 
-} //namespace
+DEFINE_NODE_TYPE_CASTS(DocumentFragment, nodeType() == Node::DOCUMENT_FRAGMENT_NODE);
+
+} // namespace WebCore
 
 #endif

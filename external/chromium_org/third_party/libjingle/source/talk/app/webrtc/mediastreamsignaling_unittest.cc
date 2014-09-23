@@ -32,13 +32,17 @@
 #include "talk/app/webrtc/mediastreamsignaling.h"
 #include "talk/app/webrtc/streamcollection.h"
 #include "talk/app/webrtc/test/fakeconstraints.h"
+#include "talk/app/webrtc/test/fakedatachannelprovider.h"
 #include "talk/app/webrtc/videotrack.h"
 #include "talk/base/gunit.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/stringutils.h"
 #include "talk/base/thread.h"
+#include "talk/media/base/fakemediaengine.h"
+#include "talk/media/devices/fakedevicemanager.h"
 #include "talk/p2p/base/constants.h"
 #include "talk/p2p/base/sessiondescription.h"
+#include "talk/session/media/channelmanager.h"
 
 static const char kStreams[][8] = {"stream1", "stream2"};
 static const char kAudioTracks[][32] = {"audiotrack0", "audiotrack1"};
@@ -124,7 +128,7 @@ static const char kSdpStringWithMsidWithoutStreams[] =
     "o=- 0 0 IN IP4 127.0.0.1\r\n"
     "s=-\r\n"
     "t=0 0\r\n"
-    "a:msid-semantic: WMS\r\n"
+    "a=msid-semantic: WMS\r\n"
     "m=audio 1 RTP/AVPF 103\r\n"
     "a=mid:audio\r\n"
     "a=rtpmap:103 ISAC/16000\r\n"
@@ -234,6 +238,23 @@ static bool CompareStreamCollections(StreamCollectionInterface* s1,
   return true;
 }
 
+class FakeDataChannelFactory : public webrtc::DataChannelFactory {
+ public:
+  FakeDataChannelFactory(FakeDataChannelProvider* provider,
+                         cricket::DataChannelType dct)
+      : provider_(provider), type_(dct) {}
+
+  virtual talk_base::scoped_refptr<webrtc::DataChannel> CreateDataChannel(
+      const std::string& label,
+      const webrtc::DataChannelInit* config) {
+    return webrtc::DataChannel::Create(provider_, type_, label, config);
+  }
+
+ private:
+  FakeDataChannelProvider* provider_;
+  cricket::DataChannelType type_;
+};
+
 class MockSignalingObserver : public webrtc::MediaStreamSignalingObserver {
  public:
   MockSignalingObserver()
@@ -285,13 +306,13 @@ class MockSignalingObserver : public webrtc::MediaStreamSignalingObserver {
   }
 
   virtual void OnAddRemoteVideoTrack(MediaStreamInterface* stream,
-                                    VideoTrackInterface* video_track,
-                                    uint32 ssrc) {
+                                     VideoTrackInterface* video_track,
+                                     uint32 ssrc) {
     AddTrack(&remote_video_tracks_, stream, video_track, ssrc);
   }
 
   virtual void OnRemoveRemoteAudioTrack(MediaStreamInterface* stream,
-                                       AudioTrackInterface* audio_track) {
+                                        AudioTrackInterface* audio_track) {
     RemoveTrack(&remote_audio_tracks_, stream, audio_track);
   }
 
@@ -392,8 +413,10 @@ class MockSignalingObserver : public webrtc::MediaStreamSignalingObserver {
 
 class MediaStreamSignalingForTest : public webrtc::MediaStreamSignaling {
  public:
-  explicit MediaStreamSignalingForTest(MockSignalingObserver* observer)
-      : webrtc::MediaStreamSignaling(talk_base::Thread::Current(), observer) {
+  MediaStreamSignalingForTest(MockSignalingObserver* observer,
+                              cricket::ChannelManager* channel_manager)
+      : webrtc::MediaStreamSignaling(talk_base::Thread::Current(), observer,
+                                     channel_manager) {
   };
 
   using webrtc::MediaStreamSignaling::GetOptionsForOffer;
@@ -406,7 +429,13 @@ class MediaStreamSignalingTest: public testing::Test {
  protected:
   virtual void SetUp() {
     observer_.reset(new MockSignalingObserver());
-    signaling_.reset(new MediaStreamSignalingForTest(observer_.get()));
+    channel_manager_.reset(
+        new cricket::ChannelManager(new cricket::FakeMediaEngine(),
+                                    new cricket::FakeDeviceManager(),
+                                    talk_base::Thread::Current()));
+    signaling_.reset(new MediaStreamSignalingForTest(observer_.get(),
+                                                     channel_manager_.get()));
+    data_channel_provider_.reset(new FakeDataChannelProvider());
   }
 
   // Create a collection of streams.
@@ -497,9 +526,25 @@ class MediaStreamSignalingTest: public testing::Test {
     ASSERT_TRUE(stream->AddTrack(video_track));
   }
 
+  talk_base::scoped_refptr<webrtc::DataChannel> AddDataChannel(
+      cricket::DataChannelType type, const std::string& label, int id) {
+    webrtc::DataChannelInit config;
+    config.id = id;
+    talk_base::scoped_refptr<webrtc::DataChannel> data_channel(
+        webrtc::DataChannel::Create(
+            data_channel_provider_.get(), type, label, &config));
+    EXPECT_TRUE(data_channel.get() != NULL);
+    EXPECT_TRUE(signaling_->AddDataChannel(data_channel.get()));
+    return data_channel;
+  }
+
+  // ChannelManager is used by VideoSource, so it should be released after all
+  // the video tracks. Put it as the first private variable should ensure that.
+  talk_base::scoped_ptr<cricket::ChannelManager> channel_manager_;
   talk_base::scoped_refptr<StreamCollection> reference_collection_;
   talk_base::scoped_ptr<MockSignalingObserver> observer_;
   talk_base::scoped_ptr<MediaStreamSignalingForTest> signaling_;
+  talk_base::scoped_ptr<FakeDataChannelProvider> data_channel_provider_;
 };
 
 // Test that a MediaSessionOptions is created for an offer if
@@ -688,6 +733,9 @@ TEST_F(MediaStreamSignalingTest, UpdateRemoteStreams) {
   observer_->VerifyRemoteAudioTrack(kStreams[0], kAudioTracks[0], 1);
   EXPECT_EQ(1u, observer_->NumberOfRemoteVideoTracks());
   observer_->VerifyRemoteVideoTrack(kStreams[0], kVideoTracks[0], 2);
+  ASSERT_EQ(1u, observer_->remote_streams()->count());
+  MediaStreamInterface* remote_stream =  observer_->remote_streams()->at(0);
+  EXPECT_TRUE(remote_stream->GetVideoTracks()[0]->GetSource() != NULL);
 
   // Create a session description based on another SDP with another
   // MediaStream.
@@ -778,6 +826,33 @@ TEST_F(MediaStreamSignalingTest, RejectMediaContent) {
   EXPECT_EQ(webrtc::MediaStreamTrackInterface::kEnded, remote_audio->state());
 }
 
+// This test that it won't crash if the remote track as been removed outside
+// of MediaStreamSignaling and then MediaStreamSignaling tries to reject
+// this track.
+TEST_F(MediaStreamSignalingTest, RemoveTrackThenRejectMediaContent) {
+  talk_base::scoped_ptr<SessionDescriptionInterface> desc(
+      webrtc::CreateSessionDescription(SessionDescriptionInterface::kOffer,
+                                       kSdpStringWithStream1, NULL));
+  EXPECT_TRUE(desc != NULL);
+  signaling_->OnRemoteDescriptionChanged(desc.get());
+
+  MediaStreamInterface* remote_stream =  observer_->remote_streams()->at(0);
+  remote_stream->RemoveTrack(remote_stream->GetVideoTracks()[0]);
+  remote_stream->RemoveTrack(remote_stream->GetAudioTracks()[0]);
+
+  cricket::ContentInfo* video_info =
+      desc->description()->GetContentByName("video");
+  video_info->rejected = true;
+  signaling_->OnLocalDescriptionChanged(desc.get());
+
+  cricket::ContentInfo* audio_info =
+      desc->description()->GetContentByName("audio");
+  audio_info->rejected = true;
+  signaling_->OnLocalDescriptionChanged(desc.get());
+
+  // No crash is a pass.
+}
+
 // This tests that a default MediaStream is created if a remote session
 // description doesn't contain any streams and no MSID support.
 // It also tests that the default stream is updated if a video m-line is added
@@ -810,6 +885,28 @@ TEST_F(MediaStreamSignalingTest, SdpWithoutMsidCreatesDefaultStream) {
   EXPECT_EQ("defaultv0", remote_stream->GetVideoTracks()[0]->id());
   observer_->VerifyRemoteAudioTrack("default", "defaulta0", 0);
   observer_->VerifyRemoteVideoTrack("default", "defaultv0", 0);
+}
+
+// This tests that it won't crash when MediaStreamSignaling tries to remove
+//  a remote track that as already been removed from the mediastream.
+TEST_F(MediaStreamSignalingTest, RemoveAlreadyGoneRemoteStream) {
+  talk_base::scoped_ptr<SessionDescriptionInterface> desc_audio_only(
+      webrtc::CreateSessionDescription(SessionDescriptionInterface::kOffer,
+                                       kSdpStringWithoutStreams,
+                                       NULL));
+  ASSERT_TRUE(desc_audio_only != NULL);
+  signaling_->OnRemoteDescriptionChanged(desc_audio_only.get());
+  MediaStreamInterface* remote_stream = observer_->remote_streams()->at(0);
+  remote_stream->RemoveTrack(remote_stream->GetAudioTracks()[0]);
+  remote_stream->RemoveTrack(remote_stream->GetVideoTracks()[0]);
+
+  talk_base::scoped_ptr<SessionDescriptionInterface> desc(
+      webrtc::CreateSessionDescription(SessionDescriptionInterface::kOffer,
+                                       kSdpStringWithoutStreams, NULL));
+  ASSERT_TRUE(desc != NULL);
+  signaling_->OnRemoteDescriptionChanged(desc.get());
+
+  // No crash is a pass.
 }
 
 // This tests that a default MediaStream is created if the remote session
@@ -947,4 +1044,62 @@ TEST_F(MediaStreamSignalingTest, ChangeSsrcOnTrackInLocalSessionDescription) {
   observer_->VerifyLocalVideoTrack(kStreams[0], kVideoTracks[0], 98);
 }
 
+// Verifies that an even SCTP id is allocated for SSL_CLIENT and an odd id for
+// SSL_SERVER.
+TEST_F(MediaStreamSignalingTest, SctpIdAllocationBasedOnRole) {
+  int id;
+  ASSERT_TRUE(signaling_->AllocateSctpSid(talk_base::SSL_SERVER, &id));
+  EXPECT_EQ(1, id);
+  ASSERT_TRUE(signaling_->AllocateSctpSid(talk_base::SSL_CLIENT, &id));
+  EXPECT_EQ(0, id);
+  ASSERT_TRUE(signaling_->AllocateSctpSid(talk_base::SSL_SERVER, &id));
+  EXPECT_EQ(3, id);
+  ASSERT_TRUE(signaling_->AllocateSctpSid(talk_base::SSL_CLIENT, &id));
+  EXPECT_EQ(2, id);
+}
 
+// Verifies that SCTP ids of existing DataChannels are not reused.
+TEST_F(MediaStreamSignalingTest, SctpIdAllocationNoReuse) {
+  int old_id = 1;
+  AddDataChannel(cricket::DCT_SCTP, "a", old_id);
+
+  int new_id;
+  ASSERT_TRUE(signaling_->AllocateSctpSid(talk_base::SSL_SERVER, &new_id));
+  EXPECT_NE(old_id, new_id);
+
+  // Creates a DataChannel with id 0.
+  old_id = 0;
+  AddDataChannel(cricket::DCT_SCTP, "a", old_id);
+  ASSERT_TRUE(signaling_->AllocateSctpSid(talk_base::SSL_CLIENT, &new_id));
+  EXPECT_NE(old_id, new_id);
+}
+
+// Verifies that duplicated label is not allowed for RTP data channel.
+TEST_F(MediaStreamSignalingTest, RtpDuplicatedLabelNotAllowed) {
+  AddDataChannel(cricket::DCT_RTP, "a", -1);
+
+  webrtc::DataChannelInit config;
+  talk_base::scoped_refptr<webrtc::DataChannel> data_channel =
+      webrtc::DataChannel::Create(
+          data_channel_provider_.get(), cricket::DCT_RTP, "a", &config);
+  ASSERT_TRUE(data_channel.get() != NULL);
+  EXPECT_FALSE(signaling_->AddDataChannel(data_channel.get()));
+}
+
+// Verifies that duplicated label is allowed for SCTP data channel.
+TEST_F(MediaStreamSignalingTest, SctpDuplicatedLabelAllowed) {
+  AddDataChannel(cricket::DCT_SCTP, "a", -1);
+  AddDataChannel(cricket::DCT_SCTP, "a", -1);
+}
+
+// Verifies that duplicated label from OPEN message is allowed.
+TEST_F(MediaStreamSignalingTest, DuplicatedLabelFromOpenMessageAllowed) {
+  AddDataChannel(cricket::DCT_SCTP, "a", -1);
+
+  FakeDataChannelFactory fake_factory(data_channel_provider_.get(),
+                                      cricket::DCT_SCTP);
+  signaling_->SetDataChannelFactory(&fake_factory);
+  webrtc::DataChannelInit config;
+  config.id = 0;
+  EXPECT_TRUE(signaling_->AddDataChannelFromOpenMessage("a", config));
+}

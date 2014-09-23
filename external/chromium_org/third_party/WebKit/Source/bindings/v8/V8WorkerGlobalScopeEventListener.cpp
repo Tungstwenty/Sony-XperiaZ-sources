@@ -44,12 +44,12 @@
 
 namespace WebCore {
 
-V8WorkerGlobalScopeEventListener::V8WorkerGlobalScopeEventListener(v8::Local<v8::Object> listener, bool isInline)
-    : V8EventListener(listener, isInline)
+V8WorkerGlobalScopeEventListener::V8WorkerGlobalScopeEventListener(v8::Local<v8::Object> listener, bool isInline, v8::Isolate* isolate)
+    : V8EventListener(listener, isInline, isolate)
 {
 }
 
-void V8WorkerGlobalScopeEventListener::handleEvent(ScriptExecutionContext* context, Event* event)
+void V8WorkerGlobalScopeEventListener::handleEvent(ExecutionContext* context, Event* event)
 {
     if (!context)
         return;
@@ -58,7 +58,8 @@ void V8WorkerGlobalScopeEventListener::handleEvent(ScriptExecutionContext* conte
     // See issue 889829.
     RefPtr<V8AbstractEventListener> protect(this);
 
-    v8::HandleScope handleScope;
+    v8::Isolate* isolate = toIsolate(context);
+    v8::HandleScope handleScope(isolate);
 
     WorkerScriptController* script = toWorkerGlobalScope(context)->script();
     if (!script)
@@ -72,13 +73,12 @@ void V8WorkerGlobalScopeEventListener::handleEvent(ScriptExecutionContext* conte
     v8::Context::Scope scope(v8Context);
 
     // Get the V8 wrapper for the event object.
-    v8::Isolate* isolate = v8Context->GetIsolate();
     v8::Handle<v8::Value> jsEvent = toV8(event, v8::Handle<v8::Object>(), isolate);
 
     invokeEventHandler(context, event, v8::Local<v8::Value>::New(isolate, jsEvent));
 }
 
-v8::Local<v8::Value> V8WorkerGlobalScopeEventListener::callListenerFunction(ScriptExecutionContext* context, v8::Handle<v8::Value> jsEvent, Event* event)
+v8::Local<v8::Value> V8WorkerGlobalScopeEventListener::callListenerFunction(ExecutionContext* context, v8::Handle<v8::Value> jsEvent, Event* event)
 {
     v8::Local<v8::Function> handlerFunction = getListenerFunction(context);
     v8::Local<v8::Object> receiver = getReceiverObject(context, event);
@@ -91,21 +91,23 @@ v8::Local<v8::Value> V8WorkerGlobalScopeEventListener::callListenerFunction(Scri
         int lineNumber = 1;
         v8::ScriptOrigin origin = handlerFunction->GetScriptOrigin();
         if (!origin.ResourceName().IsEmpty()) {
-            resourceName = toWebCoreString(origin.ResourceName());
+            V8TRYCATCH_FOR_V8STRINGRESOURCE_RETURN(V8StringResource<>, stringResourceName, origin.ResourceName(), v8::Local<v8::Value>());
+            resourceName = stringResourceName;
             lineNumber = handlerFunction->GetScriptLineNumber() + 1;
         }
         cookie = InspectorInstrumentation::willCallFunction(context, resourceName, lineNumber);
     }
 
+    v8::Isolate* isolate = toIsolate(context);
     v8::Handle<v8::Value> parameters[1] = { jsEvent };
-    v8::Local<v8::Value> result = V8ScriptRunner::callFunction(handlerFunction, context, receiver, WTF_ARRAY_LENGTH(parameters), parameters);
+    v8::Local<v8::Value> result = V8ScriptRunner::callFunction(handlerFunction, context, receiver, WTF_ARRAY_LENGTH(parameters), parameters, isolate);
 
     InspectorInstrumentation::didCallFunction(cookie);
 
     return result;
 }
 
-v8::Local<v8::Object> V8WorkerGlobalScopeEventListener::getReceiverObject(ScriptExecutionContext* context, Event* event)
+v8::Local<v8::Object> V8WorkerGlobalScopeEventListener::getReceiverObject(ExecutionContext* context, Event* event)
 {
     v8::Local<v8::Object> listener = getListenerObject(context);
 
@@ -113,10 +115,11 @@ v8::Local<v8::Object> V8WorkerGlobalScopeEventListener::getReceiverObject(Script
         return listener;
 
     EventTarget* target = event->currentTarget();
-    v8::Handle<v8::Value> value = toV8(target, v8::Handle<v8::Object>(), toV8Context(context, world())->GetIsolate());
+    v8::Isolate* isolate = toIsolate(context);
+    v8::Handle<v8::Value> value = toV8(target, v8::Handle<v8::Object>(), isolate);
     if (value.IsEmpty())
         return v8::Local<v8::Object>();
-    return v8::Local<v8::Object>::New(v8::Handle<v8::Object>::Cast(value));
+    return v8::Local<v8::Object>::New(isolate, v8::Handle<v8::Object>::Cast(value));
 }
 
 } // namespace WebCore

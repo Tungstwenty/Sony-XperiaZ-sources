@@ -27,9 +27,9 @@
 #if ENABLE(INPUT_MULTIPLE_FIELDS_UI)
 #include "core/html/shadow/DateTimeSymbolicFieldElement.h"
 
-#include "core/dom/KeyboardEvent.h"
-#include "core/platform/graphics/Font.h"
-#include "core/platform/text/TextBreakIterator.h"
+#include "core/events/KeyboardEvent.h"
+#include "platform/fonts/Font.h"
+#include "platform/text/TextBreakIterator.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/unicode/Unicode.h"
 
@@ -47,7 +47,7 @@ static AtomicString makeVisibleEmptyValue(const Vector<String>& symbols)
     return builder.toAtomicString();
 }
 
-DateTimeSymbolicFieldElement::DateTimeSymbolicFieldElement(Document* document, FieldOwner& fieldOwner, const Vector<String>& symbols, int minimum, int maximum)
+DateTimeSymbolicFieldElement::DateTimeSymbolicFieldElement(Document& document, FieldOwner& fieldOwner, const Vector<String>& symbols, int minimum, int maximum)
     : DateTimeFieldElement(document, fieldOwner)
     , m_symbols(symbols)
     , m_visibleEmptyValue(makeVisibleEmptyValue(symbols))
@@ -72,7 +72,7 @@ float DateTimeSymbolicFieldElement::maximumWidth(const Font& font)
 
 void DateTimeSymbolicFieldElement::handleKeyboardEvent(KeyboardEvent* keyboardEvent)
 {
-    if (keyboardEvent->type() != eventNames().keypressEvent)
+    if (keyboardEvent->type() != EventTypeNames::keypress)
         return;
 
     const UChar charCode = WTF::Unicode::toLower(keyboardEvent->charCode());

@@ -39,15 +39,14 @@
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLTableElement.h"
 #include "core/html/HTMLTextAreaElement.h"
-#include "core/page/FrameView.h"
-#include "core/page/Page.h"
-#include "core/page/Settings.h"
-#include "core/platform/Length.h"
+#include "core/frame/FrameView.h"
+#include "core/frame/Settings.h"
 #include "core/rendering/Pagination.h"
 #include "core/rendering/RenderTheme.h"
 #include "core/rendering/style/GridPosition.h"
 #include "core/rendering/style/RenderStyle.h"
 #include "core/rendering/style/RenderStyleConstants.h"
+#include "platform/Length.h"
 #include "wtf/Assertions.h"
 
 namespace WebCore {
@@ -95,7 +94,6 @@ static EDisplay equivalentBlockDisplay(EDisplay display, bool isFloating, bool s
     case BOX:
     case FLEX:
     case GRID:
-    case LAZY_BLOCK:
         return display;
 
     case LIST_ITEM:
@@ -113,8 +111,6 @@ static EDisplay equivalentBlockDisplay(EDisplay display, bool isFloating, bool s
         return GRID;
 
     case INLINE:
-    case RUN_IN:
-    case COMPACT:
     case INLINE_BLOCK:
     case TABLE_ROW_GROUP:
     case TABLE_HEADER_GROUP:
@@ -134,11 +130,11 @@ static EDisplay equivalentBlockDisplay(EDisplay display, bool isFloating, bool s
 }
 
 // CSS requires text-decoration to be reset at each DOM element for tables,
-// inline blocks, inline tables, run-ins, shadow DOM crossings, floating elements,
+// inline blocks, inline tables, shadow DOM crossings, floating elements,
 // and absolute or relatively positioned elements.
 static bool doesNotInheritTextDecoration(const RenderStyle* style, const Element* e)
 {
-    return style->display() == TABLE || style->display() == INLINE_TABLE || style->display() == RUN_IN
+    return style->display() == TABLE || style->display() == INLINE_TABLE
         || style->display() == INLINE_BLOCK || style->display() == INLINE_BOX || isAtShadowBoundary(e)
         || style->isFloating() || style->hasOutOfFlowPosition();
 }
@@ -158,6 +154,11 @@ static bool isDisplayFlexibleBox(EDisplay display)
 static bool isDisplayGridBox(EDisplay display)
 {
     return display == GRID || display == INLINE_GRID;
+}
+
+static bool parentStyleForcesZIndexToCreateStackingContext(const RenderStyle* parentStyle)
+{
+    return isDisplayFlexibleBox(parentStyle->display()) || isDisplayGridBox(parentStyle->display());
 }
 
 void StyleAdjuster::adjustRenderStyle(RenderStyle* style, RenderStyle* parentStyle, Element *e)
@@ -223,7 +224,7 @@ void StyleAdjuster::adjustRenderStyle(RenderStyle* style, RenderStyle* parentSty
             style->setPosition(AbsolutePosition);
 
         // Absolute/fixed positioned elements, floating elements and the document element need block-like outside display.
-        if (style->hasOutOfFlowPosition() || style->isFloating() || (e && e->document()->documentElement() == e))
+        if (style->hasOutOfFlowPosition() || style->isFloating() || (e && e->document().documentElement() == e))
             style->setDisplay(equivalentBlockDisplay(style->display(), style->isFloating(), !m_useQuirksModeStyles));
 
         // FIXME: Don't support this mutation for pseudo styles like first-letter or first-line, since it's not completely
@@ -259,13 +260,13 @@ void StyleAdjuster::adjustRenderStyle(RenderStyle* style, RenderStyle* parentSty
     }
 
     // Make sure our z-index value is only applied if the object is positioned.
-    if (style->position() == StaticPosition && !isDisplayFlexibleBox(parentStyle->display()))
+    if (style->position() == StaticPosition && !parentStyleForcesZIndexToCreateStackingContext(parentStyle))
         style->setHasAutoZIndex();
 
     // Auto z-index becomes 0 for the root element and transparent objects. This prevents
     // cases where objects that should be blended as a single unit end up with a non-transparent
     // object wedged in between them. Auto z-index also becomes 0 for objects that specify transforms/masks/reflections.
-    if (style->hasAutoZIndex() && ((e && e->document()->documentElement() == e)
+    if (style->hasAutoZIndex() && ((e && e->document().documentElement() == e)
         || style->opacity() < 1.0f
         || style->hasTransformRelatedProperty()
         || style->hasMask()
@@ -273,9 +274,11 @@ void StyleAdjuster::adjustRenderStyle(RenderStyle* style, RenderStyle* parentSty
         || style->boxReflect()
         || style->hasFilter()
         || style->hasBlendMode()
+        || style->hasIsolation()
         || style->position() == StickyPosition
-        || (style->position() == FixedPosition && e && e->document()->page() && e->document()->page()->settings()->fixedPositionCreatesStackingContext())
+        || (style->position() == FixedPosition && e && e->document().settings() && e->document().settings()->fixedPositionCreatesStackingContext())
         || isInTopLayer(e, style)
+        || style->hasFlowFrom()
         ))
         style->setZIndex(0);
 
@@ -332,10 +335,6 @@ void StyleAdjuster::adjustRenderStyle(RenderStyle* style, RenderStyle* parentSty
     style->adjustBackgroundLayers();
     style->adjustMaskLayers();
 
-    // Do the same for animations and transitions.
-    style->adjustAnimations();
-    style->adjustTransitions();
-
     // Important: Intrinsic margins get added to controls before the theme has adjusted the style, since the theme will
     // alter fonts and heights/widths.
     if (e && e->isFormControlElement() && style->fontSize() >= 11) {
@@ -347,7 +346,7 @@ void StyleAdjuster::adjustRenderStyle(RenderStyle* style, RenderStyle* parentSty
 
     // Let the theme also have a crack at adjusting the style.
     if (style->hasAppearance())
-        RenderTheme::defaultTheme()->adjustStyle(style, e, m_cachedUAStyle);
+        RenderTheme::theme().adjustStyle(style, e, m_cachedUAStyle);
 
     // If we have first-letter pseudo style, do not share this style.
     if (style->hasPseudoStyle(FIRST_LETTER))
@@ -385,6 +384,10 @@ void StyleAdjuster::adjustRenderStyle(RenderStyle* style, RenderStyle* parentSty
         // not be scaled again.
         if (e->hasTagName(SVGNames::foreignObjectTag))
             style->setEffectiveZoom(RenderStyle::initialZoom());
+
+        // SVG text layout code expects us to be a block-level style element.
+        if ((e->hasTagName(SVGNames::foreignObjectTag) || e->hasTagName(SVGNames::textTag)) && style->isDisplayInlineType())
+            style->setDisplay(BLOCK);
     }
 }
 

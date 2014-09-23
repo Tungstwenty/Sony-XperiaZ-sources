@@ -28,14 +28,16 @@
 #ifndef DocumentInit_h
 #define DocumentInit_h
 
-#include "core/dom/CustomElementRegistrationContext.h"
+#include "core/dom/SandboxFlags.h"
 #include "core/dom/SecurityContext.h"
-#include "weborigin/KURL.h"
+#include "platform/weborigin/KURL.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
+#include "wtf/WeakPtr.h"
 
 namespace WebCore {
 
+class CustomElementRegistrationContext;
 class Document;
 class Frame;
 class HTMLImport;
@@ -43,11 +45,9 @@ class Settings;
 
 class DocumentInit {
 public:
-    explicit DocumentInit(const KURL& url = KURL(), Frame* frame = 0, HTMLImport* import = 0)
-        : m_url(url)
-        , m_frame(frame)
-        , m_import(import)
-    { }
+    explicit DocumentInit(const KURL& = KURL(), Frame* = 0, WeakPtr<Document> = WeakPtr<Document>(), HTMLImport* = 0);
+    DocumentInit(const DocumentInit&);
+    ~DocumentInit();
 
     const KURL& url() const { return m_url; }
     Frame* frame() const { return m_frame; }
@@ -56,19 +56,30 @@ public:
     bool hasSecurityContext() const { return frameForSecurityContext(); }
     bool shouldTreatURLAsSrcdocDocument() const;
     bool shouldSetURL() const;
+    bool isSeamlessAllowedFor(Document* child) const;
     SandboxFlags sandboxFlags() const;
 
+    Document* parent() const { return m_parent.get(); }
+    Document* owner() const { return m_owner.get(); }
+    KURL parentBaseURL() const;
     Frame* ownerFrame() const;
     Settings* settings() const;
 
     DocumentInit& withRegistrationContext(CustomElementRegistrationContext*);
+
     PassRefPtr<CustomElementRegistrationContext> registrationContext(Document*) const;
+    WeakPtr<Document> contextDocument() const;
+
+    static DocumentInit fromContext(WeakPtr<Document> contextDocument, const KURL& = KURL());
 
 private:
     Frame* frameForSecurityContext() const;
 
     KURL m_url;
     Frame* m_frame;
+    RefPtr<Document> m_parent;
+    RefPtr<Document> m_owner;
+    WeakPtr<Document> m_contextDocument;
     HTMLImport* m_import;
     RefPtr<CustomElementRegistrationContext> m_registrationContext;
 };

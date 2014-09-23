@@ -23,51 +23,49 @@
 
 #include "HTMLNames.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "core/dom/NodeRenderingContext.h"
 #include "core/dom/Text.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/html/HTMLSummaryElement.h"
 #include "core/html/shadow/HTMLContentElement.h"
-#include "core/platform/LocalizedStrings.h"
-#include "core/rendering/RenderBlock.h"
+#include "core/rendering/RenderBlockFlow.h"
+#include "platform/text/PlatformLocale.h"
 
 namespace WebCore {
 
 using namespace HTMLNames;
 
-PassRefPtr<HTMLDetailsElement> HTMLDetailsElement::create(const QualifiedName& tagName, Document* document)
+PassRefPtr<HTMLDetailsElement> HTMLDetailsElement::create(Document& document)
 {
-    RefPtr<HTMLDetailsElement> details = adoptRef(new HTMLDetailsElement(tagName, document));
+    RefPtr<HTMLDetailsElement> details = adoptRef(new HTMLDetailsElement(document));
     details->ensureUserAgentShadowRoot();
     return details.release();
 }
 
-HTMLDetailsElement::HTMLDetailsElement(const QualifiedName& tagName, Document* document)
-    : HTMLElement(tagName, document)
+HTMLDetailsElement::HTMLDetailsElement(Document& document)
+    : HTMLElement(detailsTag, document)
     , m_isOpen(false)
 {
-    ASSERT(hasTagName(detailsTag));
     ScriptWrappable::init(this);
 }
 
 RenderObject* HTMLDetailsElement::createRenderer(RenderStyle*)
 {
-    return new RenderBlock(this);
+    return new RenderBlockFlow(this);
 }
 
-void HTMLDetailsElement::didAddUserAgentShadowRoot(ShadowRoot* root)
+void HTMLDetailsElement::didAddUserAgentShadowRoot(ShadowRoot& root)
 {
-    DEFINE_STATIC_LOCAL(AtomicString, summarySelector, ("summary:first-of-type", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, summarySelector, ("summary:first-of-type", AtomicString::ConstructFromLiteral));
 
-    RefPtr<HTMLSummaryElement> defaultSummary = HTMLSummaryElement::create(summaryTag, document());
-    defaultSummary->appendChild(Text::create(document(), defaultDetailsSummaryText()), ASSERT_NO_EXCEPTION);
+    RefPtr<HTMLSummaryElement> defaultSummary = HTMLSummaryElement::create(document());
+    defaultSummary->appendChild(Text::create(document(), locale().queryString(blink::WebLocalizedString::DetailsLabel)));
 
     RefPtr<HTMLContentElement> content = HTMLContentElement::create(document());
     content->setAttribute(selectAttr, summarySelector);
     content->appendChild(defaultSummary);
 
-    root->appendChild(content, ASSERT_NO_EXCEPTION, AttachLazily);
-    root->appendChild(HTMLContentElement::create(document()), ASSERT_NO_EXCEPTION, AttachLazily);
+    root.appendChild(content);
+    root.appendChild(HTMLContentElement::create(document()));
 }
 
 Element* HTMLDetailsElement::findMainSummary() const
@@ -93,18 +91,24 @@ void HTMLDetailsElement::parseAttribute(const QualifiedName& name, const AtomicS
         HTMLElement::parseAttribute(name, value);
 }
 
-bool HTMLDetailsElement::childShouldCreateRenderer(const NodeRenderingContext& childContext) const
+bool HTMLDetailsElement::childShouldCreateRenderer(const Node& child) const
 {
+    // FIXME: These checks do not look correct, we should just use insertion points instead.
     if (m_isOpen)
-        return HTMLElement::childShouldCreateRenderer(childContext);
-    if (!childContext.node()->hasTagName(summaryTag))
+        return HTMLElement::childShouldCreateRenderer(child);
+    if (!child.hasTagName(summaryTag))
         return false;
-    return childContext.node() == findMainSummary() && HTMLElement::childShouldCreateRenderer(childContext);
+    return child == findMainSummary() && HTMLElement::childShouldCreateRenderer(child);
 }
 
 void HTMLDetailsElement::toggleOpen()
 {
     setAttribute(openAttr, m_isOpen ? nullAtom : emptyAtom);
+}
+
+bool HTMLDetailsElement::isInteractiveContent() const
+{
+    return true;
 }
 
 }

@@ -39,34 +39,38 @@
 #include "core/inspector/ScriptArguments.h"
 #include "core/inspector/ScriptCallFrame.h"
 #include "core/inspector/ScriptCallStack.h"
-#include "core/platform/JSONValues.h"
+#include "platform/JSONValues.h"
+#include "wtf/text/StringBuilder.h"
 
 #include <v8-debug.h>
 
 namespace WebCore {
 
-class ScriptExecutionContext;
+class ExecutionContext;
 
 static ScriptCallFrame toScriptCallFrame(v8::Handle<v8::StackFrame> frame)
 {
+    StringBuilder stringBuilder;
+    stringBuilder.appendNumber(frame->GetScriptId());
+    String scriptId = stringBuilder.toString();
     String sourceName;
     v8::Local<v8::String> sourceNameValue(frame->GetScriptNameOrSourceURL());
     if (!sourceNameValue.IsEmpty())
-        sourceName = toWebCoreString(sourceNameValue);
+        sourceName = toCoreString(sourceNameValue);
 
     String functionName;
     v8::Local<v8::String> functionNameValue(frame->GetFunctionName());
     if (!functionNameValue.IsEmpty())
-        functionName = toWebCoreString(functionNameValue);
+        functionName = toCoreString(functionNameValue);
 
     int sourceLineNumber = frame->GetLineNumber();
     int sourceColumn = frame->GetColumn();
-    return ScriptCallFrame(functionName, sourceName, sourceLineNumber, sourceColumn);
+    return ScriptCallFrame(functionName, scriptId, sourceName, sourceLineNumber, sourceColumn);
 }
 
-static void toScriptCallFramesVector(v8::Handle<v8::StackTrace> stackTrace, Vector<ScriptCallFrame>& scriptCallFrames, size_t maxStackSize, bool emptyStackIsAllowed)
+static void toScriptCallFramesVector(v8::Handle<v8::StackTrace> stackTrace, Vector<ScriptCallFrame>& scriptCallFrames, size_t maxStackSize, bool emptyStackIsAllowed, v8::Isolate* isolate)
 {
-    ASSERT(v8::Context::InContext());
+    ASSERT(isolate->InContext());
     int frameCount = stackTrace->GetFrameCount();
     if (frameCount > static_cast<int>(maxStackSize))
         frameCount = maxStackSize;
@@ -78,63 +82,55 @@ static void toScriptCallFramesVector(v8::Handle<v8::StackTrace> stackTrace, Vect
         // Successfully grabbed stack trace, but there are no frames. It may happen in case
         // when a bound function is called from native code for example.
         // Fallback to setting lineNumber to 0, and source and function name to "undefined".
-        scriptCallFrames.append(ScriptCallFrame("undefined", "undefined", 0));
+        scriptCallFrames.append(ScriptCallFrame("undefined", "", "undefined", 0));
     }
 }
 
-static PassRefPtr<ScriptCallStack> createScriptCallStack(v8::Handle<v8::StackTrace> stackTrace, size_t maxStackSize, bool emptyStackIsAllowed)
+static PassRefPtr<ScriptCallStack> createScriptCallStack(v8::Handle<v8::StackTrace> stackTrace, size_t maxStackSize, bool emptyStackIsAllowed, v8::Isolate* isolate)
 {
-    ASSERT(v8::Context::InContext());
-    v8::HandleScope scope;
+    ASSERT(isolate->InContext());
+    v8::HandleScope scope(isolate);
     Vector<ScriptCallFrame> scriptCallFrames;
-    toScriptCallFramesVector(stackTrace, scriptCallFrames, maxStackSize, emptyStackIsAllowed);
+    toScriptCallFramesVector(stackTrace, scriptCallFrames, maxStackSize, emptyStackIsAllowed, isolate);
     return ScriptCallStack::create(scriptCallFrames);
 }
 
-PassRefPtr<ScriptCallStack> createScriptCallStack(v8::Handle<v8::StackTrace> stackTrace, size_t maxStackSize)
+PassRefPtr<ScriptCallStack> createScriptCallStack(v8::Handle<v8::StackTrace> stackTrace, size_t maxStackSize, v8::Isolate* isolate)
 {
-    return createScriptCallStack(stackTrace, maxStackSize, true);
+    return createScriptCallStack(stackTrace, maxStackSize, true, isolate);
 }
 
 PassRefPtr<ScriptCallStack> createScriptCallStack(size_t maxStackSize, bool emptyStackIsAllowed)
 {
-    if (!v8::Context::InContext())
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+    if (!isolate->InContext())
         return 0;
-    v8::HandleScope handleScope;
-    v8::Handle<v8::StackTrace> stackTrace(v8::StackTrace::CurrentStackTrace(maxStackSize, stackTraceOptions));
-    return createScriptCallStack(stackTrace, maxStackSize, emptyStackIsAllowed);
+    v8::HandleScope handleScope(isolate);
+    v8::Handle<v8::StackTrace> stackTrace(v8::StackTrace::CurrentStackTrace(isolate, maxStackSize, stackTraceOptions));
+    return createScriptCallStack(stackTrace, maxStackSize, emptyStackIsAllowed, isolate);
 }
 
 PassRefPtr<ScriptCallStack> createScriptCallStackForConsole(size_t maxStackSize)
 {
     size_t stackSize = 1;
     if (InspectorInstrumentation::hasFrontends()) {
-        ScriptExecutionContext* scriptExecutionContext = getScriptExecutionContext();
-        if (InspectorInstrumentation::consoleAgentEnabled(scriptExecutionContext))
+        ExecutionContext* executionContext = getExecutionContext();
+        if (InspectorInstrumentation::consoleAgentEnabled(executionContext))
             stackSize = maxStackSize;
     }
     return createScriptCallStack(stackSize);
 }
 
-PassRefPtr<ScriptCallStack> createScriptCallStackForConsole(ScriptState*)
-{
-    return createScriptCallStackForConsole();
-}
-
-PassRefPtr<ScriptCallStack> createScriptCallStack(ScriptState*, size_t maxStackSize)
-{
-    return createScriptCallStackForConsole(maxStackSize);
-}
-
 PassRefPtr<ScriptArguments> createScriptArguments(const v8::FunctionCallbackInfo<v8::Value>& v8arguments, unsigned skipArgumentCount)
 {
-    v8::HandleScope scope;
-    v8::Local<v8::Context> context = v8::Context::GetCurrent();
+    v8::Isolate* isolate = v8arguments.GetIsolate();
+    v8::HandleScope scope(isolate);
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
     ScriptState* state = ScriptState::forContext(context);
 
     Vector<ScriptValue> arguments;
     for (int i = skipArgumentCount; i < v8arguments.Length(); ++i)
-        arguments.append(ScriptValue(v8arguments[i]));
+        arguments.append(ScriptValue(v8arguments[i], isolate));
 
     return ScriptArguments::create(state, arguments);
 }

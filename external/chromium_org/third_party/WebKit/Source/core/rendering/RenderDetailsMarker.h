@@ -21,11 +21,11 @@
 #ifndef RenderDetailsMarker_h
 #define RenderDetailsMarker_h
 
-#include "core/rendering/RenderBlock.h"
+#include "core/rendering/RenderBlockFlow.h"
 
 namespace WebCore {
 
-class RenderDetailsMarker FINAL : public RenderBlock {
+class RenderDetailsMarker FINAL : public RenderBlockFlow {
 public:
     RenderDetailsMarker(Element*);
 
@@ -35,6 +35,7 @@ public:
 
 private:
     virtual const char* renderName() const { return "RenderDetailsMarker"; }
+    virtual bool supportsPartialLayout() const OVERRIDE { return false; }
     virtual bool isDetailsMarker() const { return true; }
     virtual void paint(PaintInfo&, const LayoutPoint&);
 
@@ -43,20 +44,7 @@ private:
     Path getPath(const LayoutPoint& origin) const;
 };
 
-inline RenderDetailsMarker* toRenderDetailsMarker(RenderObject* object)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!object || object->isDetailsMarker());
-    return static_cast<RenderDetailsMarker*>(object);
-}
-
-inline const RenderDetailsMarker* toRenderDetailsMarker(const RenderObject* object)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!object || object->isDetailsMarker());
-    return static_cast<const RenderDetailsMarker*>(object);
-}
-
-// This will catch anyone doing an unnecessary cast.
-void toRenderDetailsMarker(const RenderDetailsMarker*);
+DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderDetailsMarker, isDetailsMarker());
 
 }
 

@@ -45,9 +45,9 @@ void RemoveNodeCommand::doApply()
 {
     ContainerNode* parent = m_node->parentNode();
     if (!parent || (m_shouldAssumeContentIsAlwaysEditable == DoNotAssumeContentIsAlwaysEditable
-        && !parent->isContentEditable(Node::UserSelectAllIsAlwaysNonEditable) && parent->attached()))
+        && !parent->isContentEditable(Node::UserSelectAllIsAlwaysNonEditable) && parent->inActiveDocument()))
         return;
-    ASSERT(parent->isContentEditable(Node::UserSelectAllIsAlwaysNonEditable) || !parent->attached());
+    ASSERT(parent->isContentEditable(Node::UserSelectAllIsAlwaysNonEditable) || !parent->inActiveDocument());
 
     m_parent = parent;
     m_refChild = m_node->nextSibling();
@@ -64,14 +64,5 @@ void RemoveNodeCommand::doUnapply()
 
     parent->insertBefore(m_node.get(), refChild.get(), IGNORE_EXCEPTION);
 }
-
-#ifndef NDEBUG
-void RemoveNodeCommand::getNodesInCommand(HashSet<Node*>& nodes)
-{
-    addNodeAndDescendants(m_parent.get(), nodes);
-    addNodeAndDescendants(m_refChild.get(), nodes);
-    addNodeAndDescendants(m_node.get(), nodes);
-}
-#endif
 
 }

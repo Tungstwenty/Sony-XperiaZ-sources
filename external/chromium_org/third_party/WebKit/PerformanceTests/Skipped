@@ -50,24 +50,13 @@ Layout/RegionsAuto.html
 Layout/RegionsAutoMaxHeight.html
 Layout/RegionsFixed.html
 Layout/RegionsFixedShort.html
+Layout/RegionsSelection.html
 
 # Redundant with chromium's page cyclers.
 Replay
 
 # Requires manual intervention.
 Bindings/event-target-wrapper.html
-
-# Redundant with chromium's dom_perf benchmark.
-DOM/Accessors.html
-DOM/CloneNodes.html
-DOM/CreateNodes.html
-DOM/DOMDivWalk.html
-DOM/DOMTable.html
-DOM/DOMWalk.html
-DOM/Events.html
-DOM/GetElement.html
-DOM/GridSort.html
-DOM/Template.html
 
 # Crashy, crbug.com/245702
 Parser/query-selector-deep.html
@@ -77,4 +66,10 @@ Parser/query-selector-id-deep.html
 Interactive/window-resize.html
 
 # Microbenchmark that we aren't interested in monitoring.
+Bindings/gc-forest.html
+Bindings/gc-mini-tree.html
+Bindings/gc-tree.html
 Bindings/named-property-enumerator.html
+
+# Times out on the bots
+Interactive/spellcheck-paste-huge-text.html

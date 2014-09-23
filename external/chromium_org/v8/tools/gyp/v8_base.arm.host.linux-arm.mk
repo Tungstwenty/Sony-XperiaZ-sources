@@ -26,6 +26,8 @@ GYP_COPIED_SOURCE_ORIGIN_DIRS :=
 LOCAL_SRC_FILES := \
 	v8/src/accessors.cc \
 	v8/src/allocation.cc \
+	v8/src/allocation-site-scopes.cc \
+	v8/src/allocation-tracker.cc \
 	v8/src/api.cc \
 	v8/src/arguments.cc \
 	v8/src/assembler.cc \
@@ -37,7 +39,6 @@ LOCAL_SRC_FILES := \
 	v8/src/builtins.cc \
 	v8/src/cached-powers.cc \
 	v8/src/checks.cc \
-	v8/src/circular-queue.cc \
 	v8/src/code-stubs.cc \
 	v8/src/code-stubs-hydrogen.cc \
 	v8/src/codegen.cc \
@@ -47,11 +48,13 @@ LOCAL_SRC_FILES := \
 	v8/src/conversions.cc \
 	v8/src/counters.cc \
 	v8/src/cpu-profiler.cc \
+	v8/src/cpu.cc \
 	v8/src/data-flow.cc \
 	v8/src/date.cc \
 	v8/src/dateparser.cc \
 	v8/src/debug-agent.cc \
 	v8/src/debug.cc \
+	v8/src/default-platform.cc \
 	v8/src/deoptimizer.cc \
 	v8/src/disassembler.cc \
 	v8/src/diy-fp.cc \
@@ -60,6 +63,7 @@ LOCAL_SRC_FILES := \
 	v8/src/elements.cc \
 	v8/src/execution.cc \
 	v8/src/extensions/externalize-string-extension.cc \
+	v8/src/extensions/free-buffer-extension.cc \
 	v8/src/extensions/gc-extension.cc \
 	v8/src/extensions/statistics-extension.cc \
 	v8/src/factory.cc \
@@ -78,9 +82,9 @@ LOCAL_SRC_FILES := \
 	v8/src/hydrogen-bce.cc \
 	v8/src/hydrogen-bch.cc \
 	v8/src/hydrogen-canonicalize.cc \
+	v8/src/hydrogen-check-elimination.cc \
 	v8/src/hydrogen-dce.cc \
 	v8/src/hydrogen-dehoist.cc \
-	v8/src/hydrogen-deoptimizing-mark.cc \
 	v8/src/hydrogen-environment-liveness.cc \
 	v8/src/hydrogen-escape-analysis.cc \
 	v8/src/hydrogen-instructions.cc \
@@ -88,15 +92,18 @@ LOCAL_SRC_FILES := \
 	v8/src/hydrogen-gvn.cc \
 	v8/src/hydrogen-infer-representation.cc \
 	v8/src/hydrogen-infer-types.cc \
+	v8/src/hydrogen-load-elimination.cc \
 	v8/src/hydrogen-mark-deoptimize.cc \
+	v8/src/hydrogen-mark-unreachable.cc \
 	v8/src/hydrogen-minus-zero.cc \
+	v8/src/hydrogen-osr.cc \
 	v8/src/hydrogen-range-analysis.cc \
 	v8/src/hydrogen-redundant-phi.cc \
 	v8/src/hydrogen-removable-simulates.cc \
 	v8/src/hydrogen-representation-changes.cc \
 	v8/src/hydrogen-sce.cc \
 	v8/src/hydrogen-uint32-analysis.cc \
-	v8/src/hydrogen-osr.cc \
+	v8/src/i18n.cc \
 	v8/src/icu_util.cc \
 	v8/src/ic.cc \
 	v8/src/incremental-marking.cc \
@@ -105,12 +112,12 @@ LOCAL_SRC_FILES := \
 	v8/src/isolate.cc \
 	v8/src/jsregexp.cc \
 	v8/src/lithium-allocator.cc \
+	v8/src/lithium-codegen.cc \
 	v8/src/lithium.cc \
 	v8/src/liveedit.cc \
 	v8/src/log-utils.cc \
 	v8/src/log.cc \
 	v8/src/mark-compact.cc \
-	v8/src/marking-thread.cc \
 	v8/src/messages.cc \
 	v8/src/objects-debug.cc \
 	v8/src/objects-printer.cc \
@@ -119,6 +126,11 @@ LOCAL_SRC_FILES := \
 	v8/src/once.cc \
 	v8/src/optimizing-compiler-thread.cc \
 	v8/src/parser.cc \
+	v8/src/platform/time.cc \
+	v8/src/platform/condition-variable.cc \
+	v8/src/platform/mutex.cc \
+	v8/src/platform/semaphore.cc \
+	v8/src/platform/socket.cc \
 	v8/src/preparse-data.cc \
 	v8/src/preparser.cc \
 	v8/src/prettyprinter.cc \
@@ -153,6 +165,7 @@ LOCAL_SRC_FILES := \
 	v8/src/typing.cc \
 	v8/src/unicode.cc \
 	v8/src/utils.cc \
+	v8/src/utils/random-number-generator.cc \
 	v8/src/v8-counters.cc \
 	v8/src/v8.cc \
 	v8/src/v8conversions.cc \
@@ -181,11 +194,7 @@ LOCAL_SRC_FILES := \
 	v8/src/arm/simulator-arm.cc \
 	v8/src/arm/stub-cache-arm.cc \
 	v8/src/platform-posix.cc \
-	v8/src/platform-linux.cc \
-	v8/src/i18n.cc \
-	v8/src/extensions/i18n/break-iterator.cc \
-	v8/src/extensions/i18n/i18n-extension.cc \
-	v8/src/extensions/i18n/i18n-utils.cc
+	v8/src/platform-linux.cc
 
 
 # Flags passed to both C and C++ files.
@@ -209,30 +218,32 @@ MY_CFLAGS_Debug := \
 	-ffunction-sections
 
 MY_DEFS_Debug := \
-	'-DANGLE_DX11' \
+	'-DV8_DEPRECATION_WARNINGS' \
 	'-D_FILE_OFFSET_BITS=64' \
 	'-DNO_TCMALLOC' \
-	'-DDISCARDABLE_MEMORY_ALWAYS_SUPPORTED_NATIVELY' \
-	'-DSYSTEM_NATIVELY_SIGNALS_MEMORY_PRESSURE' \
 	'-DDISABLE_NACL' \
 	'-DCHROMIUM_BUILD' \
 	'-DUSE_LIBJPEG_TURBO=1' \
 	'-DUSE_PROPRIETARY_CODECS' \
 	'-DENABLE_CONFIGURATION_POLICY' \
-	'-DLOGGING_IS_OFFICIAL_BUILD=1' \
-	'-DTRACING_IS_OFFICIAL_BUILD=1' \
-	'-DENABLE_GPU=1' \
+	'-DDISCARDABLE_MEMORY_ALWAYS_SUPPORTED_NATIVELY' \
+	'-DSYSTEM_NATIVELY_SIGNALS_MEMORY_PRESSURE' \
+	'-DICU_UTIL_DATA_IMPL=ICU_UTIL_DATA_STATIC' \
 	'-DUSE_OPENSSL=1' \
 	'-DENABLE_EGLIMAGE=1' \
+	'-DCLD_VERSION=1' \
 	'-DENABLE_PRINTING=1' \
+	'-DENABLE_MANAGED_USERS=1' \
 	'-DV8_TARGET_ARCH_ARM' \
 	'-DENABLE_DEBUGGER_SUPPORT' \
 	'-DV8_I18N_SUPPORT' \
+	'-DV8_USE_DEFAULT_PLATFORM' \
 	'-DCAN_USE_VFP_INSTRUCTIONS' \
 	'-DU_USING_ICU_NAMESPACE=0' \
 	'-DU_STATIC_IMPLEMENTATION' \
 	'-DARM_TEST' \
 	'-DCAN_USE_ARMV7_INSTRUCTIONS=1' \
+	'-DV8_LIBRT_NOT_AVAILABLE=1' \
 	'-DDYNAMIC_ANNOTATIONS_ENABLED=1' \
 	'-DWTF_USE_DYNAMIC_ANNOTATIONS=1' \
 	'-D_DEBUG' \
@@ -240,7 +251,8 @@ MY_DEFS_Debug := \
 	'-DV8_ENABLE_CHECKS' \
 	'-DOBJECT_PRINT' \
 	'-DVERIFY_HEAP' \
-	'-DENABLE_EXTRA_CHECKS'
+	'-DENABLE_EXTRA_CHECKS' \
+	'-DENABLE_HANDLE_ZAPPING'
 
 
 # Include paths placed before CFLAGS/CPPFLAGS
@@ -281,30 +293,32 @@ MY_CFLAGS_Release := \
 	-O2
 
 MY_DEFS_Release := \
-	'-DANGLE_DX11' \
+	'-DV8_DEPRECATION_WARNINGS' \
 	'-D_FILE_OFFSET_BITS=64' \
 	'-DNO_TCMALLOC' \
-	'-DDISCARDABLE_MEMORY_ALWAYS_SUPPORTED_NATIVELY' \
-	'-DSYSTEM_NATIVELY_SIGNALS_MEMORY_PRESSURE' \
 	'-DDISABLE_NACL' \
 	'-DCHROMIUM_BUILD' \
 	'-DUSE_LIBJPEG_TURBO=1' \
 	'-DUSE_PROPRIETARY_CODECS' \
 	'-DENABLE_CONFIGURATION_POLICY' \
-	'-DLOGGING_IS_OFFICIAL_BUILD=1' \
-	'-DTRACING_IS_OFFICIAL_BUILD=1' \
-	'-DENABLE_GPU=1' \
+	'-DDISCARDABLE_MEMORY_ALWAYS_SUPPORTED_NATIVELY' \
+	'-DSYSTEM_NATIVELY_SIGNALS_MEMORY_PRESSURE' \
+	'-DICU_UTIL_DATA_IMPL=ICU_UTIL_DATA_STATIC' \
 	'-DUSE_OPENSSL=1' \
 	'-DENABLE_EGLIMAGE=1' \
+	'-DCLD_VERSION=1' \
 	'-DENABLE_PRINTING=1' \
+	'-DENABLE_MANAGED_USERS=1' \
 	'-DV8_TARGET_ARCH_ARM' \
 	'-DENABLE_DEBUGGER_SUPPORT' \
 	'-DV8_I18N_SUPPORT' \
+	'-DV8_USE_DEFAULT_PLATFORM' \
 	'-DCAN_USE_VFP_INSTRUCTIONS' \
 	'-DU_USING_ICU_NAMESPACE=0' \
 	'-DU_STATIC_IMPLEMENTATION' \
 	'-DARM_TEST' \
 	'-DCAN_USE_ARMV7_INSTRUCTIONS=1' \
+	'-DV8_LIBRT_NOT_AVAILABLE=1' \
 	'-DNDEBUG' \
 	'-DNVALGRIND' \
 	'-DDYNAMIC_ANNOTATIONS_ENABLED=0'

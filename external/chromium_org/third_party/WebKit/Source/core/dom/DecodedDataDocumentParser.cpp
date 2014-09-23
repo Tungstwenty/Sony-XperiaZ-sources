@@ -26,100 +26,87 @@
 #include "config.h"
 #include "core/dom/DecodedDataDocumentParser.h"
 
-#include "bindings/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/Document.h"
-#include "core/dom/Element.h"
-#include "core/loader/TextResourceDecoder.h"
-#include "wtf/text/TextEncodingRegistry.h"
+#include "core/dom/DocumentEncodingData.h"
+#include "core/fetch/TextResourceDecoder.h"
 
 namespace WebCore {
 
-namespace {
-
-class TitleEncodingFixer {
-public:
-    explicit TitleEncodingFixer(Document* document)
-        : m_document(document)
-        , m_firstEncoding(document->decoder()->encoding())
-    {
-    }
-
-    // It's possible for the encoding of the document to change while we're decoding
-    // data. That can only occur while we're processing the <head> portion of the
-    // document. There isn't much user-visible content in the <head>, but there is
-    // the <title> element. This function detects that situation and re-decodes the
-    // document's title so that the user doesn't see an incorrectly decoded title
-    // in the title bar.
-    inline void fixTitleEncodingIfNeeded()
-    {
-        if (m_firstEncoding == m_document->decoder()->encoding())
-            return; // In the common case, the encoding doesn't change and there isn't any work to do.
-        fixTitleEncoding();
-    }
-
-private:
-    void fixTitleEncoding();
-
-    Document* m_document;
-    WTF::TextEncoding m_firstEncoding;
-};
-
-void TitleEncodingFixer::fixTitleEncoding()
-{
-    RefPtr<Element> titleElement = m_document->titleElement();
-    if (!titleElement
-        || titleElement->firstElementChild()
-        || m_firstEncoding != Latin1Encoding()
-        || !titleElement->textContent().containsOnlyLatin1())
-        return; // Either we don't have a title yet or something bizzare as happened and we give up.
-    CString originalBytes = titleElement->textContent().latin1();
-    OwnPtr<TextCodec> codec = newTextCodec(m_document->decoder()->encoding());
-    String correctlyDecodedTitle = codec->decode(originalBytes.data(), originalBytes.length(), true);
-    titleElement->setTextContent(correctlyDecodedTitle, IGNORE_EXCEPTION);
-}
-
-}
-
 DecodedDataDocumentParser::DecodedDataDocumentParser(Document* document)
     : DocumentParser(document)
+    , m_hasAppendedData(false)
 {
 }
 
-size_t DecodedDataDocumentParser::appendBytes(const char* data, size_t length)
+DecodedDataDocumentParser::~DecodedDataDocumentParser()
+{
+}
+
+void DecodedDataDocumentParser::setDecoder(PassOwnPtr<TextResourceDecoder> decoder)
+{
+    m_decoder = decoder;
+}
+
+TextResourceDecoder* DecodedDataDocumentParser::decoder()
+{
+    return m_decoder.get();
+}
+
+void DecodedDataDocumentParser::setHasAppendedData()
+{
+    m_hasAppendedData = true;
+}
+
+void DecodedDataDocumentParser::appendBytes(const char* data, size_t length)
 {
     if (!length)
-        return 0;
+        return;
 
-    TitleEncodingFixer encodingFixer(document());
+    // This should be checking isStopped(), but XMLDocumentParser prematurely
+    // stops parsing when handling an XSLT processing instruction and still
+    // needs to receive decoded bytes.
+    if (isDetached())
+        return;
 
-    String decoded = document()->decoder()->decode(data, length);
-
-    encodingFixer.fixTitleEncodingIfNeeded();
-
-    if (decoded.isEmpty())
-        return 0;
-
-    size_t consumedChars = decoded.length();
-    append(decoded.releaseImpl());
-
-    return consumedChars;
+    String decoded = m_decoder->decode(data, length);
+    updateDocument(decoded);
 }
 
-size_t DecodedDataDocumentParser::flush()
+void DecodedDataDocumentParser::flush()
 {
+    // This should be checking isStopped(), but XMLDocumentParser prematurely
+    // stops parsing when handling an XSLT processing instruction and still
+    // needs to receive decoded bytes.
+    if (isDetached())
+        return;
+
     // null decoder indicates there is no data received.
     // We have nothing to do in that case.
-    TextResourceDecoder* decoder = document()->decoder();
-    if (!decoder)
-        return 0;
-    String remainingData = decoder->flush();
-    if (remainingData.isEmpty())
-        return 0;
+    if (!m_decoder)
+        return;
 
-    size_t consumedChars = remainingData.length();
-    append(remainingData.releaseImpl());
+    String remainingData = m_decoder->flush();
+    updateDocument(remainingData);
+}
 
-    return consumedChars;
+void DecodedDataDocumentParser::updateDocument(String& decodedData)
+{
+    DocumentEncodingData encodingData;
+    encodingData.encoding = m_decoder->encoding();
+    encodingData.wasDetectedHeuristically = m_decoder->encodingWasDetectedHeuristically();
+    encodingData.sawDecodingError = m_decoder->sawError();
+    document()->setEncodingData(encodingData);
+
+    if (decodedData.isEmpty())
+        return;
+
+    append(decodedData.releaseImpl());
+    // FIXME: Should be removed as part of https://code.google.com/p/chromium/issues/detail?id=319643
+    if (!m_hasAppendedData) {
+        m_hasAppendedData = true;
+        if (m_decoder->encoding().usesVisualOrdering())
+            document()->setVisuallyOrdered();
+    }
 }
 
 };

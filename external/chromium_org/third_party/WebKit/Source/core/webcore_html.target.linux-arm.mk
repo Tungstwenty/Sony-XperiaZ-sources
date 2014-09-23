@@ -23,28 +23,9 @@ LOCAL_GENERATED_SOURCES :=
 GYP_COPIED_SOURCE_ORIGIN_DIRS :=
 
 LOCAL_SRC_FILES := \
-	third_party/WebKit/Source/core/html/BaseButtonInputType.cpp \
-	third_party/WebKit/Source/core/html/BaseCheckableInputType.cpp \
-	third_party/WebKit/Source/core/html/BaseChooserOnlyDateAndTimeInputType.cpp \
-	third_party/WebKit/Source/core/html/BaseClickableWithKeyInputType.cpp \
-	third_party/WebKit/Source/core/html/BaseDateAndTimeInputType.cpp \
-	third_party/WebKit/Source/core/html/BaseMultipleFieldsDateAndTimeInputType.cpp \
-	third_party/WebKit/Source/core/html/BaseTextInputType.cpp \
-	third_party/WebKit/Source/core/html/ButtonInputType.cpp \
-	third_party/WebKit/Source/core/html/CheckboxInputType.cpp \
 	third_party/WebKit/Source/core/html/ClassList.cpp \
-	third_party/WebKit/Source/core/html/ColorInputType.cpp \
 	third_party/WebKit/Source/core/html/DOMFormData.cpp \
-	third_party/WebKit/Source/core/html/DOMSettableTokenList.cpp \
-	third_party/WebKit/Source/core/html/DOMTokenList.cpp \
-	third_party/WebKit/Source/core/html/DOMURL.cpp \
-	third_party/WebKit/Source/core/html/DateInputType.cpp \
-	third_party/WebKit/Source/core/html/DateTimeFieldsState.cpp \
-	third_party/WebKit/Source/core/html/DateTimeLocalInputType.cpp \
-	third_party/WebKit/Source/core/html/EmailInputType.cpp \
-	third_party/WebKit/Source/core/html/FileInputType.cpp \
 	third_party/WebKit/Source/core/html/FormAssociatedElement.cpp \
-	third_party/WebKit/Source/core/html/FormController.cpp \
 	third_party/WebKit/Source/core/html/FormDataList.cpp \
 	third_party/WebKit/Source/core/html/HTMLAllCollection.cpp \
 	third_party/WebKit/Source/core/html/HTMLAnchorElement.cpp \
@@ -86,7 +67,9 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/html/HTMLImageLoader.cpp \
 	third_party/WebKit/Source/core/html/HTMLImport.cpp \
 	third_party/WebKit/Source/core/html/HTMLImportsController.cpp \
+	third_party/WebKit/Source/core/html/HTMLImportChild.cpp \
 	third_party/WebKit/Source/core/html/HTMLImportLoader.cpp \
+	third_party/WebKit/Source/core/html/HTMLImportResourceOwner.cpp \
 	third_party/WebKit/Source/core/html/HTMLInputElement.cpp \
 	third_party/WebKit/Source/core/html/HTMLKeygenElement.cpp \
 	third_party/WebKit/Source/core/html/HTMLLIElement.cpp \
@@ -97,7 +80,6 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/html/HTMLMarqueeElement.cpp \
 	third_party/WebKit/Source/core/html/HTMLMediaElement.cpp \
 	third_party/WebKit/Source/core/html/HTMLMenuElement.cpp \
-	third_party/WebKit/Source/core/html/HTMLMetaElement.cpp \
 	third_party/WebKit/Source/core/html/HTMLMeterElement.cpp \
 	third_party/WebKit/Source/core/html/HTMLModElement.cpp \
 	third_party/WebKit/Source/core/html/HTMLNameCollection.cpp \
@@ -110,13 +92,11 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/html/HTMLParagraphElement.cpp \
 	third_party/WebKit/Source/core/html/HTMLParamElement.cpp \
 	third_party/WebKit/Source/core/html/HTMLPlugInElement.cpp \
-	third_party/WebKit/Source/core/html/HTMLPlugInImageElement.cpp \
 	third_party/WebKit/Source/core/html/HTMLPreElement.cpp \
 	third_party/WebKit/Source/core/html/HTMLProgressElement.cpp \
 	third_party/WebKit/Source/core/html/HTMLQuoteElement.cpp \
 	third_party/WebKit/Source/core/html/HTMLScriptElement.cpp \
 	third_party/WebKit/Source/core/html/HTMLSelectElement.cpp \
-	third_party/WebKit/Source/core/html/HTMLSelectElementWin.cpp \
 	third_party/WebKit/Source/core/html/HTMLSourceElement.cpp \
 	third_party/WebKit/Source/core/html/HTMLSpanElement.cpp \
 	third_party/WebKit/Source/core/html/HTMLStyleElement.cpp \
@@ -137,12 +117,8 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/html/HTMLUListElement.cpp \
 	third_party/WebKit/Source/core/html/HTMLVideoElement.cpp \
 	third_party/WebKit/Source/core/html/HTMLViewSourceDocument.cpp \
-	third_party/WebKit/Source/core/html/HiddenInputType.cpp \
 	third_party/WebKit/Source/core/html/ImageData.cpp \
 	third_party/WebKit/Source/core/html/ImageDocument.cpp \
-	third_party/WebKit/Source/core/html/ImageInputType.cpp \
-	third_party/WebKit/Source/core/html/InputType.cpp \
-	third_party/WebKit/Source/core/html/InputTypeNames.cpp \
 	third_party/WebKit/Source/core/html/LabelableElement.cpp \
 	third_party/WebKit/Source/core/html/LabelsNodeList.cpp \
 	third_party/WebKit/Source/core/html/LinkImport.cpp \
@@ -153,29 +129,12 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/html/MediaFragmentURIParser.cpp \
 	third_party/WebKit/Source/core/html/MediaKeyEvent.cpp \
 	third_party/WebKit/Source/core/html/HTMLMediaSource.cpp \
-	third_party/WebKit/Source/core/html/MonthInputType.cpp \
-	third_party/WebKit/Source/core/html/NumberInputType.cpp \
-	third_party/WebKit/Source/core/html/PasswordInputType.cpp \
 	third_party/WebKit/Source/core/html/PluginDocument.cpp \
 	third_party/WebKit/Source/core/html/PublicURLManager.cpp \
-	third_party/WebKit/Source/core/html/RadioInputType.cpp \
 	third_party/WebKit/Source/core/html/RadioNodeList.cpp \
-	third_party/WebKit/Source/core/html/RangeInputType.cpp \
-	third_party/WebKit/Source/core/html/ResetInputType.cpp \
-	third_party/WebKit/Source/core/html/SearchInputType.cpp \
-	third_party/WebKit/Source/core/html/StepRange.cpp \
-	third_party/WebKit/Source/core/html/SubmitInputType.cpp \
-	third_party/WebKit/Source/core/html/TelephoneInputType.cpp \
 	third_party/WebKit/Source/core/html/TextDocument.cpp \
-	third_party/WebKit/Source/core/html/TextFieldInputType.cpp \
-	third_party/WebKit/Source/core/html/TextInputType.cpp \
-	third_party/WebKit/Source/core/html/TimeInputType.cpp \
 	third_party/WebKit/Source/core/html/TimeRanges.cpp \
-	third_party/WebKit/Source/core/html/URLInputType.cpp \
-	third_party/WebKit/Source/core/html/ValidationMessage.cpp \
 	third_party/WebKit/Source/core/html/ValidityState.cpp \
-	third_party/WebKit/Source/core/html/WeekInputType.cpp \
-	third_party/WebKit/Source/core/html/TypeAhead.cpp \
 	third_party/WebKit/Source/core/html/canvas/ANGLEInstancedArrays.cpp \
 	third_party/WebKit/Source/core/html/canvas/Canvas2DContextAttributes.cpp \
 	third_party/WebKit/Source/core/html/canvas/CanvasContextAttributes.cpp \
@@ -221,6 +180,44 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/html/canvas/WebGLTexture.cpp \
 	third_party/WebKit/Source/core/html/canvas/WebGLUniformLocation.cpp \
 	third_party/WebKit/Source/core/html/canvas/WebGLVertexArrayObjectOES.cpp \
+	third_party/WebKit/Source/core/html/forms/BaseButtonInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/BaseCheckableInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/BaseChooserOnlyDateAndTimeInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/BaseClickableWithKeyInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/BaseDateAndTimeInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/BaseMultipleFieldsDateAndTimeInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/BaseTextInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/ButtonInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/CheckboxInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/CheckedRadioButtons.cpp \
+	third_party/WebKit/Source/core/html/forms/ColorInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/DateInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/DateTimeFieldsState.cpp \
+	third_party/WebKit/Source/core/html/forms/DateTimeLocalInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/EmailInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/FileInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/FormController.cpp \
+	third_party/WebKit/Source/core/html/forms/HiddenInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/ImageInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/InputType.cpp \
+	third_party/WebKit/Source/core/html/forms/InputTypeView.cpp \
+	third_party/WebKit/Source/core/html/forms/MonthInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/NumberInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/PasswordInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/RadioInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/RangeInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/ResetInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/SearchInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/StepRange.cpp \
+	third_party/WebKit/Source/core/html/forms/SubmitInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/TelephoneInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/TextFieldInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/TextInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/TimeInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/TypeAhead.cpp \
+	third_party/WebKit/Source/core/html/forms/URLInputType.cpp \
+	third_party/WebKit/Source/core/html/forms/ValidationMessage.cpp \
+	third_party/WebKit/Source/core/html/forms/WeekInputType.cpp \
 	third_party/WebKit/Source/core/html/parser/BackgroundHTMLParser.cpp \
 	third_party/WebKit/Source/core/html/parser/BackgroundHTMLInputStream.cpp \
 	third_party/WebKit/Source/core/html/parser/CSSPreloadScanner.cpp \
@@ -231,7 +228,6 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/html/parser/HTMLEntityParser.cpp \
 	third_party/WebKit/Source/core/html/parser/HTMLEntitySearch.cpp \
 	third_party/WebKit/Source/core/html/parser/HTMLFormattingElementList.cpp \
-	third_party/WebKit/Source/core/html/parser/HTMLIdentifier.cpp \
 	third_party/WebKit/Source/core/html/parser/HTMLMetaCharsetParser.cpp \
 	third_party/WebKit/Source/core/html/parser/HTMLParserIdioms.cpp \
 	third_party/WebKit/Source/core/html/parser/HTMLParserOptions.cpp \
@@ -241,6 +237,7 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/html/parser/HTMLResourcePreloader.cpp \
 	third_party/WebKit/Source/core/html/parser/HTMLScriptRunner.cpp \
 	third_party/WebKit/Source/core/html/parser/HTMLSourceTracker.cpp \
+	third_party/WebKit/Source/core/html/parser/HTMLSrcsetParser.cpp \
 	third_party/WebKit/Source/core/html/parser/HTMLTokenizer.cpp \
 	third_party/WebKit/Source/core/html/parser/HTMLTreeBuilder.cpp \
 	third_party/WebKit/Source/core/html/parser/HTMLTreeBuilderSimulator.cpp \
@@ -276,30 +273,31 @@ LOCAL_SRC_FILES := \
 	third_party/WebKit/Source/core/html/track/LoadableTextTrack.cpp \
 	third_party/WebKit/Source/core/html/track/TextTrack.cpp \
 	third_party/WebKit/Source/core/html/track/TextTrackCue.cpp \
-	third_party/WebKit/Source/core/html/track/TextTrackCueGeneric.cpp \
 	third_party/WebKit/Source/core/html/track/TextTrackCueList.cpp \
 	third_party/WebKit/Source/core/html/track/TextTrackList.cpp \
-	third_party/WebKit/Source/core/html/track/TextTrackRegion.cpp \
-	third_party/WebKit/Source/core/html/track/TextTrackRegionList.cpp \
-	third_party/WebKit/Source/core/html/track/TrackBase.cpp \
 	third_party/WebKit/Source/core/html/track/TrackEvent.cpp \
-	third_party/WebKit/Source/core/html/track/WebVTTElement.cpp \
-	third_party/WebKit/Source/core/html/track/WebVTTParser.cpp \
-	third_party/WebKit/Source/core/html/track/WebVTTTokenizer.cpp
+	third_party/WebKit/Source/core/html/track/vtt/BufferedLineReader.cpp \
+	third_party/WebKit/Source/core/html/track/vtt/VTTCue.cpp \
+	third_party/WebKit/Source/core/html/track/vtt/VTTElement.cpp \
+	third_party/WebKit/Source/core/html/track/vtt/VTTParser.cpp \
+	third_party/WebKit/Source/core/html/track/vtt/VTTRegion.cpp \
+	third_party/WebKit/Source/core/html/track/vtt/VTTRegionList.cpp \
+	third_party/WebKit/Source/core/html/track/vtt/VTTTokenizer.cpp
 
 
 # Flags passed to both C and C++ files.
 MY_CFLAGS_Debug := \
 	-fstack-protector \
 	--param=ssp-buffer-size=4 \
+	-Werror \
 	-fno-exceptions \
 	-fno-strict-aliasing \
+	-Wall \
 	-Wno-unused-parameter \
 	-Wno-missing-field-initializers \
 	-fvisibility=hidden \
 	-pipe \
 	-fPIC \
-	-Wno-format \
 	-fno-tree-sra \
 	-fuse-ld=gold \
 	-Wno-psabi \
@@ -314,10 +312,6 @@ MY_CFLAGS_Debug := \
 	-Wno-extra \
 	-Wno-ignored-qualifiers \
 	-Wno-type-limits \
-	-Wno-address \
-	-Wno-format-security \
-	-Wno-return-type \
-	-Wno-sequence-point \
 	-Os \
 	-g \
 	-fomit-frame-pointer \
@@ -325,51 +319,46 @@ MY_CFLAGS_Debug := \
 	-ffunction-sections
 
 MY_DEFS_Debug := \
-	'-DANGLE_DX11' \
+	'-DV8_DEPRECATION_WARNINGS' \
 	'-D_FILE_OFFSET_BITS=64' \
 	'-DNO_TCMALLOC' \
-	'-DDISCARDABLE_MEMORY_ALWAYS_SUPPORTED_NATIVELY' \
-	'-DSYSTEM_NATIVELY_SIGNALS_MEMORY_PRESSURE' \
 	'-DDISABLE_NACL' \
 	'-DCHROMIUM_BUILD' \
 	'-DUSE_LIBJPEG_TURBO=1' \
 	'-DUSE_PROPRIETARY_CODECS' \
 	'-DENABLE_CONFIGURATION_POLICY' \
-	'-DLOGGING_IS_OFFICIAL_BUILD=1' \
-	'-DTRACING_IS_OFFICIAL_BUILD=1' \
-	'-DENABLE_GPU=1' \
+	'-DDISCARDABLE_MEMORY_ALWAYS_SUPPORTED_NATIVELY' \
+	'-DSYSTEM_NATIVELY_SIGNALS_MEMORY_PRESSURE' \
+	'-DICU_UTIL_DATA_IMPL=ICU_UTIL_DATA_STATIC' \
 	'-DUSE_OPENSSL=1' \
 	'-DENABLE_EGLIMAGE=1' \
+	'-DCLD_VERSION=1' \
 	'-DENABLE_PRINTING=1' \
-	'-DWEBCORE_NAVIGATOR_VENDOR="Google Inc."' \
-	'-DWEBKIT_IMPLEMENTATION=1' \
-	'-DINSIDE_WEBKIT' \
-	'-DENABLE_CSS3_TEXT=0' \
-	'-DENABLE_CSS_EXCLUSIONS=1' \
-	'-DENABLE_CSS_REGIONS=1' \
+	'-DENABLE_MANAGED_USERS=1' \
+	'-DBLINK_IMPLEMENTATION=1' \
+	'-DINSIDE_BLINK' \
 	'-DENABLE_CUSTOM_SCHEME_HANDLER=0' \
-	'-DENABLE_ENCRYPTED_MEDIA_V2=1' \
 	'-DENABLE_SVG_FONTS=1' \
-	'-DENABLE_TOUCH_ICON_LOADING=1' \
-	'-DENABLE_GDI_FONTS_ON_WINDOWS=1' \
+	'-DENABLE_GDI_FONTS_ON_WINDOWS=0' \
+	'-DENABLE_HARFBUZZ_ON_WINDOWS=1' \
 	'-DWTF_USE_CONCATENATED_IMPULSE_RESPONSES=1' \
-	'-DENABLE_CALENDAR_PICKER=0' \
 	'-DENABLE_FAST_MOBILE_SCROLLING=1' \
 	'-DENABLE_INPUT_SPEECH=0' \
 	'-DENABLE_LEGACY_NOTIFICATIONS=0' \
 	'-DENABLE_MEDIA_CAPTURE=1' \
-	'-DENABLE_NOTIFICATIONS=0' \
 	'-DENABLE_ORIENTATION_EVENTS=1' \
+	'-DENABLE_TOUCH_ICON_LOADING=1' \
 	'-DENABLE_NAVIGATOR_CONTENT_UTILS=0' \
-	'-DWTF_USE_NATIVE_FULLSCREEN_VIDEO=1' \
 	'-DENABLE_OPENTYPE_VERTICAL=1' \
-	'-DWTF_USE_HARFBUZZ=1' \
 	'-DU_USING_ICU_NAMESPACE=0' \
+	'-DSK_ATTR_DEPRECATED=SK_NOTHING_ARG1' \
 	'-DCHROME_PNG_WRITE_SUPPORT' \
 	'-DPNG_USER_CONFIG' \
+	'-DCHROME_PNG_READ_PACK_SUPPORT' \
 	'-DLIBXML_STATIC' \
 	'-DLIBXSLT_STATIC' \
-	'-DUSE_SYSTEM_LIBJPEG' \
+	'-D__STDC_CONSTANT_MACROS' \
+	'-D__STDC_FORMAT_MACROS' \
 	'-DANDROID' \
 	'-D__GNU_SOURCE=1' \
 	'-DUSE_STLPORT=1' \
@@ -382,20 +371,23 @@ MY_DEFS_Debug := \
 
 # Include paths placed before CFLAGS/CPPFLAGS
 LOCAL_C_INCLUDES_Debug := \
-	$(gyp_shared_intermediate_dir)/shim_headers/skia_library/target \
 	$(gyp_shared_intermediate_dir)/shim_headers/ashmem/target \
+	$(gyp_shared_intermediate_dir)/shim_headers/skia_library/target \
 	$(gyp_shared_intermediate_dir)/shim_headers/icuuc/target \
 	$(gyp_shared_intermediate_dir)/shim_headers/icui18n/target \
+	$(LOCAL_PATH)/third_party/WebKit/Source \
+	$(LOCAL_PATH) \
+	$(LOCAL_PATH)/skia/config \
 	$(LOCAL_PATH)/third_party/khronos \
 	$(LOCAL_PATH)/gpu \
-	$(LOCAL_PATH) \
 	$(LOCAL_PATH)/third_party/WebKit \
-	$(LOCAL_PATH)/third_party/WebKit/Source \
 	$(gyp_shared_intermediate_dir)/blink \
 	$(gyp_shared_intermediate_dir)/blink/bindings \
-	$(LOCAL_PATH)/third_party/angle_dx11/include/GLSLANG \
+	$(LOCAL_PATH)/third_party/angle/include \
 	$(PWD)/external/icu4c/common \
 	$(PWD)/external/icu4c/i18n \
+	$(PWD)/external/skia/include \
+	$(PWD)/external/skia/include/core \
 	$(LOCAL_PATH)/third_party/skia/src/core \
 	$(LOCAL_PATH)/skia/ext \
 	$(LOCAL_PATH)/third_party/iccjpeg \
@@ -411,7 +403,6 @@ LOCAL_C_INCLUDES_Debug := \
 	$(LOCAL_PATH)/third_party/sqlite \
 	$(LOCAL_PATH)/third_party/zlib \
 	$(LOCAL_PATH)/v8/include \
-	$(PWD)/external/jpeg \
 	$(PWD)/frameworks/wilhelm/include \
 	$(PWD)/bionic \
 	$(PWD)/external/stlport/stlport
@@ -422,27 +413,27 @@ LOCAL_CPPFLAGS_Debug := \
 	-fno-rtti \
 	-fno-threadsafe-statics \
 	-fvisibility-inlines-hidden \
+	-Wsign-compare \
 	-Wno-c++0x-compat \
-	-Wno-deprecated \
 	-Wno-abi \
 	-Wno-error=c++0x-compat \
 	-Wno-non-virtual-dtor \
-	-Wno-sign-promo \
-	-Wno-non-virtual-dtor
+	-Wno-sign-promo
 
 
 # Flags passed to both C and C++ files.
 MY_CFLAGS_Release := \
 	-fstack-protector \
 	--param=ssp-buffer-size=4 \
+	-Werror \
 	-fno-exceptions \
 	-fno-strict-aliasing \
+	-Wall \
 	-Wno-unused-parameter \
 	-Wno-missing-field-initializers \
 	-fvisibility=hidden \
 	-pipe \
 	-fPIC \
-	-Wno-format \
 	-fno-tree-sra \
 	-fuse-ld=gold \
 	-Wno-psabi \
@@ -457,10 +448,6 @@ MY_CFLAGS_Release := \
 	-Wno-extra \
 	-Wno-ignored-qualifiers \
 	-Wno-type-limits \
-	-Wno-address \
-	-Wno-format-security \
-	-Wno-return-type \
-	-Wno-sequence-point \
 	-Os \
 	-fno-ident \
 	-fdata-sections \
@@ -468,51 +455,46 @@ MY_CFLAGS_Release := \
 	-fomit-frame-pointer
 
 MY_DEFS_Release := \
-	'-DANGLE_DX11' \
+	'-DV8_DEPRECATION_WARNINGS' \
 	'-D_FILE_OFFSET_BITS=64' \
 	'-DNO_TCMALLOC' \
-	'-DDISCARDABLE_MEMORY_ALWAYS_SUPPORTED_NATIVELY' \
-	'-DSYSTEM_NATIVELY_SIGNALS_MEMORY_PRESSURE' \
 	'-DDISABLE_NACL' \
 	'-DCHROMIUM_BUILD' \
 	'-DUSE_LIBJPEG_TURBO=1' \
 	'-DUSE_PROPRIETARY_CODECS' \
 	'-DENABLE_CONFIGURATION_POLICY' \
-	'-DLOGGING_IS_OFFICIAL_BUILD=1' \
-	'-DTRACING_IS_OFFICIAL_BUILD=1' \
-	'-DENABLE_GPU=1' \
+	'-DDISCARDABLE_MEMORY_ALWAYS_SUPPORTED_NATIVELY' \
+	'-DSYSTEM_NATIVELY_SIGNALS_MEMORY_PRESSURE' \
+	'-DICU_UTIL_DATA_IMPL=ICU_UTIL_DATA_STATIC' \
 	'-DUSE_OPENSSL=1' \
 	'-DENABLE_EGLIMAGE=1' \
+	'-DCLD_VERSION=1' \
 	'-DENABLE_PRINTING=1' \
-	'-DWEBCORE_NAVIGATOR_VENDOR="Google Inc."' \
-	'-DWEBKIT_IMPLEMENTATION=1' \
-	'-DINSIDE_WEBKIT' \
-	'-DENABLE_CSS3_TEXT=0' \
-	'-DENABLE_CSS_EXCLUSIONS=1' \
-	'-DENABLE_CSS_REGIONS=1' \
+	'-DENABLE_MANAGED_USERS=1' \
+	'-DBLINK_IMPLEMENTATION=1' \
+	'-DINSIDE_BLINK' \
 	'-DENABLE_CUSTOM_SCHEME_HANDLER=0' \
-	'-DENABLE_ENCRYPTED_MEDIA_V2=1' \
 	'-DENABLE_SVG_FONTS=1' \
-	'-DENABLE_TOUCH_ICON_LOADING=1' \
-	'-DENABLE_GDI_FONTS_ON_WINDOWS=1' \
+	'-DENABLE_GDI_FONTS_ON_WINDOWS=0' \
+	'-DENABLE_HARFBUZZ_ON_WINDOWS=1' \
 	'-DWTF_USE_CONCATENATED_IMPULSE_RESPONSES=1' \
-	'-DENABLE_CALENDAR_PICKER=0' \
 	'-DENABLE_FAST_MOBILE_SCROLLING=1' \
 	'-DENABLE_INPUT_SPEECH=0' \
 	'-DENABLE_LEGACY_NOTIFICATIONS=0' \
 	'-DENABLE_MEDIA_CAPTURE=1' \
-	'-DENABLE_NOTIFICATIONS=0' \
 	'-DENABLE_ORIENTATION_EVENTS=1' \
+	'-DENABLE_TOUCH_ICON_LOADING=1' \
 	'-DENABLE_NAVIGATOR_CONTENT_UTILS=0' \
-	'-DWTF_USE_NATIVE_FULLSCREEN_VIDEO=1' \
 	'-DENABLE_OPENTYPE_VERTICAL=1' \
-	'-DWTF_USE_HARFBUZZ=1' \
 	'-DU_USING_ICU_NAMESPACE=0' \
+	'-DSK_ATTR_DEPRECATED=SK_NOTHING_ARG1' \
 	'-DCHROME_PNG_WRITE_SUPPORT' \
 	'-DPNG_USER_CONFIG' \
+	'-DCHROME_PNG_READ_PACK_SUPPORT' \
 	'-DLIBXML_STATIC' \
 	'-DLIBXSLT_STATIC' \
-	'-DUSE_SYSTEM_LIBJPEG' \
+	'-D__STDC_CONSTANT_MACROS' \
+	'-D__STDC_FORMAT_MACROS' \
 	'-DANDROID' \
 	'-D__GNU_SOURCE=1' \
 	'-DUSE_STLPORT=1' \
@@ -520,25 +502,29 @@ MY_DEFS_Release := \
 	'-DCHROME_BUILD_ID=""' \
 	'-DNDEBUG' \
 	'-DNVALGRIND' \
-	'-DDYNAMIC_ANNOTATIONS_ENABLED=0'
+	'-DDYNAMIC_ANNOTATIONS_ENABLED=0' \
+	'-D_FORTIFY_SOURCE=2'
 
 
 # Include paths placed before CFLAGS/CPPFLAGS
 LOCAL_C_INCLUDES_Release := \
-	$(gyp_shared_intermediate_dir)/shim_headers/skia_library/target \
 	$(gyp_shared_intermediate_dir)/shim_headers/ashmem/target \
+	$(gyp_shared_intermediate_dir)/shim_headers/skia_library/target \
 	$(gyp_shared_intermediate_dir)/shim_headers/icuuc/target \
 	$(gyp_shared_intermediate_dir)/shim_headers/icui18n/target \
+	$(LOCAL_PATH)/third_party/WebKit/Source \
+	$(LOCAL_PATH) \
+	$(LOCAL_PATH)/skia/config \
 	$(LOCAL_PATH)/third_party/khronos \
 	$(LOCAL_PATH)/gpu \
-	$(LOCAL_PATH) \
 	$(LOCAL_PATH)/third_party/WebKit \
-	$(LOCAL_PATH)/third_party/WebKit/Source \
 	$(gyp_shared_intermediate_dir)/blink \
 	$(gyp_shared_intermediate_dir)/blink/bindings \
-	$(LOCAL_PATH)/third_party/angle_dx11/include/GLSLANG \
+	$(LOCAL_PATH)/third_party/angle/include \
 	$(PWD)/external/icu4c/common \
 	$(PWD)/external/icu4c/i18n \
+	$(PWD)/external/skia/include \
+	$(PWD)/external/skia/include/core \
 	$(LOCAL_PATH)/third_party/skia/src/core \
 	$(LOCAL_PATH)/skia/ext \
 	$(LOCAL_PATH)/third_party/iccjpeg \
@@ -554,7 +540,6 @@ LOCAL_C_INCLUDES_Release := \
 	$(LOCAL_PATH)/third_party/sqlite \
 	$(LOCAL_PATH)/third_party/zlib \
 	$(LOCAL_PATH)/v8/include \
-	$(PWD)/external/jpeg \
 	$(PWD)/frameworks/wilhelm/include \
 	$(PWD)/bionic \
 	$(PWD)/external/stlport/stlport
@@ -565,13 +550,12 @@ LOCAL_CPPFLAGS_Release := \
 	-fno-rtti \
 	-fno-threadsafe-statics \
 	-fvisibility-inlines-hidden \
+	-Wsign-compare \
 	-Wno-c++0x-compat \
-	-Wno-deprecated \
 	-Wno-abi \
 	-Wno-error=c++0x-compat \
 	-Wno-non-virtual-dtor \
-	-Wno-sign-promo \
-	-Wno-non-virtual-dtor
+	-Wno-sign-promo
 
 
 LOCAL_CFLAGS := $(MY_CFLAGS_$(GYP_CONFIGURATION)) $(MY_DEFS_$(GYP_CONFIGURATION))

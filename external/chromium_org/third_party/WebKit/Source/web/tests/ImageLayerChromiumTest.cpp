@@ -25,9 +25,9 @@
 #include "config.h"
 
 #include <gtest/gtest.h>
-#include "core/platform/graphics/GraphicsLayer.h"
-#include "core/platform/graphics/Image.h"
-#include "core/platform/graphics/skia/NativeImageSkia.h"
+#include "platform/graphics/GraphicsLayer.h"
+#include "platform/graphics/Image.h"
+#include "platform/graphics/skia/NativeImageSkia.h"
 #include "public/platform/WebImageLayer.h"
 #include "wtf/PassOwnPtr.h"
 
@@ -37,27 +37,26 @@ namespace {
 
 class MockGraphicsLayerClient : public GraphicsLayerClient {
   public:
-    virtual void notifyAnimationStarted(const GraphicsLayer*, double time) OVERRIDE { }
+    virtual void notifyAnimationStarted(const GraphicsLayer*, double wallClockTime, double monotonicTime) OVERRIDE { }
     virtual void paintContents(const GraphicsLayer*, GraphicsContext&, GraphicsLayerPaintingPhase, const IntRect& inClip) OVERRIDE { }
+    virtual String debugName(const GraphicsLayer*) OVERRIDE { return String(); }
 };
 
 class TestImage : public Image {
 public:
 
-    static PassRefPtr<TestImage> create(const IntSize& size, bool opaque)
+    static PassRefPtr<TestImage> create(const IntSize& size, SkAlphaType alphaType)
     {
-        return adoptRef(new TestImage(size, opaque));
+        return adoptRef(new TestImage(size, alphaType));
     }
 
-    explicit TestImage(const IntSize& size, bool opaque)
+    explicit TestImage(const IntSize& size, SkAlphaType alphaType)
         : Image(0)
         , m_size(size)
     {
         m_nativeImage = NativeImageSkia::create();
-        m_nativeImage->bitmap().setConfig(SkBitmap::kARGB_8888_Config,
-                                          size.width(), size.height(), 0);
+        m_nativeImage->bitmap().setConfig(SkBitmap::kARGB_8888_Config, size.width(), size.height(), 0, alphaType);
         m_nativeImage->bitmap().allocPixels();
-        m_nativeImage->bitmap().setIsOpaque(opaque);
     }
 
     virtual bool isBitmapImage() const OVERRIDE
@@ -88,12 +87,7 @@ public:
     {
     }
 
-    virtual unsigned decodedSize() const OVERRIDE
-    {
-        return 0u;
-    }
-
-    virtual void draw(GraphicsContext*, const FloatRect&, const FloatRect&, CompositeOperator, BlendMode) OVERRIDE
+    virtual void draw(GraphicsContext*, const FloatRect&, const FloatRect&, CompositeOperator, blink::WebBlendMode) OVERRIDE
     {
     }
 
@@ -108,6 +102,8 @@ class GraphicsLayerForTesting : public GraphicsLayer {
 public:
     explicit GraphicsLayerForTesting(GraphicsLayerClient* client)
         : GraphicsLayer(client) { };
+
+    virtual blink::WebLayer* contentsLayer() const { return GraphicsLayer::contentsLayer(); }
 };
 
 TEST(ImageLayerChromiumTest, opaqueImages)
@@ -116,9 +112,9 @@ TEST(ImageLayerChromiumTest, opaqueImages)
     OwnPtr<GraphicsLayerForTesting> graphicsLayer = adoptPtr(new GraphicsLayerForTesting(&client));
     ASSERT_TRUE(graphicsLayer.get());
 
-    RefPtr<Image> opaqueImage = TestImage::create(IntSize(100, 100), true);
+    RefPtr<Image> opaqueImage = TestImage::create(IntSize(100, 100), kOpaque_SkAlphaType);
     ASSERT_TRUE(opaqueImage.get());
-    RefPtr<Image> nonOpaqueImage = TestImage::create(IntSize(100, 100), false);
+    RefPtr<Image> nonOpaqueImage = TestImage::create(IntSize(100, 100), kPremul_SkAlphaType);
     ASSERT_TRUE(nonOpaqueImage.get());
 
     ASSERT_FALSE(graphicsLayer->contentsLayer());

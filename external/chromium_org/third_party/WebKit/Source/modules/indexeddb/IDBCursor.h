@@ -29,8 +29,9 @@
 #include "bindings/v8/ScriptValue.h"
 #include "bindings/v8/ScriptWrappable.h"
 #include "modules/indexeddb/IDBKey.h"
-#include "modules/indexeddb/IDBTransaction.h"
+#include "modules/indexeddb/IDBRequest.h"
 #include "modules/indexeddb/IndexedDB.h"
+#include "public/platform/WebIDBCursor.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
@@ -40,12 +41,11 @@ namespace WebCore {
 class DOMRequestState;
 class ExceptionState;
 class IDBAny;
-class IDBCallbacks;
-class IDBCursorBackendInterface;
-class IDBRequest;
-class ScriptExecutionContext;
+class IDBTransaction;
+class ExecutionContext;
+class SharedBuffer;
 
-class IDBCursor : public ScriptWrappable, public RefCounted<IDBCursor> {
+class IDBCursor : public ScriptWrappable, public WTF::RefCountedBase {
 public:
     static const AtomicString& directionNext();
     static const AtomicString& directionNextUnique();
@@ -55,51 +55,64 @@ public:
     static IndexedDB::CursorDirection stringToDirection(const String& modeString, ExceptionState&);
     static const AtomicString& directionToString(unsigned short mode);
 
-    static PassRefPtr<IDBCursor> create(PassRefPtr<IDBCursorBackendInterface>, IndexedDB::CursorDirection, IDBRequest*, IDBAny* source, IDBTransaction*);
+    static PassRefPtr<IDBCursor> create(PassOwnPtr<blink::WebIDBCursor>, IndexedDB::CursorDirection, IDBRequest*, IDBAny* source, IDBTransaction*);
     virtual ~IDBCursor();
 
     // Implement the IDL
     const String& direction() const { return directionToString(m_direction); }
-    const ScriptValue& key() const { return m_currentKeyValue; }
-    const ScriptValue& primaryKey() const { return m_currentPrimaryKeyValue; }
-    const ScriptValue& value() const { return m_currentValue; }
-    IDBAny* source() const { return m_source.get(); }
+    ScriptValue key(ExecutionContext*);
+    ScriptValue primaryKey(ExecutionContext*);
+    ScriptValue value(ExecutionContext*);
+    ScriptValue source(ExecutionContext*) const;
 
     PassRefPtr<IDBRequest> update(ScriptState*, ScriptValue&, ExceptionState&);
     void advance(unsigned long, ExceptionState&);
-    void continueFunction(ScriptExecutionContext*, const ScriptValue& key, ExceptionState&);
-    PassRefPtr<IDBRequest> deleteFunction(ScriptExecutionContext*, ExceptionState&);
+    void continueFunction(ExecutionContext*, const ScriptValue& key, ExceptionState&);
+    void continuePrimaryKey(ExecutionContext*, const ScriptValue& key, const ScriptValue& primaryKey, ExceptionState&);
+    PassRefPtr<IDBRequest> deleteFunction(ExecutionContext*, ExceptionState&);
 
-    void continueFunction(PassRefPtr<IDBKey>, ExceptionState&);
+    bool isKeyDirty() const { return m_keyDirty; }
+    bool isPrimaryKeyDirty() const { return m_primaryKeyDirty; }
+    bool isValueDirty() const { return m_valueDirty; }
+
+    void continueFunction(PassRefPtr<IDBKey>, PassRefPtr<IDBKey> primaryKey, ExceptionState&);
     void postSuccessHandlerCallback();
     void close();
-    void setValueReady(DOMRequestState*, PassRefPtr<IDBKey>, PassRefPtr<IDBKey> primaryKey, ScriptValue&);
-    PassRefPtr<IDBKey> idbPrimaryKey() { return m_currentPrimaryKey; }
+    void setValueReady(PassRefPtr<IDBKey>, PassRefPtr<IDBKey> primaryKey, PassRefPtr<SharedBuffer> value);
+    PassRefPtr<IDBKey> idbPrimaryKey() const { return m_primaryKey; }
+    IDBRequest* request() const { return m_request.get(); }
     virtual bool isKeyCursor() const { return true; }
     virtual bool isCursorWithValue() const { return false; }
 
+    void deref()
+    {
+        if (derefBase())
+            delete this;
+        else if (hasOneRef())
+            checkForReferenceCycle();
+    }
+
 protected:
-    IDBCursor(PassRefPtr<IDBCursorBackendInterface>, IndexedDB::CursorDirection, IDBRequest*, IDBAny* source, IDBTransaction*);
+    IDBCursor(PassOwnPtr<blink::WebIDBCursor>, IndexedDB::CursorDirection, IDBRequest*, IDBAny* source, IDBTransaction*);
 
 private:
-    PassRefPtr<IDBObjectStore> effectiveObjectStore();
+    PassRefPtr<IDBObjectStore> effectiveObjectStore() const;
 
+    void checkForReferenceCycle();
     bool isDeleted() const;
 
-    RefPtr<IDBCursorBackendInterface> m_backend;
+    OwnPtr<blink::WebIDBCursor> m_backend;
     RefPtr<IDBRequest> m_request;
     const IndexedDB::CursorDirection m_direction;
     RefPtr<IDBAny> m_source;
     RefPtr<IDBTransaction> m_transaction;
-    IDBTransaction::OpenCursorNotifier m_transactionNotifier;
     bool m_gotValue;
-    // These values are held because m_backend may advance while they
-    // are still valid for the current success handlers.
-    ScriptValue m_currentKeyValue;
-    ScriptValue m_currentPrimaryKeyValue;
-    RefPtr<IDBKey> m_currentKey;
-    RefPtr<IDBKey> m_currentPrimaryKey;
-    ScriptValue m_currentValue;
+    bool m_keyDirty;
+    bool m_primaryKeyDirty;
+    bool m_valueDirty;
+    RefPtr<IDBKey> m_key;
+    RefPtr<IDBKey> m_primaryKey;
+    RefPtr<SharedBuffer> m_value;
 };
 
 } // namespace WebCore

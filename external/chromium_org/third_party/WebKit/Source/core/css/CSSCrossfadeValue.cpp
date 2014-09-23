@@ -27,10 +27,9 @@
 #include "core/css/CSSCrossfadeValue.h"
 
 #include "core/css/CSSImageValue.h"
-#include "core/loader/cache/ImageResource.h"
-#include "core/platform/graphics/CrossfadeGeneratedImage.h"
 #include "core/rendering/RenderObject.h"
 #include "core/rendering/style/StyleFetchedImage.h"
+#include "platform/graphics/CrossfadeGeneratedImage.h"
 #include "wtf/text/StringBuilder.h"
 
 namespace WebCore {
@@ -41,7 +40,7 @@ static bool subimageIsPending(CSSValue* value)
         return toCSSImageValue(value)->cachedOrPendingImage()->isPendingImage();
 
     if (value->isImageGeneratorValue())
-        return static_cast<CSSImageGeneratorValue*>(value)->isPending();
+        return toCSSImageGeneratorValue(value)->isPending();
 
     ASSERT_NOT_REACHED();
 
@@ -54,7 +53,7 @@ static bool subimageKnownToBeOpaque(CSSValue* value, const RenderObject* rendere
         return toCSSImageValue(value)->knownToBeOpaque(renderer);
 
     if (value->isImageGeneratorValue())
-        return static_cast<CSSImageGeneratorValue*>(value)->knownToBeOpaque(renderer);
+        return toCSSImageGeneratorValue(value)->knownToBeOpaque(renderer);
 
     ASSERT_NOT_REACHED();
 
@@ -75,7 +74,7 @@ static ImageResource* cachedImageForCSSValue(CSSValue* value, ResourceFetcher* f
     }
 
     if (value->isImageGeneratorValue()) {
-        static_cast<CSSImageGeneratorValue*>(value)->loadSubimages(fetcher);
+        toCSSImageGeneratorValue(value)->loadSubimages(fetcher);
         // FIXME: Handle CSSImageGeneratorValue (and thus cross-fades with gradients and canvas).
         return 0;
     }
@@ -93,7 +92,7 @@ CSSCrossfadeValue::~CSSCrossfadeValue()
         m_cachedToImage->removeClient(&m_crossfadeSubimageObserver);
 }
 
-String CSSCrossfadeValue::customCssText() const
+String CSSCrossfadeValue::customCSSText() const
 {
     StringBuilder result;
     result.appendLiteral("-webkit-cross-fade(");
@@ -111,7 +110,7 @@ IntSize CSSCrossfadeValue::fixedSize(const RenderObject* renderer)
     float percentage = m_percentageValue->getFloatValue();
     float inversePercentage = 1 - percentage;
 
-    ResourceFetcher* fetcher = renderer->document()->fetcher();
+    ResourceFetcher* fetcher = renderer->document().fetcher();
     ImageResource* cachedFromImage = cachedImageForCSSValue(m_fromValue.get(), fetcher);
     ImageResource* cachedToImage = cachedImageForCSSValue(m_toValue.get(), fetcher);
 
@@ -170,7 +169,7 @@ PassRefPtr<Image> CSSCrossfadeValue::image(RenderObject* renderer, const IntSize
     if (size.isEmpty())
         return 0;
 
-    ResourceFetcher* fetcher = renderer->document()->fetcher();
+    ResourceFetcher* fetcher = renderer->document().fetcher();
     ImageResource* cachedFromImage = cachedImageForCSSValue(m_fromValue.get(), fetcher);
     ImageResource* cachedToImage = cachedImageForCSSValue(m_toValue.get(), fetcher);
 

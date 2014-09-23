@@ -25,17 +25,17 @@
 #include "core/svg/SVGAnimateElement.h"
 
 #include "CSSPropertyNames.h"
-#include "SVGNames.h"
 #include "core/css/CSSParser.h"
 #include "core/css/StylePropertySet.h"
 #include "core/dom/QualifiedName.h"
 #include "core/svg/SVGAnimatedType.h"
 #include "core/svg/SVGAnimatedTypeAnimator.h"
 #include "core/svg/SVGAnimatorFactory.h"
+#include "core/svg/SVGDocumentExtensions.h"
 
 namespace WebCore {
 
-SVGAnimateElement::SVGAnimateElement(const QualifiedName& tagName, Document* document)
+SVGAnimateElement::SVGAnimateElement(const QualifiedName& tagName, Document& document)
     : SVGAnimationElement(tagName, document)
     , m_animatedPropertyType(AnimatedString)
 {
@@ -43,13 +43,15 @@ SVGAnimateElement::SVGAnimateElement(const QualifiedName& tagName, Document* doc
     ScriptWrappable::init(this);
 }
 
-PassRefPtr<SVGAnimateElement> SVGAnimateElement::create(const QualifiedName& tagName, Document* document)
+PassRefPtr<SVGAnimateElement> SVGAnimateElement::create(Document& document)
 {
-    return adoptRef(new SVGAnimateElement(tagName, document));
+    return adoptRef(new SVGAnimateElement(SVGNames::animateTag, document));
 }
 
 SVGAnimateElement::~SVGAnimateElement()
 {
+    if (targetElement())
+        clearAnimatedType(targetElement());
 }
 
 bool SVGAnimateElement::hasValidAttributeType()
@@ -97,7 +99,7 @@ void SVGAnimateElement::calculateAnimatedValue(float percentage, unsigned repeat
 {
     ASSERT(resultElement);
     SVGElement* targetElement = this->targetElement();
-    if (!targetElement)
+    if (!targetElement || !isSVGAnimateElement(*resultElement))
         return;
 
     ASSERT(m_animatedPropertyType == determineAnimatedPropertyType(targetElement));
@@ -111,12 +113,7 @@ void SVGAnimateElement::calculateAnimatedValue(float percentage, unsigned repeat
     ASSERT(m_fromType->type() == m_animatedPropertyType);
     ASSERT(m_toType);
 
-    ASSERT(resultElement->hasTagName(SVGNames::animateTag)
-        || resultElement->hasTagName(SVGNames::animateColorTag)
-        || resultElement->hasTagName(SVGNames::animateTransformTag)
-        || resultElement->hasTagName(SVGNames::setTag));
-
-    SVGAnimateElement* resultAnimationElement = static_cast<SVGAnimateElement*>(resultElement);
+    SVGAnimateElement* resultAnimationElement = toSVGAnimateElement(resultElement);
     ASSERT(resultAnimationElement->m_animatedType);
     ASSERT(resultAnimationElement->m_animatedPropertyType == m_animatedPropertyType);
 
@@ -170,6 +167,10 @@ bool SVGAnimateElement::calculateFromAndByValues(const String& fromString, const
     if (animationMode() == ByAnimation && !isAdditive())
         return false;
 
+    // from-by animation may only be used with attributes that support addition (e.g. most numeric attributes).
+    if (animationMode() == FromByAnimation && !animatedPropertyTypeSupportsAddition())
+        return false;
+
     ASSERT(!hasTagName(SVGNames::setTag));
 
     determinePropertyValueTypes(fromString, byString);
@@ -212,6 +213,10 @@ void SVGAnimateElement::resetAnimatedType()
     if (shouldApply == ApplyXMLAnimation) {
         // SVG DOM animVal animation code-path.
         m_animatedProperties = animator->findAnimatedPropertiesForAttributeName(targetElement, attributeName);
+        SVGElementAnimatedPropertyList::const_iterator end = m_animatedProperties.end();
+        for (SVGElementAnimatedPropertyList::const_iterator it = m_animatedProperties.begin(); it != end; ++it)
+            document().accessSVGExtensions()->addElementReferencingTarget(this, it->element);
+
         ASSERT(!m_animatedProperties.isEmpty());
 
         ASSERT(propertyTypesAreConsistent(m_animatedPropertyType, m_animatedProperties));
@@ -241,7 +246,7 @@ void SVGAnimateElement::resetAnimatedType()
 
 static inline void applyCSSPropertyToTarget(SVGElement* targetElement, CSSPropertyID id, const String& value)
 {
-    ASSERT(!targetElement->m_deletionHasBegun);
+    ASSERT_WITH_SECURITY_IMPLICATION(!targetElement->m_deletionHasBegun);
 
     MutableStylePropertySet* propertySet = targetElement->ensureAnimatedSMILStyleProperties();
     if (!propertySet->setProperty(id, value, false, 0))
@@ -252,7 +257,7 @@ static inline void applyCSSPropertyToTarget(SVGElement* targetElement, CSSProper
 
 static inline void removeCSSPropertyFromTarget(SVGElement* targetElement, CSSPropertyID id)
 {
-    ASSERT(!targetElement->m_deletionHasBegun);
+    ASSERT_WITH_SECURITY_IMPLICATION(!targetElement->m_deletionHasBegun);
     targetElement->ensureAnimatedSMILStyleProperties()->removeProperty(id);
     targetElement->setNeedsStyleRecalc(LocalStyleChange);
 }
@@ -299,7 +304,7 @@ static inline void removeCSSPropertyFromTargetAndInstances(SVGElement* targetEle
 
 static inline void notifyTargetAboutAnimValChange(SVGElement* targetElement, const QualifiedName& attributeName)
 {
-    ASSERT(!targetElement->m_deletionHasBegun);
+    ASSERT_WITH_SECURITY_IMPLICATION(!targetElement->m_deletionHasBegun);
     targetElement->svgAttributeChanged(attributeName);
 }
 
@@ -372,21 +377,26 @@ void SVGAnimateElement::applyResultsToTarget()
     notifyTargetAndInstancesAboutAnimValChange(targetElement(), attributeName());
 }
 
+bool SVGAnimateElement::animatedPropertyTypeSupportsAddition() const
+{
+    // Spec: http://www.w3.org/TR/SVG/animate.html#AnimationAttributesAndProperties.
+    switch (m_animatedPropertyType) {
+    case AnimatedBoolean:
+    case AnimatedEnumeration:
+    case AnimatedPreserveAspectRatio:
+    case AnimatedString:
+    case AnimatedUnknown:
+        return false;
+    default:
+        return true;
+    }
+}
+
 bool SVGAnimateElement::isAdditive() const
 {
-    if (animationMode() == ByAnimation || animationMode() == FromByAnimation) {
-        // Spec: http://www.w3.org/TR/SVG/animate.html#AnimationAttributesAndProperties.
-        switch (m_animatedPropertyType) {
-        case AnimatedBoolean:
-        case AnimatedEnumeration:
-        case AnimatedPreserveAspectRatio:
-        case AnimatedString:
-        case AnimatedUnknown:
+    if (animationMode() == ByAnimation || animationMode() == FromByAnimation)
+        if (!animatedPropertyTypeSupportsAddition())
             return false;
-        default:
-            break;
-        }
-    }
 
     return SVGAnimationElement::isAdditive();
 }

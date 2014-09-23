@@ -24,8 +24,9 @@
 
 #include "wtf/Alignment.h"
 #include "wtf/Assertions.h"
-#include "wtf/FastMalloc.h"
 #include "wtf/HashTraits.h"
+#include "wtf/PartitionAlloc.h"
+#include "wtf/WTF.h"
 #include <string.h>
 
 #define DUMP_HASHTABLE_STATS 0
@@ -271,8 +272,10 @@ namespace WTF {
         HashTable();
         ~HashTable()
         {
-            if (m_table)
-                deallocateTable(m_table, m_tableSize);
+            if (LIKELY(!m_table))
+                return;
+            deallocateTable(m_table, m_tableSize);
+            m_table = 0;
         }
 
         HashTable(const HashTable&);
@@ -287,8 +290,8 @@ namespace WTF {
         const_iterator begin() const { return isEmpty() ? end() : makeConstIterator(m_table); }
         const_iterator end() const { return makeKnownGoodConstIterator(m_table + m_tableSize); }
 
-        int size() const { return m_keyCount; }
-        int capacity() const { return m_tableSize; }
+        unsigned size() const { return m_keyCount; }
+        unsigned capacity() const { return m_tableSize; }
         bool isEmpty() const { return !m_keyCount; }
 
         AddResult add(const ValueType& value) { return add<IdentityTranslatorType>(Extractor::extract(value), value); }
@@ -320,8 +323,8 @@ namespace WTF {
         template<typename HashTranslator, typename T> ValueType* lookup(const T&);
 
     private:
-        static ValueType* allocateTable(int size);
-        static void deallocateTable(ValueType* table, int size);
+        static ValueType* allocateTable(unsigned size);
+        static void deallocateTable(ValueType* table, unsigned size);
 
         typedef std::pair<ValueType*, bool> LookupType;
         typedef std::pair<LookupType, unsigned> FullLookupType;
@@ -338,7 +341,7 @@ namespace WTF {
         void expand();
         void shrink() { rehash(m_tableSize / 2); }
 
-        void rehash(int newTableSize);
+        void rehash(unsigned newTableSize);
         void reinsert(ValueType&);
 
         static void initializeBucket(ValueType& bucket);
@@ -352,14 +355,14 @@ namespace WTF {
         iterator makeKnownGoodIterator(ValueType* pos) { return iterator(this, pos, m_table + m_tableSize, HashItemKnownGood); }
         const_iterator makeKnownGoodConstIterator(ValueType* pos) const { return const_iterator(this, pos, m_table + m_tableSize, HashItemKnownGood); }
 
-        static const int m_maxLoad = 2;
-        static const int m_minLoad = 6;
+        static const unsigned m_maxLoad = 2;
+        static const unsigned m_minLoad = 6;
 
         ValueType* m_table;
-        int m_tableSize;
-        int m_tableSizeMask;
-        int m_keyCount;
-        int m_deletedCount;
+        unsigned m_tableSize;
+        unsigned m_tableSizeMask;
+        unsigned m_keyCount;
+        unsigned m_deletedCount;
 
 #if DUMP_HASHTABLE_STATS_PER_TABLE
     public:
@@ -855,48 +858,51 @@ namespace WTF {
     }
 
     template<typename Key, typename Value, typename Extractor, typename HashFunctions, typename Traits, typename KeyTraits>
-    Value* HashTable<Key, Value, Extractor, HashFunctions, Traits, KeyTraits>::allocateTable(int size)
+    Value* HashTable<Key, Value, Extractor, HashFunctions, Traits, KeyTraits>::allocateTable(unsigned size)
     {
-        // would use a template member function with explicit specializations here, but
-        // gcc doesn't appear to support that
-        if (Traits::emptyValueIsZero)
-            return static_cast<ValueType*>(fastZeroedMalloc(size * sizeof(ValueType)));
-        ValueType* result = static_cast<ValueType*>(fastMalloc(size * sizeof(ValueType)));
-        for (int i = 0; i < size; i++)
-            initializeBucket(result[i]);
+        size_t allocSize = size * sizeof(ValueType);
+        ValueType* result = static_cast<ValueType*>(partitionAllocGeneric(WTF::Partitions::getBufferPartition(), allocSize));
+        if (Traits::emptyValueIsZero) {
+            memset(result, '\0', allocSize);
+        } else {
+            for (unsigned i = 0; i < size; i++)
+                initializeBucket(result[i]);
+        }
         return result;
     }
 
     template<typename Key, typename Value, typename Extractor, typename HashFunctions, typename Traits, typename KeyTraits>
-    void HashTable<Key, Value, Extractor, HashFunctions, Traits, KeyTraits>::deallocateTable(ValueType* table, int size)
+    void HashTable<Key, Value, Extractor, HashFunctions, Traits, KeyTraits>::deallocateTable(ValueType* table, unsigned size)
     {
         if (Traits::needsDestruction) {
-            for (int i = 0; i < size; ++i) {
+            for (unsigned i = 0; i < size; ++i) {
                 if (!isDeletedBucket(table[i]))
                     table[i].~ValueType();
             }
         }
-        fastFree(table);
+        partitionFreeGeneric(WTF::Partitions::getBufferPartition(), table);
     }
 
     template<typename Key, typename Value, typename Extractor, typename HashFunctions, typename Traits, typename KeyTraits>
     void HashTable<Key, Value, Extractor, HashFunctions, Traits, KeyTraits>::expand()
     {
-        int newSize;
-        if (m_tableSize == 0)
+        unsigned newSize;
+        if (!m_tableSize) {
             newSize = KeyTraits::minimumTableSize;
-        else if (mustRehashInPlace())
+        } else if (mustRehashInPlace()) {
             newSize = m_tableSize;
-        else
+        } else {
             newSize = m_tableSize * 2;
+            RELEASE_ASSERT(newSize > m_tableSize);
+        }
 
         rehash(newSize);
     }
 
     template<typename Key, typename Value, typename Extractor, typename HashFunctions, typename Traits, typename KeyTraits>
-    void HashTable<Key, Value, Extractor, HashFunctions, Traits, KeyTraits>::rehash(int newTableSize)
+    void HashTable<Key, Value, Extractor, HashFunctions, Traits, KeyTraits>::rehash(unsigned newTableSize)
     {
-        int oldTableSize = m_tableSize;
+        unsigned oldTableSize = m_tableSize;
         ValueType* oldTable = m_table;
 
 #if DUMP_HASHTABLE_STATS
@@ -913,7 +919,7 @@ namespace WTF {
         m_tableSizeMask = newTableSize - 1;
         m_table = allocateTable(newTableSize);
 
-        for (int i = 0; i != oldTableSize; ++i)
+        for (unsigned i = 0; i != oldTableSize; ++i)
             if (!isEmptyOrDeletedBucket(oldTable[i]))
                 reinsert(oldTable[i]);
 

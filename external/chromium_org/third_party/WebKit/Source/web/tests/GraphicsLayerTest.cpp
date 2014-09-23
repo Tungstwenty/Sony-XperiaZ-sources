@@ -24,12 +24,12 @@
 
 #include "config.h"
 
-#include "core/platform/graphics/GraphicsLayer.h"
+#include "platform/graphics/GraphicsLayer.h"
 
-#include "core/platform/ScrollableArea.h"
-#include "core/platform/graphics/transforms/Matrix3DTransformOperation.h"
-#include "core/platform/graphics/transforms/RotateTransformOperation.h"
-#include "core/platform/graphics/transforms/TranslateTransformOperation.h"
+#include "platform/scroll/ScrollableArea.h"
+#include "platform/transforms/Matrix3DTransformOperation.h"
+#include "platform/transforms/RotateTransformOperation.h"
+#include "platform/transforms/TranslateTransformOperation.h"
 #include "wtf/PassOwnPtr.h"
 
 #include <gtest/gtest.h>
@@ -42,20 +42,23 @@
 #include "public/platform/WebUnitTestSupport.h"
 
 using namespace WebCore;
-using namespace WebKit;
+using namespace blink;
 
 namespace {
 
 class MockGraphicsLayerClient : public GraphicsLayerClient {
 public:
-    virtual void notifyAnimationStarted(const GraphicsLayer*, double time) OVERRIDE { }
+    virtual void notifyAnimationStarted(const GraphicsLayer*, double wallClockTime, double monotonicTime) OVERRIDE { }
     virtual void paintContents(const GraphicsLayer*, GraphicsContext&, GraphicsLayerPaintingPhase, const IntRect& inClip) OVERRIDE { }
+    virtual String debugName(const GraphicsLayer*) OVERRIDE { return String(); }
 };
 
 class GraphicsLayerForTesting : public GraphicsLayer {
 public:
     explicit GraphicsLayerForTesting(GraphicsLayerClient* client)
         : GraphicsLayer(client) { };
+
+    virtual blink::WebLayer* contentsLayer() const { return GraphicsLayer::contentsLayer(); }
 };
 
 class GraphicsLayerTest : public testing::Test {
@@ -93,7 +96,7 @@ TEST_F(GraphicsLayerTest, updateLayerPreserves3DWithAnimations)
     curve->add(WebFloatKeyframe(0.0, 0.0));
     OwnPtr<WebAnimation> floatAnimation(adoptPtr(Platform::current()->compositorSupport()->createAnimation(*curve, WebAnimation::TargetPropertyOpacity)));
     int animationId = floatAnimation->id();
-    ASSERT_TRUE(m_platformLayer->addAnimation(floatAnimation.get()));
+    ASSERT_TRUE(m_platformLayer->addAnimation(floatAnimation.leakPtr()));
 
     ASSERT_TRUE(m_platformLayer->hasActiveAnimation());
 
@@ -129,6 +132,7 @@ public:
     virtual void invalidateScrollbarRect(Scrollbar*, const IntRect&) OVERRIDE { }
     virtual void invalidateScrollCornerRect(const IntRect&) OVERRIDE { }
     virtual bool userInputScrollable(ScrollbarOrientation) const OVERRIDE { return true; }
+    virtual bool shouldPlaceVerticalScrollbarOnLeft() const OVERRIDE { return false; }
     virtual int pageStep(ScrollbarOrientation) const OVERRIDE { return 0; }
     virtual IntPoint minimumScrollPosition() const OVERRIDE { return IntPoint(); }
     virtual IntPoint maximumScrollPosition() const OVERRIDE

@@ -43,7 +43,7 @@ static bool isListOrIndentBlockquote(const Node* node)
     return node && (node->hasTagName(ulTag) || node->hasTagName(olTag) || node->hasTagName(blockquoteTag));
 }
 
-IndentOutdentCommand::IndentOutdentCommand(Document* document, EIndentType typeOfAction, int marginInPixels)
+IndentOutdentCommand::IndentOutdentCommand(Document& document, EIndentType typeOfAction, int marginInPixels)
     : ApplyBlockElementCommand(document, blockquoteTag, "margin: 0 0 0 40px; border: none; padding: 0px;")
     , m_typeOfAction(typeOfAction)
     , m_marginInPixels(marginInPixels)
@@ -69,10 +69,21 @@ bool IndentOutdentCommand::tryIndentingAsListItem(const Position& start, const P
     RefPtr<Element> previousList = selectedListItem->previousElementSibling();
     RefPtr<Element> nextList = selectedListItem->nextElementSibling();
 
-    RefPtr<Element> newList = document()->createElement(listNode->tagQName(), false);
+    // We should calculate visible range in list item because inserting new
+    // list element will change visibility of list item, e.g. :first-child
+    // CSS selector.
+    RefPtr<Element> newList = document().createElement(listNode->tagQName(), false);
     insertNodeBefore(newList, selectedListItem.get());
 
-    moveParagraphWithClones(start, end, newList.get(), selectedListItem.get());
+    // We should clone all the children of the list item for indenting purposes. However, in case the current
+    // selection does not encompass all its children, we need to explicitally handle the same. The original
+    // list item too would require proper deletion in that case.
+    if (end.anchorNode() == selectedListItem.get() || end.anchorNode()->isDescendantOf(selectedListItem->lastChild())) {
+        moveParagraphWithClones(start, end, newList.get(), selectedListItem.get());
+    } else {
+        moveParagraphWithClones(start, positionAfterNode(selectedListItem->lastChild()), newList.get(), selectedListItem.get());
+        removeNode(selectedListItem.get());
+    }
 
     if (canMergeLists(previousList.get(), newList.get()))
         mergeIdenticalElements(previousList.get(), newList.get());
@@ -96,7 +107,6 @@ void IndentOutdentCommand::indentIntoBlockquote(const Position& start, const Pos
     if (!nodeToSplitTo)
         return;
 
-    RefPtr<Node> nodeAfterStart = start.computeNodeAfterPosition();
     RefPtr<Node> outerBlock = (start.containerNode() == nodeToSplitTo) ? start.containerNode() : splitTreeToNode(start.containerNode(), nodeToSplitTo);
 
     VisiblePosition startOfContents = start;
@@ -156,7 +166,7 @@ void IndentOutdentCommand::outdentParagraph()
             }
         }
 
-        document()->updateLayoutIgnorePendingStylesheets();
+        document().updateLayoutIgnorePendingStylesheets();
         visibleStartOfParagraph = VisiblePosition(visibleStartOfParagraph.deepEquivalent());
         visibleEndOfParagraph = VisiblePosition(visibleEndOfParagraph.deepEquivalent());
         if (visibleStartOfParagraph.isNotNull() && !isStartOfParagraph(visibleStartOfParagraph))
@@ -183,16 +193,16 @@ void IndentOutdentCommand::outdentParagraph()
 // FIXME: We should merge this function with ApplyBlockElementCommand::formatSelection
 void IndentOutdentCommand::outdentRegion(const VisiblePosition& startOfSelection, const VisiblePosition& endOfSelection)
 {
+    VisiblePosition endOfCurrentParagraph = endOfParagraph(startOfSelection);
     VisiblePosition endOfLastParagraph = endOfParagraph(endOfSelection);
 
-    if (endOfParagraph(startOfSelection) == endOfLastParagraph) {
+    if (endOfCurrentParagraph == endOfLastParagraph) {
         outdentParagraph();
         return;
     }
 
     Position originalSelectionEnd = endingSelection().end();
-    VisiblePosition endOfCurrentParagraph = endOfParagraph(startOfSelection);
-    VisiblePosition endAfterSelection = endOfParagraph(endOfParagraph(endOfSelection).next());
+    VisiblePosition endAfterSelection = endOfParagraph(endOfLastParagraph.next());
 
     while (endOfCurrentParagraph != endAfterSelection) {
         VisiblePosition endOfNextParagraph = endOfParagraph(endOfCurrentParagraph.next());
@@ -206,10 +216,10 @@ void IndentOutdentCommand::outdentRegion(const VisiblePosition& startOfSelection
         // outdentParagraph could move more than one paragraph if the paragraph
         // is in a list item. As a result, endAfterSelection and endOfNextParagraph
         // could refer to positions no longer in the document.
-        if (endAfterSelection.isNotNull() && !endAfterSelection.deepEquivalent().anchorNode()->inDocument())
+        if (endAfterSelection.isNotNull() && !endAfterSelection.deepEquivalent().inDocument())
             break;
 
-        if (endOfNextParagraph.isNotNull() && !endOfNextParagraph.deepEquivalent().anchorNode()->inDocument()) {
+        if (endOfNextParagraph.isNotNull() && !endOfNextParagraph.deepEquivalent().inDocument()) {
             endOfCurrentParagraph = endingSelection().end();
             endOfNextParagraph = endOfParagraph(endOfCurrentParagraph.next());
         }

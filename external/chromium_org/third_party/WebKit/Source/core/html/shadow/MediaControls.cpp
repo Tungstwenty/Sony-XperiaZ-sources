@@ -33,8 +33,8 @@ namespace WebCore {
 
 static const double timeWithoutMouseMovementBeforeHidingFullscreenControls = 3;
 
-MediaControls::MediaControls(Document* document)
-    : HTMLDivElement(HTMLNames::divTag, document)
+MediaControls::MediaControls(Document& document)
+    : HTMLDivElement(document)
     , m_mediaController(0)
     , m_panel(0)
     , m_textDisplayContainer(0)
@@ -79,7 +79,7 @@ void MediaControls::setMediaController(MediaControllerInterface* controller)
 
 void MediaControls::reset()
 {
-    Page* page = document()->page();
+    Page* page = document().page();
     if (!page)
         return;
 
@@ -88,12 +88,12 @@ void MediaControls::reset()
     updateCurrentTimeDisplay();
 
     double duration = m_mediaController->duration();
-    if (std::isfinite(duration) || page->theme()->hasOwnDisabledStateHandlingFor(MediaSliderPart)) {
+    if (std::isfinite(duration) || RenderTheme::theme().hasOwnDisabledStateHandlingFor(MediaSliderPart)) {
         m_timeline->setDuration(duration);
         m_timeline->setPosition(m_mediaController->currentTime());
     }
 
-    if (m_mediaController->hasAudio() || page->theme()->hasOwnDisabledStateHandlingFor(MediaMuteButtonPart))
+    if (m_mediaController->hasAudio() || RenderTheme::theme().hasOwnDisabledStateHandlingFor(MediaMuteButtonPart))
         m_panelMuteButton->show();
     else
         m_panelMuteButton->hide();
@@ -121,19 +121,19 @@ void MediaControls::reset()
 
 void MediaControls::reportedError()
 {
-    Page* page = document()->page();
+    Page* page = document().page();
     if (!page)
         return;
 
-    if (!page->theme()->hasOwnDisabledStateHandlingFor(MediaMuteButtonPart)) {
+    if (!RenderTheme::theme().hasOwnDisabledStateHandlingFor(MediaMuteButtonPart)) {
         m_panelMuteButton->hide();
         m_volumeSlider->hide();
     }
 
-    if (m_toggleClosedCaptionsButton && !page->theme()->hasOwnDisabledStateHandlingFor(MediaToggleClosedCaptionsButtonPart))
+    if (m_toggleClosedCaptionsButton && !RenderTheme::theme().hasOwnDisabledStateHandlingFor(MediaToggleClosedCaptionsButtonPart))
         m_toggleClosedCaptionsButton->hide();
 
-    if (m_fullScreenButton && !page->theme()->hasOwnDisabledStateHandlingFor(MediaEnterFullscreenButtonPart))
+    if (m_fullScreenButton && !RenderTheme::theme().hasOwnDisabledStateHandlingFor(MediaEnterFullscreenButtonPart))
         m_fullScreenButton->hide();
 }
 
@@ -268,7 +268,7 @@ void MediaControls::defaultEventHandler(Event* event)
 {
     HTMLDivElement::defaultEventHandler(event);
 
-    if (event->type() == eventNames().mouseoverEvent) {
+    if (event->type() == EventTypeNames::mouseover) {
         if (!containsRelatedTarget(event)) {
             m_isMouseOverControls = true;
             if (!m_mediaController->canPlay()) {
@@ -280,7 +280,7 @@ void MediaControls::defaultEventHandler(Event* event)
         return;
     }
 
-    if (event->type() == eventNames().mouseoutEvent) {
+    if (event->type() == EventTypeNames::mouseout) {
         if (!containsRelatedTarget(event)) {
             m_isMouseOverControls = false;
             stopHideFullscreenControlsTimer();
@@ -288,7 +288,7 @@ void MediaControls::defaultEventHandler(Event* event)
         return;
     }
 
-    if (event->type() == eventNames().mousemoveEvent) {
+    if (event->type() == EventTypeNames::mousemove) {
         if (m_isFullscreen) {
             // When we get a mouse move in fullscreen mode, show the media controls, and start a timer
             // that will hide the media controls after a 3 seconds without a mouse move.
@@ -319,7 +319,7 @@ void MediaControls::startHideFullscreenControlsTimer()
     if (!m_isFullscreen)
         return;
 
-    Page* page = document()->page();
+    Page* page = document().page();
     if (!page)
         return;
 
@@ -331,7 +331,7 @@ void MediaControls::stopHideFullscreenControlsTimer()
     m_hideFullscreenControlsTimer.stop();
 }
 
-const AtomicString& MediaControls::part() const
+const AtomicString& MediaControls::pseudo() const
 {
     DEFINE_STATIC_LOCAL(AtomicString, id, ("-webkit-media-controls"));
     return id;
@@ -359,7 +359,7 @@ void MediaControls::createTextTrackDisplay()
         m_textDisplayContainer->setMediaController(m_mediaController);
 
     // Insert it before the first controller element so it always displays behind the controls.
-    insertBefore(textDisplayContainer.release(), m_panel, IGNORE_EXCEPTION, AttachLazily);
+    insertBefore(textDisplayContainer.release(), m_panel, IGNORE_EXCEPTION);
 }
 
 void MediaControls::showTextTrackDisplay()

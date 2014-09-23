@@ -31,7 +31,7 @@
 #include "core/css/StyleSheetContents.h"
 #include "core/dom/ContainerNode.h"
 #include "core/dom/Document.h"
-#include "core/dom/NodeTraversal.h"
+#include "core/dom/ElementTraversal.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/html/HTMLStyleElement.h"
 
@@ -80,7 +80,7 @@ static bool hasDistributedRule(StyleSheetContents* styleSheetContents)
 
         const StyleRule* styleRule = toStyleRule(rule);
         const CSSSelectorList& selectorList = styleRule->selectorList();
-        for (size_t selectorIndex = 0; selectorIndex != notFound; selectorIndex = selectorList.indexOfNextSelectorAfter(selectorIndex)) {
+        for (size_t selectorIndex = 0; selectorIndex != kNotFound; selectorIndex = selectorList.indexOfNextSelectorAfter(selectorIndex)) {
             if (selectorList.hasShadowDistributedAt(selectorIndex))
                 return true;
         }
@@ -92,15 +92,50 @@ static Node* determineScopingNodeForStyleScoped(HTMLStyleElement* ownerElement, 
 {
     ASSERT(ownerElement && ownerElement->isRegisteredAsScoped());
 
-    if (ownerElement->isInShadowTree() && hasDistributedRule(styleSheetContents)) {
-        ContainerNode* scope = ownerElement;
-        do {
-            scope = scope->containingShadowRoot()->shadowHost();
-        } while (scope->isInShadowTree());
+    if (ownerElement->isInShadowTree()) {
+        if (hasDistributedRule(styleSheetContents)) {
+            ContainerNode* scope = ownerElement;
+            do {
+                scope = scope->containingShadowRoot()->shadowHost();
+            } while (scope->isInShadowTree());
 
-        return scope;
+            return scope;
+        }
+        if (ownerElement->isRegisteredAsScoped())
+            return ownerElement->containingShadowRoot()->shadowHost();
     }
+
     return ownerElement->isRegisteredInShadowRoot() ? ownerElement->containingShadowRoot()->shadowHost() : ownerElement->parentNode();
+}
+
+static bool ruleAdditionMightRequireDocumentStyleRecalc(StyleRuleBase* rule)
+{
+    // This funciton is conservative. We only return false when we know that
+    // the added @rule can't require style recalcs.
+    switch (rule->type()) {
+    case StyleRule::Import: // Whatever we import should do its own analysis, we don't need to invalidate the document here!
+    case StyleRule::Keyframes: // Keyframes never cause style invalidations and are handled during sheet insertion.
+    case StyleRule::Page: // Page rules apply only during printing, we force a full-recalc before printing.
+        return false;
+
+    case StyleRule::Media: // If the media rule doesn't apply, we could avoid recalc.
+    case StyleRule::FontFace: // If the fonts aren't in use, we could avoid recalc.
+    case StyleRule::Supports: // If we evaluated the supports-clause we could avoid recalc.
+    case StyleRule::Viewport: // If the viewport doesn't match, we could avoid recalcing.
+    // FIXME: Unclear if any of the rest need to cause style recalc:
+    case StyleRule::Region:
+    case StyleRule::Filter:
+        return true;
+
+    // These should all be impossible to reach:
+    case StyleRule::Unknown:
+    case StyleRule::Charset:
+    case StyleRule::Keyframe:
+    case StyleRule::Style:
+        break;
+    }
+    ASSERT_NOT_REACHED();
+    return true;
 }
 
 void StyleInvalidationAnalysis::analyzeStyleSheet(StyleSheetContents* styleSheetContents)
@@ -129,11 +164,13 @@ void StyleInvalidationAnalysis::analyzeStyleSheet(StyleSheetContents* styleSheet
     for (unsigned i = 0; i < rules.size(); i++) {
         StyleRuleBase* rule = rules[i].get();
         if (!rule->isStyleRule()) {
-            // FIXME: Media rules and maybe some others could be allowed.
-            m_dirtiesAllStyle = true;
-            return;
+            if (ruleAdditionMightRequireDocumentStyleRecalc(rule)) {
+                m_dirtiesAllStyle = true;
+                return;
+            }
+            continue;
         }
-        StyleRule* styleRule = static_cast<StyleRule*>(rule);
+        StyleRule* styleRule = toStyleRule(rule);
         if (!determineSelectorScopes(styleRule->selectorList(), m_idScopes, m_classScopes)) {
             m_dirtiesAllStyle = true;
             return;
@@ -155,7 +192,7 @@ static bool elementMatchesSelectorScopes(const Element* element, const HashSet<S
     return false;
 }
 
-void StyleInvalidationAnalysis::invalidateStyle(Document* document)
+void StyleInvalidationAnalysis::invalidateStyle(Document& document)
 {
     ASSERT(!m_dirtiesAllStyle);
 
@@ -171,10 +208,10 @@ void StyleInvalidationAnalysis::invalidateStyle(Document* document)
         if (elementMatchesSelectorScopes(element, m_idScopes, m_classScopes)) {
             element->setNeedsStyleRecalc();
             // The whole subtree is now invalidated, we can skip to the next sibling.
-            element = ElementTraversal::nextSkippingChildren(element);
+            element = ElementTraversal::nextSkippingChildren(*element);
             continue;
         }
-        element = ElementTraversal::next(element);
+        element = ElementTraversal::next(*element);
     }
 }
 

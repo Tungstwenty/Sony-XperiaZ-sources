@@ -33,14 +33,13 @@
 
 #include "EditorClientImpl.h"
 #include "WebTextCheckingResult.h"
-#include "core/editing/SpellChecker.h"
-#include "core/platform/text/TextCheckerClient.h"
+#include "platform/text/TextCheckerClient.h"
 #include "public/platform/WebVector.h"
 #include "wtf/Assertions.h"
 
 using namespace WebCore;
 
-namespace WebKit {
+namespace blink {
 
 static Vector<TextCheckingResult> toCoreResults(const WebVector<WebTextCheckingResult>& results)
 {
@@ -62,4 +61,4 @@ void WebTextCheckingCompletionImpl::didCancelCheckingText()
     delete this;
 }
 
-} // namespace WebKit
+} // namespace blink

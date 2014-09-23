@@ -34,29 +34,47 @@
 #include "bindings/v8/V8Binding.h"
 #include "core/dom/Document.h"
 #include "core/html/HTMLFrameElementBase.h"
-#include "core/html/parser/HTMLParserIdioms.h"
-#include "core/page/DOMWindow.h"
-#include "core/page/Frame.h"
-#include "core/page/Settings.h"
-#include "weborigin/SecurityOrigin.h"
+#include "core/frame/DOMWindow.h"
+#include "core/frame/Frame.h"
+#include "core/frame/Settings.h"
+#include "platform/weborigin/SecurityOrigin.h"
 
 namespace WebCore {
 
-static bool canAccessDocument(Document* targetDocument, SecurityReportingOption reportingOption = ReportSecurityError)
+static bool isDocumentAccessibleFromDOMWindow(Document* targetDocument, DOMWindow* activeWindow)
 {
     if (!targetDocument)
         return false;
 
-    DOMWindow* active = activeDOMWindow();
-    if (!active)
+    if (!activeWindow)
         return false;
 
-    if (active->document()->securityOrigin()->canAccess(targetDocument->securityOrigin()))
+    if (activeWindow->document()->securityOrigin()->canAccess(targetDocument->securityOrigin()))
         return true;
 
-    if (reportingOption == ReportSecurityError) {
+    return false;
+}
+
+static bool canAccessDocument(Document* targetDocument, ExceptionState& exceptionState)
+{
+    DOMWindow* activeWindow = activeDOMWindow();
+    if (isDocumentAccessibleFromDOMWindow(targetDocument, activeWindow))
+        return true;
+
+    if (targetDocument->domWindow())
+        exceptionState.throwSecurityError(targetDocument->domWindow()->sanitizedCrossDomainAccessErrorMessage(activeWindow), targetDocument->domWindow()->crossDomainAccessErrorMessage(activeWindow));
+    return false;
+}
+
+static bool canAccessDocument(Document* targetDocument, SecurityReportingOption reportingOption = ReportSecurityError)
+{
+    DOMWindow* activeWindow = activeDOMWindow();
+    if (isDocumentAccessibleFromDOMWindow(targetDocument, activeWindow))
+        return true;
+
+    if (reportingOption == ReportSecurityError && targetDocument->domWindow()) {
         if (Frame* frame = targetDocument->frame())
-            frame->domWindow()->printErrorMessage(targetDocument->domWindow()->crossDomainAccessErrorMessage(active));
+            frame->domWindow()->printErrorMessage(targetDocument->domWindow()->crossDomainAccessErrorMessage(activeWindow));
     }
 
     return false;
@@ -67,14 +85,14 @@ bool BindingSecurity::shouldAllowAccessToFrame(Frame* target, SecurityReportingO
     return target && canAccessDocument(target->document(), reportingOption);
 }
 
-bool BindingSecurity::shouldAllowAccessToNode(Node* target)
+bool BindingSecurity::shouldAllowAccessToFrame(Frame* target, ExceptionState& exceptionState)
 {
-    return target && canAccessDocument(target->document());
+    return target && canAccessDocument(target->document(), exceptionState);
 }
 
-bool BindingSecurity::allowSettingFrameSrcToJavascriptUrl(HTMLFrameElementBase* frame, const String& value)
+bool BindingSecurity::shouldAllowAccessToNode(Node* target, ExceptionState& exceptionState)
 {
-    return !protocolIsJavaScript(stripLeadingAndTrailingHTMLSpaces(value)) || canAccessDocument(frame->contentDocument());
+    return target && canAccessDocument(&target->document(), exceptionState);
 }
 
 }

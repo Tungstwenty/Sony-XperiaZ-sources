@@ -27,7 +27,8 @@
 #include "core/html/track/TextTrackList.h"
 
 #include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "core/dom/EventNames.h"
+#include "core/events/GenericEventQueue.h"
+#include "core/events/ThreadLocalEventNames.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/track/InbandTextTrack.h"
 #include "core/html/track/LoadableTextTrack.h"
@@ -36,18 +37,16 @@
 
 using namespace WebCore;
 
-TextTrackList::TextTrackList(HTMLMediaElement* owner, ScriptExecutionContext* context)
-    : m_context(context)
-    , m_owner(owner)
-    , m_pendingEventTimer(this, &TextTrackList::asyncEventTimerFired)
-    , m_dispatchingEvents(0)
+TextTrackList::TextTrackList(HTMLMediaElement* owner)
+    : m_owner(owner)
+    , m_asyncEventQueue(GenericEventQueue::create(this))
 {
-    ASSERT(context->isDocument());
     ScriptWrappable::init(this);
 }
 
 TextTrackList::~TextTrackList()
 {
+    m_asyncEventQueue->close();
 }
 
 unsigned TextTrackList::length() const
@@ -131,6 +130,22 @@ TextTrack* TextTrackList::item(unsigned index)
     return 0;
 }
 
+TextTrack* TextTrackList::getTrackById(const AtomicString& id)
+{
+    // 4.8.10.12.5 Text track API
+    // The getTrackById(id) method must return the first TextTrack in the
+    // TextTrackList object whose id IDL attribute would return a value equal
+    // to the value of the id argument.
+    for (unsigned i = 0; i < length(); ++i) {
+        TextTrack* track = item(i);
+        if (track->id() == id)
+            return track;
+    }
+
+    // When no tracks match the given argument, the method must return null.
+    return 0;
+}
+
 void TextTrackList::invalidateTrackIndexesAfterTrack(TextTrack* track)
 {
     Vector<RefPtr<TextTrack> >* tracks = 0;
@@ -151,7 +166,7 @@ void TextTrackList::invalidateTrackIndexesAfterTrack(TextTrack* track)
         ASSERT_NOT_REACHED();
 
     size_t index = tracks->find(track);
-    if (index == notFound)
+    if (index == kNotFound)
         return;
 
     for (size_t i = index; i < tracks->size(); ++i)
@@ -200,7 +215,7 @@ void TextTrackList::remove(TextTrack* track)
     }
 
     size_t index = tracks->find(track);
-    if (index == notFound)
+    if (index == kNotFound)
         return;
 
     invalidateTrackIndexesAfterTrack(track);
@@ -212,6 +227,8 @@ void TextTrackList::remove(TextTrack* track)
 
     if (inbandTrack)
         inbandTrack->trackRemoved();
+
+    scheduleRemoveTrackEvent(track);
 }
 
 bool TextTrackList::contains(TextTrack* track) const
@@ -227,12 +244,28 @@ bool TextTrackList::contains(TextTrack* track) const
     else
         ASSERT_NOT_REACHED();
 
-    return tracks->find(track) != notFound;
+    return tracks->find(track) != kNotFound;
 }
 
 const AtomicString& TextTrackList::interfaceName() const
 {
-    return eventNames().interfaceForTextTrackList;
+    return EventTargetNames::TextTrackList;
+}
+
+ExecutionContext* TextTrackList::executionContext() const
+{
+    ASSERT(m_owner);
+    return m_owner->executionContext();
+}
+
+void TextTrackList::scheduleTrackEvent(const AtomicString& eventName, PassRefPtr<TextTrack> track)
+{
+    TrackEventInit initializer;
+    initializer.track = track;
+    initializer.bubbles = false;
+    initializer.cancelable = false;
+
+    m_asyncEventQueue->enqueueEvent(TrackEvent::create(eventName, initializer));
 }
 
 void TextTrackList::scheduleAddTrackEvent(PassRefPtr<TextTrack> track)
@@ -243,28 +276,38 @@ void TextTrackList::scheduleAddTrackEvent(PassRefPtr<TextTrack> track)
     // bubble and is not cancelable, and that uses the TrackEvent interface, with
     // the track attribute initialized to the text track's TextTrack object, at
     // the media element's textTracks attribute's TextTrackList object.
+    scheduleTrackEvent(EventTypeNames::addtrack, track);
+}
 
-    RefPtr<TextTrack> trackRef = track;
-    TrackEventInit initializer;
-    initializer.track = trackRef;
+void TextTrackList::scheduleChangeEvent()
+{
+    // 4.8.10.12.1 Text track model
+    // Whenever a text track that is in a media element's list of text tracks
+    // has its text track mode change value, the user agent must run the
+    // following steps for the media element:
+    // ...
+    // Fire a simple event named change at the media element's textTracks
+    // attribute's TextTrackList object.
+
+    EventInit initializer;
     initializer.bubbles = false;
     initializer.cancelable = false;
 
-    m_pendingEvents.append(TrackEvent::create(eventNames().addtrackEvent, initializer));
-    if (!m_pendingEventTimer.isActive())
-        m_pendingEventTimer.startOneShot(0);
+    m_asyncEventQueue->enqueueEvent(Event::create(EventTypeNames::change, initializer));
 }
 
-void TextTrackList::asyncEventTimerFired(Timer<TextTrackList>*)
+void TextTrackList::scheduleRemoveTrackEvent(PassRefPtr<TextTrack> track)
 {
-    Vector<RefPtr<Event> > pendingEvents;
-
-    ++m_dispatchingEvents;
-    m_pendingEvents.swap(pendingEvents);
-    size_t count = pendingEvents.size();
-    for (size_t index = 0; index < count; ++index)
-        dispatchEvent(pendingEvents[index].release(), IGNORE_EXCEPTION);
-    --m_dispatchingEvents;
+    // 4.8.10.12.3 Sourcing out-of-band text tracks
+    // When a track element's parent element changes and the old parent was a
+    // media element, then the user agent must remove the track element's
+    // corresponding text track from the media element's list of text tracks,
+    // and then queue a task to fire a trusted event with the name removetrack,
+    // that does not bubble and is not cancelable, and that uses the TrackEvent
+    // interface, with the track attribute initialized to the text track's
+    // TextTrack object, at the media element's textTracks attribute's
+    // TextTrackList object.
+    scheduleTrackEvent(EventTypeNames::removetrack, track);
 }
 
 Node* TextTrackList::owner() const

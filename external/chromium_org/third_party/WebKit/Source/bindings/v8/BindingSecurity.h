@@ -36,8 +36,8 @@
 namespace WebCore {
 
 class DOMWindow;
+class ExceptionState;
 class Frame;
-class HTMLFrameElementBase;
 class Node;
 
 enum SecurityReportingOption {
@@ -47,9 +47,9 @@ enum SecurityReportingOption {
 
 class BindingSecurity {
 public:
-    static bool shouldAllowAccessToNode(Node*);
+    static bool shouldAllowAccessToNode(Node*, ExceptionState&);
     static bool shouldAllowAccessToFrame(Frame*, SecurityReportingOption = ReportSecurityError);
-    static bool allowSettingFrameSrcToJavascriptUrl(HTMLFrameElementBase*, const String& value);
+    static bool shouldAllowAccessToFrame(Frame*, ExceptionState&);
 };
 
 }

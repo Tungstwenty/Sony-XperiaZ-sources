@@ -31,7 +31,7 @@
 #include "config.h"
 #include "core/inspector/JSONParser.h"
 
-#include "core/platform/JSONValues.h"
+#include "platform/JSONValues.h"
 #include "wtf/text/StringBuilder.h"
 
 namespace WebCore {
@@ -271,7 +271,7 @@ template<typename CharType>
 bool decodeString(const CharType* start, const CharType* end, StringBuilder* output)
 {
     while (start < end) {
-        CharType c = *start++;
+        UChar c = *start++;
         if ('\\' != c) {
             output->append(c);
             continue;

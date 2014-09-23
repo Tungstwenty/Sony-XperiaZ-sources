@@ -19,6 +19,15 @@ display
 -webkit-animation-name
 -webkit-animation-play-state
 -webkit-animation-timing-function
+animation
+animation-delay
+animation-direction
+animation-duration
+animation-fill-mode
+animation-iteration-count
+animation-name
+animation-play-state
+animation-timing-function
 -webkit-transition
 -webkit-transition-delay
 -webkit-transition-duration
@@ -36,13 +45,13 @@ color
 direction
 font
 font-family
+font-kerning
 font-size
 font-style
 font-variant
 font-weight
 text-rendering
 -webkit-font-feature-settings
--webkit-font-kerning
 -webkit-font-smoothing
 -webkit-font-variant-ligatures
 -webkit-locale
@@ -126,6 +135,7 @@ float
 font-stretch
 height
 image-rendering
+isolation
 left
 letter-spacing
 list-style
@@ -137,6 +147,7 @@ margin-bottom
 margin-left
 margin-right
 margin-top
+mask-source-type
 max-height
 max-width
 min-height
@@ -152,6 +163,8 @@ outline-color
 outline-offset
 outline-style
 outline-width
+object-fit
+object-position
 overflow
 overflow-wrap
 overflow-x
@@ -182,6 +195,7 @@ text-decoration-line
 text-decoration-style
 text-decoration-color
 text-indent
+text-justify
 text-line-through-color
 text-line-through-mode
 text-line-through-style
@@ -198,8 +212,10 @@ text-underline-color
 text-underline-mode
 text-underline-style
 text-underline-width
+text-underline-position
 top
 touch-action
+touch-action-delay
 
 unicode-bidi
 unicode-range
@@ -257,11 +273,13 @@ z-index
 -webkit-box-pack
 -webkit-box-reflect
 -webkit-box-shadow
+-internal-callback
 -webkit-column-axis
 -webkit-column-break-after
 -webkit-column-break-before
 -webkit-column-break-inside
 -webkit-column-count
+column-fill
 -webkit-column-gap
 -webkit-column-progression
 -webkit-column-rule
@@ -328,12 +346,6 @@ grid-template
 -webkit-margin-before
 -webkit-margin-end
 -webkit-margin-start
--webkit-marquee
--webkit-marquee-direction
--webkit-marquee-increment
--webkit-marquee-repetition
--webkit-marquee-speed
--webkit-marquee-style
 -webkit-mask
 -webkit-mask-box-image
 -webkit-mask-box-image-outset
@@ -371,7 +383,6 @@ order
 -webkit-ruby-position
 -webkit-text-combine
 -epub-text-combine alias_for=-webkit-text-combine
--webkit-text-underline-position condition=CSS3_TEXT
 -webkit-text-decorations-in-effect
 -webkit-text-emphasis
 -epub-text-emphasis alias_for=-webkit-text-emphasis
@@ -400,10 +411,16 @@ order
 -webkit-region-break-after
 -webkit-region-break-before
 -webkit-region-break-inside
--webkit-shape-inside
--webkit-shape-outside
--webkit-shape-margin
--webkit-shape-padding
+-webkit-shape-inside alias_for=shape-inside
+-webkit-shape-outside alias_for=shape-outside
+-webkit-shape-margin alias_for=shape-margin
+-webkit-shape-padding alias_for=shape-padding
+-webkit-shape-image-threshold alias_for=shape-image-threshold
+shape-inside
+shape-outside
+shape-margin
+shape-padding
+shape-image-threshold
 -webkit-wrap-flow
 -webkit-wrap-through
 max-zoom
@@ -412,3 +429,10 @@ orientation
 user-zoom
 -webkit-tap-highlight-color
 -webkit-app-region
+
+// Internal properties.
+-internal-marquee-direction
+-internal-marquee-increment
+-internal-marquee-repetition
+-internal-marquee-speed
+-internal-marquee-style

@@ -33,13 +33,17 @@
 
 #include "WebCommon.h"
 
-namespace WebKit {
+#if INSIDE_BLINK
+#include "wtf/Assertions.h"
+#endif
+
+namespace blink {
 
 #pragma pack(push, 1)
 
 class WebDeviceMotionData {
 public:
-    WEBKIT_EXPORT WebDeviceMotionData();
+    BLINK_PLATFORM_EXPORT WebDeviceMotionData();
     ~WebDeviceMotionData() { }
 
     double accelerationX;
@@ -71,14 +75,12 @@ public:
     bool allAvailableSensorsAreActive : 1;
 };
 
-#if WEBKIT_IMPLEMENTATION
-#include "wtf/Assertions.h"
-
+#if INSIDE_BLINK
 COMPILE_ASSERT(sizeof(WebDeviceMotionData) == (10 * sizeof(double) + 2 * sizeof(char)), WebDeviceMotionData_has_wrong_size);
 #endif
 
 #pragma pack(pop)
 
-} // namespace WebKit
+} // namespace blink
 
 #endif // WebDeviceMotionData_h

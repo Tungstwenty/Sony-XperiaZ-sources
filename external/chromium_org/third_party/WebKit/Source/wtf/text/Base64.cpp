@@ -26,7 +26,6 @@
 
 #include <limits.h>
 #include "wtf/StringExtras.h"
-#include "wtf/text/WTFString.h"
 
 namespace WTF {
 
@@ -128,7 +127,7 @@ void base64Encode(const char* data, unsigned len, Vector<char>& out, Base64Encod
     }
 }
 
-bool base64Decode(const Vector<char>& in, Vector<char>& out, Base64InvalidCharactersPolicy charactersPolicy, Base64PaddingValidationPolicy paddingPolicy)
+bool base64Decode(const Vector<char>& in, Vector<char>& out, CharacterMatchFunctionPtr shouldIgnoreCharacter, Base64DecodePolicy policy)
 {
     out.clear();
 
@@ -136,48 +135,43 @@ bool base64Decode(const Vector<char>& in, Vector<char>& out, Base64InvalidCharac
     if (in.size() > UINT_MAX)
         return false;
 
-    return base64Decode(in.data(), in.size(), out, charactersPolicy, paddingPolicy);
+    return base64Decode(in.data(), in.size(), out, shouldIgnoreCharacter, policy);
 }
 
 template<typename T>
-static inline bool base64DecodeInternal(const T* data, unsigned length, Vector<char>& out, Base64InvalidCharactersPolicy charactersPolicy, Base64PaddingValidationPolicy paddingPolicy)
+static inline bool base64DecodeInternal(const T* data, unsigned length, Vector<char>& out, CharacterMatchFunctionPtr shouldIgnoreCharacter, Base64DecodePolicy policy)
 {
     out.clear();
     if (!length)
         return true;
 
-    unsigned dataLength = length;
-    if (paddingPolicy == Base64StrictPaddingValidation) {
-        if (!(dataLength % 4)) {
-            // There may be 2 = padding max.
-            while (data[dataLength - 1] == '=' && dataLength >= (length - 2))
-                --dataLength;
-        }
-        if (dataLength % 4 == 1)
-            return false;
-    }
-
     out.grow(length);
 
-    bool sawEqualsSign = false;
+    unsigned equalsSignCount = 0;
     unsigned outLength = 0;
     for (unsigned idx = 0; idx < length; ++idx) {
         unsigned ch = data[idx];
         if (ch == '=') {
-            sawEqualsSign = true;
-            if (paddingPolicy == Base64StrictPaddingValidation && idx < dataLength)
+            ++equalsSignCount;
+            // There should never be more than 2 padding characters.
+            if (policy == Base64ValidatePadding && equalsSignCount > 2)
                 return false;
         } else if (('0' <= ch && ch <= '9') || ('A' <= ch && ch <= 'Z') || ('a' <= ch && ch <= 'z') || ch == '+' || ch == '/') {
-            if (sawEqualsSign)
+            if (equalsSignCount)
                 return false;
-            out[outLength] = base64DecMap[ch];
-            ++outLength;
-        } else if (charactersPolicy == Base64FailOnInvalidCharacter || (charactersPolicy == Base64IgnoreWhitespace && !isSpaceOrNewline(ch)))
+            out[outLength++] = base64DecMap[ch];
+        } else if (!shouldIgnoreCharacter || !shouldIgnoreCharacter(ch)) {
             return false;
+        }
     }
 
     if (!outLength)
-        return !sawEqualsSign;
+        return !equalsSignCount;
+
+    // There should be no padding if length is a multiple of 4.
+    // We use (outLength + equalsSignCount) instead of length because we don't want to account for ignored characters.
+    if (policy == Base64ValidatePadding && equalsSignCount && (outLength + equalsSignCount) % 4)
+        return false;
 
     // Valid data is (n * 4 + [0,2,3]) characters long.
     if ((outLength % 4) == 1)
@@ -212,18 +206,23 @@ static inline bool base64DecodeInternal(const T* data, unsigned length, Vector<c
     return true;
 }
 
-bool base64Decode(const char* data, unsigned length, Vector<char>& out, Base64InvalidCharactersPolicy charactersPolicy, Base64PaddingValidationPolicy paddingPolicy)
+bool base64Decode(const char* data, unsigned length, Vector<char>& out, CharacterMatchFunctionPtr shouldIgnoreCharacter, Base64DecodePolicy policy)
 {
-    return base64DecodeInternal<LChar>(reinterpret_cast<const LChar*>(data), length, out, charactersPolicy, paddingPolicy);
+    return base64DecodeInternal<LChar>(reinterpret_cast<const LChar*>(data), length, out, shouldIgnoreCharacter, policy);
 }
 
-bool base64Decode(const String& in, Vector<char>& out, Base64InvalidCharactersPolicy charactersPolicy, Base64PaddingValidationPolicy paddingPolicy)
+bool base64Decode(const UChar* data, unsigned length, Vector<char>& out, CharacterMatchFunctionPtr shouldIgnoreCharacter, Base64DecodePolicy policy)
+{
+    return base64DecodeInternal<UChar>(data, length, out, shouldIgnoreCharacter, policy);
+}
+
+bool base64Decode(const String& in, Vector<char>& out, CharacterMatchFunctionPtr shouldIgnoreCharacter, Base64DecodePolicy policy)
 {
     if (in.isEmpty())
-        return base64DecodeInternal<LChar>(0, 0, out, charactersPolicy, paddingPolicy);
+        return base64DecodeInternal<LChar>(0, 0, out, shouldIgnoreCharacter, policy);
     if (in.is8Bit())
-        return base64DecodeInternal<LChar>(in.characters8(), in.length(), out, charactersPolicy, paddingPolicy);
-    return base64DecodeInternal<UChar>(in.characters16(), in.length(), out, charactersPolicy, paddingPolicy);
+        return base64DecodeInternal<LChar>(in.characters8(), in.length(), out, shouldIgnoreCharacter, policy);
+    return base64DecodeInternal<UChar>(in.characters16(), in.length(), out, shouldIgnoreCharacter, policy);
 }
 
 } // namespace WTF

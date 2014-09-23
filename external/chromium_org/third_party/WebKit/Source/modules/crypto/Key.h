@@ -32,6 +32,7 @@
 #define Key_h
 
 #include "bindings/v8/ScriptWrappable.h"
+#include "modules/crypto/NormalizeAlgorithm.h"
 #include "public/platform/WebCryptoKey.h"
 #include "wtf/Forward.h"
 #include "wtf/PassRefPtr.h"
@@ -41,10 +42,11 @@
 namespace WebCore {
 
 class Algorithm;
+class ExceptionState;
 
 class Key : public ScriptWrappable, public RefCounted<Key> {
 public:
-    static PassRefPtr<Key> create(const WebKit::WebCryptoKey& key) { return adoptRef(new Key(key)); }
+    static PassRefPtr<Key> create(const blink::WebCryptoKey& key) { return adoptRef(new Key(key)); }
 
     ~Key();
 
@@ -53,18 +55,17 @@ public:
     Algorithm* algorithm();
     Vector<String> usages() const;
 
-    const WebKit::WebCryptoKey& key() const { return m_key; }
+    const blink::WebCryptoKey& key() const { return m_key; }
 
-    static bool parseFormat(const String&, WebKit::WebCryptoKeyFormat&);
+    bool canBeUsedForAlgorithm(const blink::WebCryptoAlgorithm&, AlgorithmOperation, ExceptionState&) const;
 
-    // Parses KeyUsage strings to a WebCryptoKeyUsageMask. If any element is
-    // unrecognized, returns false.
-    static bool parseUsageMask(const Vector<String>&, WebKit::WebCryptoKeyUsageMask&);
+    static bool parseFormat(const String&, blink::WebCryptoKeyFormat&, ExceptionState&);
+    static bool parseUsageMask(const Vector<String>&, blink::WebCryptoKeyUsageMask&, ExceptionState&);
 
 protected:
-    explicit Key(const WebKit::WebCryptoKey&);
+    explicit Key(const blink::WebCryptoKey&);
 
-    const WebKit::WebCryptoKey m_key;
+    const blink::WebCryptoKey m_key;
     RefPtr<Algorithm> m_algorithm;
 };
 

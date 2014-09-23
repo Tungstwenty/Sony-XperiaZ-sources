@@ -29,16 +29,18 @@ namespace WebCore {
 
 class ExceptionState;
 class RenderText;
-class ScriptExecutionContext;
+class ExecutionContext;
 
 class Text : public CharacterData {
 public:
     static const unsigned defaultLengthLimit = 1 << 16;
 
-    static PassRefPtr<Text> create(Document*, const String&);
-    static PassRefPtr<Text> createWithLengthLimit(Document*, const String&, unsigned positionInString, unsigned lengthLimit = defaultLengthLimit);
-    static PassRefPtr<Text> createEditingText(Document*, const String&);
+    static PassRefPtr<Text> create(Document&, const String&);
+    static PassRefPtr<Text> createEditingText(Document&, const String&);
 
+    // mergeNextSiblingNodesIfPossible() merges next sibling nodes if possible
+    // then returns a node not merged.
+    PassRefPtr<Node> mergeNextSiblingNodesIfPossible();
     PassRefPtr<Text> splitText(unsigned offset, ExceptionState&);
 
     // DOM Level 3: http://www.w3.org/TR/DOM-Level-3-Core/core.html#ID-1312295772
@@ -46,10 +48,10 @@ public:
     String wholeText() const;
     PassRefPtr<Text> replaceWholeText(const String&);
 
-    bool recalcTextStyle(StyleChange);
+    void recalcTextStyle(StyleRecalcChange, Text* nextTextSibling);
     bool textRendererIsNeeded(const NodeRenderingContext&);
-    virtual RenderText* createTextRenderer(RenderStyle*);
-    void updateTextRenderer(unsigned offsetOfReplacedData, unsigned lengthOfReplacedData);
+    RenderText* createTextRenderer(RenderStyle*);
+    void updateTextRenderer(unsigned offsetOfReplacedData, unsigned lengthOfReplacedData, RecalcStyleBehavior = DoNotRecalcStyle);
 
     virtual void attach(const AttachContext& = AttachContext()) OVERRIDE FINAL;
 
@@ -57,7 +59,7 @@ public:
     virtual NodeType nodeType() const OVERRIDE;
 
 protected:
-    Text(TreeScope* treeScope, const String& data, ConstructionType type)
+    Text(TreeScope& treeScope, const String& data, ConstructionType type)
         : CharacterData(treeScope, data, type)
     {
         ScriptWrappable::init(this);
@@ -77,11 +79,7 @@ private:
 #endif
 };
 
-inline Text* toText(Node* node)
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!node || node->isTextNode());
-    return static_cast<Text*>(node);
-}
+DEFINE_NODE_TYPE_CASTS(Text, isTextNode());
 
 } // namespace WebCore
 

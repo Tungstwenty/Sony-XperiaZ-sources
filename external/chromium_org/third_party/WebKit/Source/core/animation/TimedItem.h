@@ -32,12 +32,14 @@
 #define TimedItem_h
 
 #include "core/animation/Timing.h"
+#include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/RefCounted.h"
 
 namespace WebCore {
 
 class Player;
+class TimedItem;
 
 static inline bool isNull(double value)
 {
@@ -49,28 +51,10 @@ static inline double nullValue()
     return std::numeric_limits<double>::quiet_NaN();
 }
 
-class TimedItemEventDelegate {
-public:
-    virtual ~TimedItemEventDelegate() { };
-    virtual void onEventCondition(bool wasInPlay, bool isInPlay, double previousIteration, double currentIteration) = 0;
-};
-
 class TimedItem : public RefCounted<TimedItem> {
     friend class Player; // Calls attach/detach, updateInheritedTime.
 public:
-    virtual ~TimedItem() { }
-
-    bool isCurrent() const { return ensureCalculated().isCurrent; }
-    bool isInEffect() const { return ensureCalculated().isInEffect; }
-    bool isInPlay() const { return ensureCalculated().isInPlay; }
-
-    double startTime() const { return m_startTime; }
-
-    double currentIteration() const { return ensureCalculated().currentIteration; }
-    double activeDuration() const { return ensureCalculated().activeDuration; }
-    double timeFraction() const { return ensureCalculated().timeFraction; }
-    Player* player() const { return m_player; }
-
+    // Note that logic in CSSAnimations depends on the order of these values.
     enum Phase {
         PhaseBefore,
         PhaseActive,
@@ -78,19 +62,54 @@ public:
         PhaseNone,
     };
 
+    class EventDelegate {
+    public:
+        virtual ~EventDelegate() { };
+        virtual void onEventCondition(const TimedItem*, bool isFirstSample, Phase previousPhase, double previousIteration) = 0;
+    };
+
+    virtual ~TimedItem() { }
+
+    virtual bool isAnimation() const { return false; }
+
+    Phase phase() const { return ensureCalculated().phase; }
+    bool isCurrent() const { return ensureCalculated().isCurrent; }
+    bool isInEffect() const { return ensureCalculated().isInEffect; }
+    bool isInPlay() const { return ensureCalculated().isInPlay; }
+    double timeToEffectChange() const { return ensureCalculated().timeToEffectChange; }
+
+    double currentIteration() const { return ensureCalculated().currentIteration; }
+    double activeDuration() const { return ensureCalculated().activeDuration; }
+    double timeFraction() const { return ensureCalculated().timeFraction; }
+    double startTime() const { return m_startTime; }
+    const Player* player() const { return m_player; }
+    Player* player() { return m_player; }
+    const Timing& specified() const { return m_specified; }
+
 protected:
-    TimedItem(const Timing&, PassOwnPtr<TimedItemEventDelegate> = nullptr);
+    TimedItem(const Timing&, PassOwnPtr<EventDelegate> = nullptr);
 
     // When TimedItem receives a new inherited time via updateInheritedTime
     // it will (if necessary) recalculate timings and (if necessary) call
     // updateChildrenAndEffects.
-    void updateInheritedTime(double inheritedTime) const;
-    virtual void updateChildrenAndEffects(bool wasInEffect) const = 0;
-    virtual double intrinsicIterationDuration() const { return 0; };
-    virtual void willDetach() = 0;
+    // Returns whether style recalc was triggered.
+    bool updateInheritedTime(double inheritedTime) const;
+    void invalidate() const { m_needsUpdate = true; };
 
 private:
-    void attach(Player* player) { m_player = player; };
+    // Returns whether style recalc was triggered.
+    virtual bool updateChildrenAndEffects() const = 0;
+    virtual double intrinsicIterationDuration() const { return 0; };
+    virtual double calculateTimeToEffectChange(double localTime, double timeToNextIteration) const = 0;
+    virtual void didAttach() { };
+    virtual void willDetach() { };
+
+    void attach(Player* player)
+    {
+        m_player = player;
+        didAttach();
+    };
+
     void detach()
     {
         ASSERT(m_player);
@@ -103,18 +122,22 @@ private:
     const double m_startTime;
     Player* m_player;
     Timing m_specified;
-    OwnPtr<TimedItemEventDelegate> m_eventDelegate;
+    OwnPtr<EventDelegate> m_eventDelegate;
 
     // FIXME: Should be versioned by monotonic value on player.
     mutable struct CalculatedTiming {
-        CalculatedTiming();
         double activeDuration;
+        Phase phase;
         double currentIteration;
         double timeFraction;
         bool isCurrent;
         bool isInEffect;
         bool isInPlay;
+        double timeToEffectChange;
     } m_calculated;
+    mutable bool m_isFirstSample;
+    mutable bool m_needsUpdate;
+    mutable double m_lastUpdateTime;
 
     // FIXME: Should check the version and reinherit time if inconsistent.
     const CalculatedTiming& ensureCalculated() const { return m_calculated; }

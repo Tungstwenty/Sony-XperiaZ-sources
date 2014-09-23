@@ -71,17 +71,14 @@ ui.onebar = base.extends('div', {
                 '<li><a href="#unexpected">Unexpected Failures</a></li>' +
                 '<li><a href="#expected">Expected Failures</a></li>' +
                 '<li><a href="#results">Results</a></li>' +
-                '<li><a href="#perf">perf</a></li>' +
             '</ul>' +
             '<div id="unexpected"></div>' +
             '<div id="expected"></div>' +
-            '<div id="results"></div>' +
-            '<div id="perf"></div>';
+            '<div id="results"></div>';
         this._tabNames = [
             'unexpected',
             'expected',
             'results',
-            'perf',
         ]
 
         this._tabIndexToSavedScrollOffset = {};
@@ -157,10 +154,6 @@ ui.onebar = base.extends('div', {
     {
         return this.tabNamed('results');
     },
-    perf: function()
-    {
-        return this.tabNamed('perf');
-    },
     _selectInternal: function(tabName) {
         var tabIndex = this._tabNames.indexOf(tabName);
         this._tabs.tabs('enable', tabIndex);
@@ -199,6 +192,25 @@ ui.RelativeTime = base.extends('time', {
         this._date = date;
         this.update();
     }
+});
+
+ui.TreeStatus = base.extends('div',  {
+    addStatus: function(name)
+    {
+        var label = document.createElement('div');
+        label.textContent = " " + name + ' status: ';
+        this.appendChild(label);
+        var statusSpan = document.createElement('span');
+        statusSpan.textContent = '(Loading...) ';
+        label.appendChild(statusSpan);
+        treestatus.fetchTreeStatus(treestatus.urlByName(name), statusSpan);
+    },
+    init: function()
+    {
+        this.className = 'treestatus';
+        this.addStatus('blink');
+        this.addStatus('chromium');
+    },
 });
 
 ui.StatusArea = base.extends('div',  {

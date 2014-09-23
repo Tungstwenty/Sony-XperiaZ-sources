@@ -25,6 +25,7 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "talk/base/dscp.h"
 #include "talk/base/testclient.h"
 #include "talk/base/thread.h"
 #include "talk/base/timeutils.h"
@@ -58,12 +59,12 @@ bool TestClient::CheckConnState(AsyncPacketSocket::State state) {
 }
 
 int TestClient::Send(const char* buf, size_t size) {
-  return socket_->Send(buf, size);
+  return socket_->Send(buf, size, DSCP_NO_CHANGE);
 }
 
 int TestClient::SendTo(const char* buf, size_t size,
                        const SocketAddress& dest) {
-  return socket_->SendTo(buf, size, dest);
+  return socket_->SendTo(buf, size, dest, DSCP_NO_CHANGE);
 }
 
 TestClient::Packet* TestClient::NextPacket() {
@@ -79,13 +80,20 @@ TestClient::Packet* TestClient::NextPacket() {
   // the wrong thread to non-thread-safe objects.
 
   uint32 end = TimeAfter(kTimeout);
-  while (packets_->size() == 0 && TimeUntil(end) > 0)
+  while (TimeUntil(end) > 0) {
+    {
+      CritScope cs(&crit_);
+      if (packets_->size() != 0) {
+        break;
+      }
+    }
     Thread::Current()->ProcessMessages(1);
+  }
 
   // Return the first packet placed in the queue.
   Packet* packet = NULL;
+  CritScope cs(&crit_);
   if (packets_->size() > 0) {
-    CritScope cs(&crit_);
     packet = packets_->front();
     packets_->erase(packets_->begin());
   }
@@ -127,7 +135,8 @@ bool TestClient::ready_to_send() const {
 }
 
 void TestClient::OnPacket(AsyncPacketSocket* socket, const char* buf,
-                          size_t size, const SocketAddress& remote_addr) {
+                          size_t size, const SocketAddress& remote_addr,
+                          const PacketTime& packet_time) {
   CritScope cs(&crit_);
   packets_->push_back(new Packet(remote_addr, buf, size));
 }

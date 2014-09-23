@@ -28,7 +28,7 @@
  */
 
 /**
- * @param {Object} obj
+ * @param {!Object} obj
  * @return {boolean}
  */
 Object.isEmpty = function(obj)
@@ -39,8 +39,8 @@ Object.isEmpty = function(obj)
 }
 
 /**
- * @param {!Object.<string,T>} obj
- * @return {!Array.<T>}
+ * @param {!Object.<string,!T>} obj
+ * @return {!Array.<!T>}
  * @template T
  */
 Object.values = function(obj)
@@ -197,11 +197,11 @@ String.prototype.compareTo = function(other)
 
 /**
  * @param {string} href
- * @return {string}
+ * @return {?string}
  */
 function sanitizeHref(href)
 {
-    return href && href.trim().toLowerCase().startsWith("javascript:") ? "" : href;
+    return href && href.trim().toLowerCase().startsWith("javascript:") ? null : href;
 }
 
 /**
@@ -339,9 +339,9 @@ Date.prototype.toISO8601Compact = function()
 Object.defineProperty(Array.prototype, "remove",
 {
     /**
-     * @param {T} value
+     * @param {!T} value
      * @param {boolean=} onlyFirst
-     * @this {Array.<T>}
+     * @this {Array.<!T>}
      * @template T
      */
     value: function(value, onlyFirst)
@@ -380,8 +380,8 @@ Object.defineProperty(Array.prototype, "rotate",
 {
     /**
      * @param {number} index
-     * @return {!Array.<T>}
-     * @this {Array.<T>}
+     * @return {!Array.<!T>}
+     * @this {Array.<!T>}
      * @template T
      */
     value: function(index)
@@ -436,33 +436,87 @@ var sortRange = {
      * @param {function(number, number): number} comparator
      * @param {number} leftBound
      * @param {number} rightBound
-     * @param {number} k
+     * @param {number} sortWindowLeft
+     * @param {number} sortWindowRight
      * @return {!Array.<number>}
      * @this {Array.<number>}
      */
-    value: function(comparator, leftBound, rightBound, k)
+    value: function(comparator, leftBound, rightBound, sortWindowLeft, sortWindowRight)
     {
-        function quickSortFirstK(array, comparator, left, right, k)
+        function quickSortRange(array, comparator, left, right, sortWindowLeft, sortWindowRight)
         {
             if (right <= left)
                 return;
             var pivotIndex = Math.floor(Math.random() * (right - left)) + left;
             var pivotNewIndex = array.partition(comparator, left, right, pivotIndex);
-            quickSortFirstK(array, comparator, left, pivotNewIndex - 1, k);
-            if (pivotNewIndex < left + k - 1)
-                quickSortFirstK(array, comparator, pivotNewIndex + 1, right, left + k - 1 - pivotNewIndex);
+            if (sortWindowLeft < pivotNewIndex)
+                quickSortRange(array, comparator, left, pivotNewIndex - 1, sortWindowLeft, sortWindowRight);
+            if (pivotNewIndex < sortWindowRight)
+                quickSortRange(array, comparator, pivotNewIndex + 1, right, sortWindowLeft, sortWindowRight);
         }
-
-        if (leftBound === 0 && rightBound === (this.length - 1) && k >= this.length)
+        if (leftBound === 0 && rightBound === (this.length - 1) && sortWindowLeft === 0 && sortWindowRight >= rightBound)
             this.sort(comparator);
         else
-            quickSortFirstK(this, comparator, leftBound, rightBound, k);
+            quickSortRange(this, comparator, leftBound, rightBound, sortWindowLeft, sortWindowRight);
         return this;
     }
 }
 Object.defineProperty(Array.prototype, "sortRange", sortRange);
 Object.defineProperty(Uint32Array.prototype, "sortRange", sortRange);
 })();
+
+Object.defineProperty(Array.prototype, "stableSort",
+{
+    /**
+     * @param {function(?T, ?T): number=} comparator
+     * @return {!Array.<?T>}
+     * @this {Array.<?T>}
+     * @template T
+     */
+    value: function(comparator)
+    {
+        function defaultComparator(a, b)
+        {
+            return a < b ? -1 : (a > b ? 1 : 0);
+        }
+        comparator = comparator || defaultComparator;
+
+        var indices = new Array(this.length);
+        for (var i = 0; i < this.length; ++i)
+            indices[i] = i;
+        var self = this;
+        /**
+         * @param {number} a
+         * @param {number} b
+         * @return {number}
+         */
+        function indexComparator(a, b)
+        {
+            var result = comparator(self[a], self[b]);
+            return result ? result : a - b;
+        }
+        indices.sort(indexComparator);
+
+        for (var i = 0; i < this.length; ++i) {
+            if (indices[i] < 0 || i === indices[i])
+                continue;
+            var cyclical = i;
+            var saved = this[i];
+            while (true) {
+                var next = indices[cyclical];
+                indices[cyclical] = -1;
+                if (next === i) {
+                    this[cyclical] = saved;
+                    break;
+                } else {
+                    this[cyclical] = this[next];
+                    cyclical = next;
+                }
+            }
+        }
+        return this;
+    }
+});
 
 Object.defineProperty(Array.prototype, "qselect",
 {
@@ -501,10 +555,10 @@ Object.defineProperty(Array.prototype, "lowerBound",
      * elements are smaller than the specimen) returns array.length.
      * The function works for sorted array.
      *
-     * @param {T} object
-     * @param {function(T,S):number=} comparator
+     * @param {!T} object
+     * @param {function(!T,!S):number=} comparator
      * @return {number}
-     * @this {Array.<S>}
+     * @this {Array.<!S>}
      * @template T,S
      */
     value: function(object, comparator)
@@ -535,10 +589,10 @@ Object.defineProperty(Array.prototype, "upperBound",
      * elements are smaller than the specimen) returns array.length.
      * The function works for sorted array.
      *
-     * @param {T} object
-     * @param {function(T,S):number=} comparator
+     * @param {!T} object
+     * @param {function(!T,!S):number=} comparator
      * @return {number}
-     * @this {Array.<S>}
+     * @this {Array.<!S>}
      * @template T,S
      */
     value: function(object, comparator)
@@ -564,10 +618,10 @@ Object.defineProperty(Array.prototype, "upperBound",
 Object.defineProperty(Array.prototype, "binaryIndexOf",
 {
     /**
-     * @param {T} value
-     * @param {function(T,S):number} comparator
+     * @param {!T} value
+     * @param {function(!T,!S):number} comparator
      * @return {number}
-     * @this {Array.<S>}
+     * @this {Array.<!S>}
      * @template T,S
      */
     value: function(value, comparator)
@@ -581,8 +635,8 @@ Object.defineProperty(Array.prototype, "select",
 {
     /**
      * @param {string} field
-     * @return {!Array.<T>}
-     * @this {Array.<Object.<string,T>>}
+     * @return {!Array.<!T>}
+     * @this {Array.<!Object.<string,!T>>}
      * @template T
      */
     value: function(field)
@@ -597,8 +651,8 @@ Object.defineProperty(Array.prototype, "select",
 Object.defineProperty(Array.prototype, "peekLast",
 {
     /**
-     * @return {T|undefined}
-     * @this {Array.<T>}
+     * @return {!T|undefined}
+     * @this {Array.<!T>}
      * @template T
      */
     value: function()
@@ -607,10 +661,84 @@ Object.defineProperty(Array.prototype, "peekLast",
     }
 });
 
+(function(){
+
 /**
- * @param {T} object
- * @param {Array.<S>} list
- * @param {function(T,S):number=} comparator
+ * @param {!Array.<T>} array1
+ * @param {!Array.<T>} array2
+ * @param {function(T,T):number} comparator
+ * @return {!Array.<T>}
+ * @template T
+ */
+function mergeOrIntersect(array1, array2, comparator, mergeNotIntersect)
+{
+    var result = [];
+    var i = 0;
+    var j = 0;
+    while (i < array1.length || j < array2.length) {
+        if (i === array1.length) {
+            result = result.concat(array2.slice(j));
+            j = array2.length;
+        } else if (j === array2.length) {
+            result = result.concat(array1.slice(i));
+            i = array1.length;
+        } else {
+            var compareValue = comparator(array1[i], array2[j])
+             if (compareValue < 0) {
+                 if (mergeNotIntersect)
+                    result.push(array1[i]);
+                 ++i;
+             } else if (compareValue > 0) {
+                 if (mergeNotIntersect)
+                     result.push(array2[j]);
+                 ++j;
+             } else {
+                 result.push(array1[i]);
+                 ++i;
+                 ++j;
+             }
+        }
+    }
+    return result;
+}
+
+Object.defineProperty(Array.prototype, "intersectOrdered",
+{
+    /**
+     * @param {!Array.<T>} array
+     * @param {function(T,T):number} comparator
+     * @return {!Array.<T>}
+     * @this {!Array.<T>}
+     * @template T
+     */
+    value: function(array, comparator)
+    {
+        return mergeOrIntersect(this, array, comparator, false);
+    }
+});
+
+Object.defineProperty(Array.prototype, "mergeOrdered",
+{
+    /**
+     * @param {!Array.<T>} array
+     * @param {function(T,T):number} comparator
+     * @return {!Array.<T>}
+     * @this {!Array.<T>}
+     * @template T
+     */
+    value: function(array, comparator)
+    {
+        return mergeOrIntersect(this, array, comparator, true);
+    }
+});
+
+}());
+
+
+/**
+ * @param {!T} object
+ * @param {!Array.<!S>} list
+ * @param {function(!T,!S):number=} comparator
  * @param {boolean=} insertionIndexAfter
  * @return {number}
  * @template T,S
@@ -723,7 +851,7 @@ String.standardFormatters = {
 
 /**
  * @param {string} format
- * @param {Array.<*>} substitutions
+ * @param {!Array.<*>} substitutions
  * @return {string}
  */
 String.vsprintf = function(format, substitutions)
@@ -802,7 +930,7 @@ String.format = function(format, substitutions, formatters, initialValue, append
  * @param {string} query
  * @param {boolean} caseSensitive
  * @param {boolean} isRegex
- * @return {RegExp}
+ * @return {!RegExp}
  */
 function createSearchRegex(query, caseSensitive, isRegex)
 {
@@ -843,7 +971,7 @@ function createPlainTextSearchRegex(query, flags)
 }
 
 /**
- * @param {RegExp} regex
+ * @param {!RegExp} regex
  * @param {string} content
  * @return {number}
  */
@@ -974,8 +1102,8 @@ var Map = function()
 
 Map.prototype = {
     /**
-     * @param {!K} key
-     * @param {V=} value
+     * @param {K} key
+     * @param {V} value
      */
     put: function(key, value)
     {
@@ -990,7 +1118,8 @@ Map.prototype = {
     },
 
     /**
-     * @param {!K} key
+     * @param {K} key
+     * @return {V}
      */
     remove: function(key)
     {
@@ -1003,7 +1132,7 @@ Map.prototype = {
     },
 
     /**
-     * @return {!Array.<!K>}
+     * @return {!Array.<K>}
      */
     keys: function()
     {
@@ -1032,7 +1161,7 @@ Map.prototype = {
     },
 
     /**
-     * @param {!K} key
+     * @param {K} key
      * @return {V|undefined}
      */
     get: function(key)
@@ -1042,7 +1171,7 @@ Map.prototype = {
     },
 
     /**
-     * @param {!K} key
+     * @param {K} key
      * @return {boolean}
      */
     contains: function(key)
@@ -1251,7 +1380,7 @@ StringPool.prototype = {
     },
 
     /**
-     * @param {Object} obj
+     * @param {!Object} obj
      * @param {number=} depthLimit
      */
     internObjectStrings: function(obj, depthLimit)
@@ -1294,8 +1423,6 @@ function importScript(scriptName)
         return;
     var xhr = new XMLHttpRequest();
     _importedScripts[scriptName] = true;
-    if (window.flattenImports)
-        scriptName = scriptName.split("/").reverse()[0];
     xhr.open("GET", scriptName, false);
     xhr.send(null);
     if (!xhr.responseText)
@@ -1316,8 +1443,8 @@ function CallbackBarrier()
 
 CallbackBarrier.prototype = {
     /**
-     * @param {function(T)=} userCallback
-     * @return {function(T=)}
+     * @param {function(!T)=} userCallback
+     * @return {function(!T=)}
      * @template T
      */
     createCallback: function(userCallback)
