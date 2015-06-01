@@ -41,6 +41,7 @@ EXTRA_DIST =                                        \
 	annotate_smart_pointer.stderr.exp	    \
 	annotate_smart_pointer.vgtest		    \
 	annotate_smart_pointer2.stderr.exp	    \
+	annotate_smart_pointer2.stderr.exp-darwin   \
 	annotate_smart_pointer2.vgtest		    \
 	annotate_spinlock.stderr.exp		    \
 	annotate_spinlock.vgtest		    \
@@ -60,10 +61,14 @@ EXTRA_DIST =                                        \
 	annotate_ignore_write2.vgtest		    \
 	annotate_trace_memory.stderr.exp-32bit	    \
 	annotate_trace_memory.stderr.exp-64bit	    \
+	annotate_trace_memory.stderr.exp-mips32	   \
 	annotate_trace_memory.vgtest		    \
 	annotate_trace_memory_xml.stderr.exp-32bit  \
 	annotate_trace_memory_xml.stderr.exp-64bit  \
+	annotate_trace_memory_xml.stderr.exp-mips32 \
 	annotate_trace_memory_xml.vgtest	    \
+	annotate_sem.stderr.exp                     \
+	annotate_sem.vgtest                         \
 	annotate_static.stderr.exp	            \
 	annotate_static.vgtest		            \
 	atomic_var.stderr.exp			    \
@@ -81,15 +86,21 @@ EXTRA_DIST =                                        \
 	bug-235681.vgtest			    \
 	circular_buffer.stderr.exp		    \
 	circular_buffer.vgtest			    \
+	concurrent_close.stderr.exp		    \
+	concurrent_close.vgtest			    \
 	custom_alloc.stderr.exp			    \
 	custom_alloc.vgtest			    \
 	custom_alloc_fiw.stderr.exp		    \
 	custom_alloc_fiw.vgtest			    \
 	fp_race.stderr.exp                          \
+	fp_race.stderr.exp-mips32-be                \
+	fp_race.stderr.exp-mips32-le                \
 	fp_race.vgtest                              \
 	fp_race2.stderr.exp                         \
 	fp_race2.vgtest                             \
 	fp_race_xml.stderr.exp                      \
+	fp_race_xml.stderr.exp-mips32-be            \
+	fp_race_xml.stderr.exp-mips32-le            \
 	fp_race_xml.vgtest                          \
 	free_is_write.stderr.exp		    \
 	free_is_write.vgtest			    \
@@ -156,6 +167,8 @@ EXTRA_DIST =                                        \
 	pth_cancel_locked.vgtest		    \
 	pth_cleanup_handler.stderr.exp		    \
 	pth_cleanup_handler.vgtest		    \
+	pth_cond_destroy_busy.stderr.exp            \
+	pth_cond_destroy_busy.vgtest                \
 	pth_cond_race.stderr.exp                    \
 	pth_cond_race.vgtest                        \
 	pth_cond_race2.stderr.exp                   \
@@ -204,25 +217,43 @@ EXTRA_DIST =                                        \
 	rwlock_type_checking.stderr.exp	            \
 	rwlock_type_checking.vgtest                 \
 	sem_as_mutex.stderr.exp                     \
+	sem_as_mutex.stderr.exp-mips32-be           \
+	sem_as_mutex.stderr.exp-mips32-le           \
 	sem_as_mutex.vgtest                         \
 	sem_as_mutex2.stderr.exp                    \
 	sem_as_mutex2.vgtest                        \
 	sem_as_mutex3.stderr.exp                    \
+	sem_as_mutex3.stderr.exp-mips32-be          \
+	sem_as_mutex3.stderr.exp-mips32-le          \
 	sem_as_mutex3.vgtest                        \
 	sem_open.stderr.exp                         \
+	sem_open.stderr.exp-mips32-be               \
+	sem_open.stderr.exp-mips32-le               \
 	sem_open.vgtest                             \
 	sem_open2.stderr.exp                        \
 	sem_open2.vgtest                            \
 	sem_open3.stderr.exp                        \
+	sem_open3.stderr.exp-mips32-be              \
+	sem_open3.stderr.exp-mips32-le              \
 	sem_open3.vgtest                            \
 	sem_open_traced.stderr.exp                  \
 	sem_open_traced.vgtest                      \
+	sem_wait.stderr.exp                         \
+	sem_wait.vgtest                             \
 	sigalrm.stderr.exp                          \
 	sigalrm.vgtest                              \
 	sigaltstack.stderr.exp                      \
 	sigaltstack.vgtest                          \
+	std_atomic.stderr.exp		  	    \
+	std_atomic.vgtest			            \
+	std_list.stderr.exp		  	    \
+	std_list.vgtest			            \
+	std_string.stderr.exp		  	    \
+	std_string.vgtest			    \
 	std_thread.stderr.exp		  	    \
 	std_thread.vgtest			    \
+	str_tester.stderr.exp		  	    \
+	str_tester.vgtest			    \
 	tc01_simple_race.stderr.exp                 \
 	tc01_simple_race.vgtest                     \
 	tc02_simple_tls.stderr.exp                  \
@@ -301,8 +332,10 @@ check_PROGRAMS =      \
   annotate_ignore_write \
   annotate_publish_hg \
   annotate_static     \
+  annotate_trace_memory \
   bug-235681          \
   custom_alloc        \
+  concurrent_close    \
   fp_race             \
   free_is_write	      \
   hold_lock           \
@@ -313,6 +346,7 @@ check_PROGRAMS =      \
   pth_broadcast       \
   pth_cancel_locked   \
   pth_cleanup_handler \
+  pth_cond_destroy_busy \
   pth_cond_race       \
   pth_create_chain    \
   pth_detached        \
@@ -343,13 +377,9 @@ if HAVE_BUILTIN_ATOMIC
 check_PROGRAMS +=        \
   annotate_barrier       \
   annotate_rwlock        \
+  annotate_sem           \
   atomic_var             \
   circular_buffer
-endif
-
-if HAVE_BUILTIN_ATOMIC64
-check_PROGRAMS +=        \
-  annotate_trace_memory
 endif
 
 if HAVE_BUILTIN_ATOMIC_CXX
@@ -358,9 +388,16 @@ check_PROGRAMS +=        \
   tsan_unittest
 endif
 
+# clang 3.3 will generate errors about libstdc++ headers from 
+# gcc (Ubuntu/Linaro 4.6.3-1ubuntu5) 4.6.3
+if CXX_CAN_INCLUDE_THREAD_HEADER
 if HAVE_SHARED_POINTER_ANNOTATION
 check_PROGRAMS += \
+  std_atomic      \
+  std_list        \
+  std_string      \
   std_thread
+endif
 endif
 
 if HAVE_OPENMP
@@ -380,6 +417,10 @@ if HAVE_PTHREAD_SPINLOCK
 check_PROGRAMS += pth_spinlock
 endif
 
+if !VGCONF_OS_IS_DARWIN
+check_PROGRAMS += sem_wait
+endif
+
 
 AM_CFLAGS   += $(AM_FLAG_M3264_PRI) @FLAG_W_EXTRA@ -Wno-inline -Wno-unused-parameter
 AM_CXXFLAGS += $(AM_FLAG_M3264_PRI) @FLAG_W_EXTRA@ -Wno-inline -Wno-unused-parameter
@@ -387,6 +428,7 @@ AM_CXXFLAGS += $(AM_FLAG_M3264_PRI) @FLAG_W_EXTRA@ -Wno-inline -Wno-unused-param
 LDADD = -lpthread
 
 
+concurrent_close_SOURCES    = concurrent_close.cpp
 monitor_example_SOURCES     = monitor_example.cpp
 new_delete_SOURCES          = new_delete.cpp
 
@@ -434,5 +476,16 @@ if HAVE_PTHREAD_BARRIER
 matinv_LDADD                = $(LDADD) -lm
 endif
 
+std_atomic_SOURCES          = std_atomic.cpp
+std_atomic_CXXFLAGS         = $(AM_CXXFLAGS) -std=c++0x -Wno-sign-compare
+
+std_list_SOURCES            = std_list.cpp
+std_list_CXXFLAGS           = $(AM_CXXFLAGS) -std=c++0x -Wno-sign-compare
+
+std_string_SOURCES          = std_string.cpp
+std_string_CXXFLAGS         = $(AM_CXXFLAGS) -std=c++0x -Wno-sign-compare
+
 std_thread_SOURCES          = std_thread.cpp
 std_thread_CXXFLAGS         = $(AM_CXXFLAGS) -std=c++0x
+
+sem_wait_SOURCES            = sem_wait.cpp

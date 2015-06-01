@@ -38,7 +38,19 @@ libext2_profile_cflags := -O2 -g -W -Wall \
 	-DHAVE_TYPE_SSIZE_T \
 	-DHAVE_SYS_TIME_H \
         -DHAVE_SYS_PARAM_H \
-	-DHAVE_SYSCONF
+	-DHAVE_SYSCONF \
+	-DDISABLE_BACKTRACE=1
+
+include $(CLEAR_VARS)
+
+LOCAL_SRC_FILES := $(libext2_profile_src_files)
+LOCAL_C_INCLUDES := $(libext2_profile_c_includes)
+LOCAL_CFLAGS := $(libext2_profile_cflags)
+LOCAL_PRELINK_MODULE := false
+LOCAL_MODULE := libext2_profile_static
+LOCAL_MODULE_TAGS := optional
+
+include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 
@@ -52,17 +64,6 @@ LOCAL_MODULE := libext2_profile
 LOCAL_MODULE_TAGS := optional
 
 include $(BUILD_SHARED_LIBRARY)
-
-include $(CLEAR_VARS)
-
-LOCAL_SRC_FILES := $(libext2_profile_src_files)
-LOCAL_C_INCLUDES := $(libext2_profile_c_includes)
-LOCAL_CFLAGS := $(libext2_profile_cflags)
-LOCAL_PRELINK_MODULE := false
-LOCAL_MODULE := libext2_profile_static
-LOCAL_MODULE_TAGS := optional
-
-include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 
@@ -89,6 +90,7 @@ e2fsck_src_files :=  \
 	pass3.c \
 	pass4.c \
 	pass5.c \
+	logfile.c \
 	journal.c \
 	recovery.c \
 	revoke.c \
@@ -101,19 +103,23 @@ e2fsck_src_files :=  \
 	problem.c \
 	message.c \
 	ea_refcount.c \
+	quota.c \
 	rehash.c \
-	region.c
+	region.c \
+	sigcatcher.c
 
 e2fsck_shared_libraries := \
 	libext2fs \
 	libext2_blkid \
 	libext2_uuid \
 	libext2_profile \
+	libext2_quota \
 	libext2_com_err \
 	libext2_e2p
 e2fsck_system_shared_libraries := libc
 
 e2fsck_static_libraries := \
+	libext2_quota_static \
 	libext2fs_static \
 	libext2_blkid_static \
 	libext2_uuid_static \
@@ -124,7 +130,7 @@ e2fsck_static_libraries := \
 
 e2fsck_c_includes := external/e2fsprogs/lib
 
-e2fsck_cflags := -O2 -g -W -Wall \
+e2fsck_cflags := -O2 -g -W -Wall -fno-strict-aliasing \
 	-DHAVE_DIRENT_H \
 	-DHAVE_ERRNO_H \
 	-DHAVE_INTTYPES_H \
@@ -153,7 +159,8 @@ e2fsck_cflags := -O2 -g -W -Wall \
 	-DENABLE_HTREE=1 \
 	-DHAVE_SYS_TIME_H \
         -DHAVE_SYS_PARAM_H \
-	-DHAVE_SYSCONF
+	-DHAVE_SYSCONF \
+	-DDISABLE_BACKTRACE=1
 
 include $(CLEAR_VARS)
 

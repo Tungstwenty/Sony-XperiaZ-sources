@@ -13,7 +13,7 @@
 #define _ANDROID_SKIN_FILE_H
 
 #include "android/skin/image.h"
-#include "android/config.h"
+#include "android/config-file.h"
 #include "android/framebuffer.h"
 
 /**  Layout
@@ -80,6 +80,9 @@ typedef struct SkinLayout {
     SkinRotation        dpad_rotation;
     SkinSize            size;
     SkinLocation*       locations;
+    SkinImage*          onion_image;
+    int                 onion_alpha;
+    SkinRotation        onion_rotation;
 } SkinLayout;
 
 #define  SKIN_LAYOUT_LOOP_LOCS(layout,loc)               \

@@ -595,6 +595,10 @@ static ssize_t store_powersave_bias(struct kobject *a, struct attribute *b,
 				cpumask_set_cpu(cpu, &cpus_timer_done);
 				if (dbs_info->cur_policy) {
 					/* restart dbs timer */
+					if (timer_pending(
+						&dbs_info->work.timer))
+						dbs_timer_exit(dbs_info);
+
 					dbs_timer_init(dbs_info);
 				}
 skip_this_cpu:

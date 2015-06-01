@@ -26,6 +26,9 @@
 #ifndef TARGET_H
 #define TARGET_H
 
+#include "pub_core_basics.h"    // Addr
+#include "server.h"             // CORE_ADDR
+
 /* This file defines the architecture independent Valgrind gdbserver
    high level operations such as read memory, get/set registers, ...
 
@@ -63,7 +66,7 @@ extern void initialize_shadow_low (Bool shadow_mode);
    with the shadow registers
    else returns the xml target description only for
    the normal registers. */
-extern char* valgrind_target_xml (Bool shadow_mode);
+extern const char* valgrind_target_xml (Bool shadow_mode);
 
 
 /* -------------------------------------------------------------------------- */
@@ -230,5 +233,8 @@ extern void  VG_(transfer) (void *valgrind,
                             Bool *mod);
 
 
+// True means gdbserver can access (internal) Valgrind memory.
+// Otherwise, only the client memory can be accessed.
+extern Bool hostvisibility;
 
 #endif /* TARGET_H */

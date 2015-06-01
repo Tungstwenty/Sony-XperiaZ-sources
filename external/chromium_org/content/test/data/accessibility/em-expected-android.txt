@@ -1,3 +1,0 @@
-#<skip - whitespace error
-android.view.View focusable focused scrollable
-    android.view.View clickable name='One word isemphasized.'

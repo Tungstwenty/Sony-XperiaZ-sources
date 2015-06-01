@@ -319,7 +319,7 @@ static int forward_query(int udpfd, union mysockaddr *udpaddr,
 		      fd = forward->rfd4->fd;
 		    }
 		}
-	      
+
 	      if (sendto(fd, (char *)header, plen, 0,
 			 &start->addr.sa,
 			 sa_len(&start->addr)) == -1)

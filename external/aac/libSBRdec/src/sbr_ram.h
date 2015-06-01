@@ -1,13 +1,12 @@
 
 /* -----------------------------------------------------------------------------------------------------------
-Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android
+Software License for The Fraunhofer FDK AAC Codec Library for Android
 
 © Copyright  1995 - 2013 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
-  Copyright (C) 2012 - 2013 Sony Mobile Communications AB.
 
  1.    INTRODUCTION
-The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
+The Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
 the MPEG Advanced Audio Coding ("AAC") encoding and decoding scheme for digital audio.
 This FDK AAC Codec software is intended to be used on a wide variety of Android devices.
 
@@ -80,9 +79,6 @@ Am Wolfsmantel 33
 
 www.iis.fraunhofer.de/amm
 amm-info@iis.fraunhofer.de
-
-Changes made in the code.
-2013-01-08 - Added flag for triggering the initialization of the sbr header.
 ----------------------------------------------------------------------------------------------------------- */
 
 /*!
@@ -122,8 +118,8 @@ typedef struct
 
 struct SBR_DECODER_INSTANCE
 {
-  SBR_DECODER_ELEMENT  *pSbrElement[(4)];
-  SBR_HEADER_DATA       sbrHeader[(4)][(1)+1];      /* Sbr header for each individual channel of an element */
+  SBR_DECODER_ELEMENT  *pSbrElement[(8)];
+  SBR_HEADER_DATA       sbrHeader[(8)][(1)+1];      /* Sbr header for each individual channel of an element */
 
   FIXP_DBL *workBuffer1;
   FIXP_DBL *workBuffer2;
@@ -141,8 +137,6 @@ struct SBR_DECODER_INSTANCE
   UCHAR numDelayFrames;        /* The current number of additional delay frames used for processing. */
 
   UINT flags;
-
-  UCHAR isResetNeeded;
 
 };
 

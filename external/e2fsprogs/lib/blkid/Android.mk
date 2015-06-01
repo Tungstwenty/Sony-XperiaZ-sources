@@ -21,7 +21,7 @@ libext2_blkid_system_shared_libraries := libc
 
 libext2_blkid_c_includes := external/e2fsprogs/lib
 
-libext2_blkid_cflags := -O2 -g -W -Wall \
+libext2_blkid_cflags := -O2 -g -W -Wall -fno-strict-aliasing \
 	-DHAVE_UNISTD_H \
 	-DHAVE_ERRNO_H \
 	-DHAVE_NETINET_IN_H \
@@ -52,10 +52,8 @@ libext2_blkid_cflags_linux := \
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := $(libext2_blkid_src_files)
-LOCAL_STATIC_LIBRARIES := libext2_uuid_static libc
 LOCAL_C_INCLUDES := $(libext2_blkid_c_includes)
 LOCAL_CFLAGS := $(libext2_blkid_cflags) $(libext2_blkid_cflags_linux)
-LOCAL_PRELINK_MODULE := false
 LOCAL_MODULE := libext2_blkid_static
 LOCAL_MODULE_TAGS:= optional
 
@@ -67,7 +65,7 @@ LOCAL_SRC_FILES := $(libext2_blkid_src_files)
 LOCAL_SYSTEM_SHARED_LIBRARIES := $(libext2_blkid_system_shared_libraries)
 LOCAL_SHARED_LIBRARIES := $(libext2_blkid_shared_libraries)
 LOCAL_C_INCLUDES := $(libext2_blkid_c_includes)
-LOCAL_CFLAGS := $(libext2_blkid_cflags) $(libext2_blkid_cflags_linux)
+LOCAL_CFLAGS := $(libext2_blkid_cflags) $(libext2_blkid_cflags_linux) -fno-strict-aliasing
 LOCAL_PRELINK_MODULE := false
 LOCAL_MODULE := libext2_blkid
 LOCAL_MODULE_TAGS := optional

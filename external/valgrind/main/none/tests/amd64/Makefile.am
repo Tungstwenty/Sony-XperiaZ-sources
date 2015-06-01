@@ -24,7 +24,10 @@ EXTRA_DIST = \
 	aes.vgtest aes.stdout.exp aes.stderr.exp \
 	amd64locked.vgtest amd64locked.stdout.exp amd64locked.stderr.exp \
 	avx-1.vgtest avx-1.stdout.exp avx-1.stderr.exp \
+	avx2-1.vgtest avx2-1.stdout.exp avx2-1.stderr.exp \
 	asorep.stderr.exp asorep.stdout.exp asorep.vgtest \
+	bmi.stderr.exp bmi.stdout.exp bmi.vgtest \
+	fma.stderr.exp fma.stdout.exp fma.vgtest \
 	bug127521-64.vgtest bug127521-64.stdout.exp bug127521-64.stderr.exp \
 	bug132813-amd64.vgtest bug132813-amd64.stdout.exp \
 	bug132813-amd64.stderr.exp \
@@ -53,6 +56,7 @@ EXTRA_DIST = \
 	loopnel.stderr.exp loopnel.stdout.exp loopnel.vgtest \
 	lzcnt64.stderr.exp lzcnt64.stdout.exp lzcnt64.vgtest \
 	movbe.stderr.exp movbe.stdout.exp movbe.vgtest \
+	mpx.stderr.exp mpx.stdout.exp mpx.vgtest \
 	nan80and64.stderr.exp nan80and64.stdout.exp nan80and64.vgtest \
 	nibz_bennee_mmap.stderr.exp nibz_bennee_mmap.stdout.exp \
 	nibz_bennee_mmap.vgtest \
@@ -76,12 +80,14 @@ EXTRA_DIST = \
 	sse4-64.stdout.exp-older-glibc \
 	slahf-amd64.stderr.exp slahf-amd64.stdout.exp \
 	slahf-amd64.vgtest \
+	tm1.vgtest tm1.stderr.exp tm1.stdout.exp \
+	x87trigOOR.vgtest x87trigOOR.stderr.exp x87trigOOR.stdout.exp \
+	xacq_xrel.stderr.exp xacq_xrel.stdout.exp xacq_xrel.vgtest \
 	xadd.stderr.exp xadd.stdout.exp xadd.vgtest
 
 check_PROGRAMS = \
 	allexec \
 	amd64locked \
-	asorep \
 	bug127521-64 bug132813-amd64 bug132918 \
 	clc \
 	cmpxchg \
@@ -92,7 +98,11 @@ check_PROGRAMS = \
 	smc1 \
 	sbbmisc \
 	nibz_bennee_mmap \
+	x87trigOOR \
 	xadd
+if BUILD_ADDR32_TESTS
+ check_PROGRAMS += asorep
+endif
 if BUILD_SSSE3_TESTS
  check_PROGRAMS += ssse3_misaligned
 endif
@@ -109,9 +119,25 @@ if BUILD_VPCLMULQDQ_TESTS
  check_PROGRAMS += avx-1
 endif
 endif
+if BUILD_AVX2_TESTS
+  check_PROGRAMS += avx2-1
+endif
+if BUILD_TSX_TESTS
+  check_PROGRAMS += tm1 xacq_xrel
+endif
+if BUILD_BMI_TESTS
+ check_PROGRAMS += bmi
+endif
+if BUILD_FMA_TESTS
+ check_PROGRAMS += fma
+endif
 if BUILD_MOVBE_TESTS
  check_PROGRAMS += movbe
 endif
+if BUILD_MPX_TESTS
+ check_PROGRAMS += mpx
+endif
+
 
 # DDD: these need to be made to work on Darwin like the x86/ ones were.
 if ! VGCONF_OS_IS_DARWIN
@@ -122,10 +148,12 @@ if ! VGCONF_OS_IS_DARWIN
 	fcmovnu \
 	fxtract \
 	looper \
-	loopnel \
 	jrcxz \
 	shrld \
 	slahf-amd64
+if BUILD_LOOPNEL_TESTS
+   check_PROGRAMS += loopnel
+endif
 endif
 
 AM_CFLAGS    += @FLAG_M64@

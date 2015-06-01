@@ -16,10 +16,10 @@
 #include "android/utils/bufprint.h"
 #include "android/looper.h"
 #include "hw/hw.h"
-#include "hw/goldfish_pipe.h"
-#include "qemu-char.h"
-#include "charpipe.h"
-#include "cbuffer.h"
+#include "hw/android/goldfish/pipe.h"
+#include "sysemu/char.h"
+#include "android/charpipe.h"
+#include "android/cbuffer.h"
 #include "utils/panic.h"
 
 #define  D(...)    VERBOSE_PRINT(qemud,__VA_ARGS__)
@@ -48,8 +48,9 @@
  */
 #define QEMUD_SAVE_VERSION 2
 
+#ifndef min
 #define min(a, b) (((a) < (b)) ? (a) : (b))
-
+#endif
 
 /* define SUPPORT_LEGACY_QEMUD to 1 if you want to support
  * talking to a legacy qemud daemon. See docs/ANDROID-QEMUD.TXT
@@ -1542,8 +1543,6 @@ static void
 qemud_multiplexer_init( QemudMultiplexer*  mult,
                         CharDriverState*   serial_cs )
 {
-    QemudClient*  control;
-
     /* initialize serial handler */
     qemud_serial_init( mult->serial,
                        serial_cs,
@@ -1551,13 +1550,13 @@ qemud_multiplexer_init( QemudMultiplexer*  mult,
                        mult );
 
     /* setup listener for channel 0 */
-    control = qemud_client_alloc( 0,
-                                  NULL,
-                                  mult,
-                                  qemud_multiplexer_control_recv,
-                                  NULL, NULL, NULL,
-                                  mult->serial,
-                                  &mult->clients );
+    qemud_client_alloc(0,
+                       NULL,
+                       mult,
+                       qemud_multiplexer_control_recv,
+                       NULL, NULL, NULL,
+                       mult->serial,
+                       &mult->clients );
 }
 
 /* the global multiplexer state */
@@ -2255,8 +2254,13 @@ _android_qemud_serial_init(void)
 
     qemud_multiplexer_init(_multiplexer, cs);
 
-    register_savevm( "qemud", 0, QEMUD_SAVE_VERSION,
-                      qemud_save, qemud_load, _multiplexer);
+    register_savevm(NULL,
+                    "qemud",
+                    0,
+                    QEMUD_SAVE_VERSION,
+                    qemud_save,
+                    qemud_load,
+                    _multiplexer);
 }
 
 extern void

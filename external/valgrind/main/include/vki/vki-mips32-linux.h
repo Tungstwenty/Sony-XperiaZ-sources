@@ -7,7 +7,7 @@
    This file is part of Valgrind, a dynamic binary instrumentation
    framework.
 
-   Copyright (C) 2010-2012 RT-RK
+   Copyright (C) 2010-2013 RT-RK
       mips-valgrind@rt-rk.com
 
    This program is free software; you can redistribute it and/or
@@ -39,7 +39,7 @@
 #elif defined (_MIPSEB)
 #define VKI_BIG_ENDIAN  1
 #endif
- 
+
 
 //----------------------------------------------------------------------
 // From linux-2.6.35.5/include/asm-generic/int-ll64.h
@@ -79,10 +79,10 @@ typedef unsigned long long __vki_u64;
 #define VKI_MAX_PAGE_SIZE       VKI_PAGE_SIZE
 
 //----------------------------------------------------------------------
-// From linux-2.6.35.5/arch/mips/include/asm-generic/shmparam.h
+// From linux-2.6.35.9/arch/mips/include/bits/shm.h
 //----------------------------------------------------------------------
 
-#define VKI_SHMLBA  SHM_ALIGNMENT
+#define VKI_SHMLBA  0x40000
 
 //----------------------------------------------------------------------
 // From linux-2.6.35.5/include/asm/signal.h
@@ -309,6 +309,7 @@ struct vki_sigcontext {
 // From linux-2.6.35.5/include/asm-mips/fcntl.h
 //----------------------------------------------------------------------
 
+#define VKI_O_ACCMODE		   03
 #define VKI_O_RDONLY		   00
 #define VKI_O_WRONLY		   01
 #define VKI_O_RDWR		   02
@@ -370,7 +371,10 @@ struct vki_f_owner_ex {
 //----------------------------------------------------------------------
 
 #define VKI_SOL_SOCKET	0xffff
+
 #define VKI_SO_TYPE	0x1008
+
+#define VKI_SO_ATTACH_FILTER	26
 
 //----------------------------------------------------------------------
 // From linux-2.6.35.5/include/asm-i386/sockios.h
@@ -520,8 +524,8 @@ struct vki_termios {
 
 #define _VKI_IOC_NRBITS		8
 #define _VKI_IOC_TYPEBITS	8
-#define _VKI_IOC_SIZEBITS	14
-#define _VKI_IOC_DIRBITS	2
+#define _VKI_IOC_SIZEBITS	13
+#define _VKI_IOC_DIRBITS	3
 
 #define _VKI_IOC_NRMASK		((1 << _VKI_IOC_NRBITS)-1)
 #define _VKI_IOC_TYPEMASK	((1 << _VKI_IOC_TYPEBITS)-1)
@@ -534,8 +538,8 @@ struct vki_termios {
 #define _VKI_IOC_DIRSHIFT	(_VKI_IOC_SIZESHIFT+_VKI_IOC_SIZEBITS)
 
 #define _VKI_IOC_NONE	1U
-#define _VKI_IOC_WRITE	2U
-#define _VKI_IOC_READ	4U
+#define _VKI_IOC_READ	2U
+#define _VKI_IOC_WRITE	4U
 
 #define _VKI_IOC(dir,type,nr,size) \
 	(((dir)  << _VKI_IOC_DIRSHIFT) | \
@@ -963,8 +967,23 @@ typedef struct vki_siginfo {
 #define VKI_BRK_OVERFLOW         6    /* Overflow check */
 #define VKI_BRK_DIVZERO          7    /* Divide by zero check */
 
-#endif // __VKI_MIPS32_LINUX_H
+//----------------------------------------------------------------------
+// From linux-3.6.35.5/arch/mips/include/socket.h
+//----------------------------------------------------------------------
+enum vki_sock_type {
+        VKI_SOCK_STREAM = 2,
+        // [[others omitted]]
+};
+#define ARCH_HAS_SOCKET_TYPES 1
 
+//----------------------------------------------------------------------
+// From linux-3.13.0/include/asm/errno.h
+//----------------------------------------------------------------------
+
+#define	VKI_ENOSYS       89  /* Function not implemented */
+#define	VKI_EOVERFLOW    79  /* Value too large for defined data type */
+
+#endif // __VKI_MIPS32_LINUX_H
 
 /*--------------------------------------------------------------------*/
 /*--- end                                       vki-mips32-linux.h ---*/

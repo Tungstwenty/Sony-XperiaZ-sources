@@ -50,7 +50,9 @@ e2fstool_static_libraries := \
 	libext2_uuid_static \
 	libext2_profile_static \
 	libext2_com_err_static \
-	libext2_e2p_static
+	libext2_e2p_static \
+	libext2_quota_static \
+	libext2fs_static
 
 include $(CLEAR_VARS)
 

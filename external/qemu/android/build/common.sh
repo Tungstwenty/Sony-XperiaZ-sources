@@ -110,6 +110,7 @@ log2 "EXE=$EXE"
 #   linux-x86
 #   linux-x86_64
 #   darwin-x86
+#   darwin-x86_64
 #   darwin-ppc
 #   windows  (MSys)
 #   cygwin
@@ -203,19 +204,29 @@ enable_linux_mingw ()
         exit 1
     fi
     # Do we have the binaries installed
+    log "Mingw64    : Checking for mingw64 installation"
+    MINGW64_PREFIX=x86_64-w64-mingw32
+    find_program MINGW64_CC $MINGW64_PREFIX-gcc
+    if [ -n "$MINGW64_CC" ]; then
+        MINGW_CC=$MINGW64_CC
+        MINGW_PREFIX=$MINGW64_PREFIX
+    else
     log "Mingw      : Checking for mingw32 installation"
     MINGW32_PREFIX=i586-mingw32msvc
     find_program MINGW32_CC $MINGW32_PREFIX-gcc
     if [ -z "$MINGW32_CC" ] ; then
-        echo "ERROR: It looks like $MINGW32_PREFIX-gcc is not in your path"
-        echo "Please install the mingw32 package !"
+            echo "ERROR: It looks like neither $MINGW64_PREFIX-cc nor $MINGW32_PREFIX-gcc"
+            echo "are in your path. Please install the mingw32 package !"
         exit 1
+        fi
+        MINGW_CC=$MINGW32_CC
+        MINGW_PREFIX=$MINGW32_PREFIX
+        FORCE_32BIT=no
     fi
     log2 "Mingw      : Found $MINGW32_CC"
-    CC=$MINGW32_CC
-    LD=$MINGW32_CC
-    AR=$MINGW32_PREFIX-ar
-    FORCE_32BIT=no
+    CC=$MINGW_CC
+    LD=$MINGW_CC
+    AR=$MINGW_PREFIX-ar
 }
 
 # Cygwin is normally not supported, unless you call this function
@@ -263,7 +274,6 @@ EOF
             # this is highly dependent on your GCC installation (and no, we can't set
             # this flag all the time)
             CFLAGS="$CFLAGS -Wa,--32"
-            compile
         fi
     fi
 
@@ -281,16 +291,9 @@ EOF
     fi
     link
     if [ $? != 0 ] ; then
-        OLD_LD=$LD
-        LD=gcc
-        compile
-        link
-        if [ $? != 0 ] ; then
-            LD=$OLD_LD
-            echo "your linker doesn't seem to work:"
-            cat $TMPL
-            clean_exit
-        fi
+        echo "your linker doesn't seem to work:"
+        cat $TMPL
+        clean_exit
     fi
     log "LD         : linker check ok ($LD)"
 
@@ -298,6 +301,7 @@ EOF
         AR=ar
     fi
     log "AR         : archiver ($AR)"
+    clean_temp
 }
 
 # try to compile the current source file in $TMPC into an object
@@ -401,6 +405,7 @@ feature_check_link ()
     CFLAGS=$OLD_CFLAGS
     LDFLAGS=$OLD_LDFLAGS
     eval $1=$result_cl
+    clean_temp
 }
 
 # check that a given C header file exists on the host system
@@ -422,6 +427,7 @@ EOF
     eval $1=$result_ch
     #eval result=$`echo $1`
     #log  "Host       : $1=$result_ch"
+    clean_temp
 }
 
 # run the test program that is in $TMPC and set its exit status
@@ -441,6 +447,7 @@ feature_run_exec ()
     LDFLAGS="$OLD_LDFLAGS"
     eval $1=$run_exec_result
     log "Host       : $1=$run_exec_result"
+    clean_temp
 }
 
 ## Android build system auto-detection
@@ -534,11 +541,13 @@ locate_android_prebuilt ()
 ## Build configuration file support
 ## you must define $config_mk before calling this function
 ##
+## $1: Optional output directory.
 create_config_mk ()
 {
     # create the directory if needed
     local  config_dir
-    config_mk=${config_mk:-objs/config.make}
+    local out_dir=${1:-objs}
+    config_mk=${config_mk:-$out_dir/config.make}
     config_dir=`dirname $config_mk`
     mkdir -p $config_dir 2> $TMPL
     if [ $? != 0 ] ; then
@@ -555,11 +564,14 @@ create_config_mk ()
     echo "HOST_OS     := $HOST_OS" >> $config_mk
     echo "HOST_ARCH   := $HOST_ARCH" >> $config_mk
     echo "CC          := $CC" >> $config_mk
-    echo "HOST_CC     := $CC" >> $config_mk
     echo "LD          := $LD" >> $config_mk
     echo "AR          := $AR" >> $config_mk
     echo "CFLAGS      := $CFLAGS" >> $config_mk
     echo "LDFLAGS     := $LDFLAGS" >> $config_mk
+    echo "HOST_CC     := $CC" >> $config_mk
+    echo "HOST_LD     := $LD" >> $config_mk
+    echo "HOST_AR     := $AR" >> $config_mk
+    echo "OBJS_DIR    := $out_dir" >> $config_mk
 }
 
 add_android_config_mk ()

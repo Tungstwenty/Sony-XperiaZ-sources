@@ -16,19 +16,41 @@ LOCAL_PATH:= $(call my-dir)
 
 ANDROID_HARDWARE := ANDROID_HARDWARE_generic
 
-ifneq ($(filter arm x86,$(TARGET_ARCH)),)
+ifneq ($(filter arm arm64 x86,$(TARGET_ARCH)),)
 
 common_cflags := \
 	-Wall -Wmissing-prototypes -Wshadow -Wpointer-arith -Wmissing-declarations \
 	-Wno-pointer-sign -Wno-sign-compare -Wno-unused-parameter -Wno-shadow \
 	-fno-strict-aliasing -fno-stack-protector \
-	-DVGA_$(TARGET_ARCH)=1 \
 	-DVGO_linux=1 \
+	-DANDROID_SYMBOLS_DIR=\"/data/local/symbols\"
+
+target_arch_cflags := \
+	-DVGA_$(TARGET_ARCH)=1 \
 	-DVGP_$(TARGET_ARCH)_linux=1 \
 	-DVGPV_$(TARGET_ARCH)_linux_android=1 \
-	-DVG_PLATFORM=\"$(TARGET_ARCH)-linux\" \
-	-DVG_LIBDIR=\"/system/lib/valgrind\" \
-	-DANDROID_SYMBOLS_DIR=\"/data/local/symbols\"
+	-DVG_PLATFORM=\"$(TARGET_ARCH)-linux\"
+
+ifeq ($(TARGET_IS_64_BIT),true)
+  vg_module_path := /system/lib64/valgrind
+else
+  vg_module_path := /system/lib/valgrind
+endif
+
+vg_libdir := \"$(vg_module_path)\"
+
+target_arch_cflags+=-DVG_LIBDIR=$(vg_libdir)
+
+ifdef TARGET_2ND_ARCH
+target_2nd_arch_cflags := \
+	-DVGA_$(TARGET_2ND_ARCH)=1 \
+	-DVGP_$(TARGET_2ND_ARCH)_linux=1 \
+	-DVGPV_$(TARGET_2ND_ARCH)_linux_android=1 \
+    -DVG_LIBDIR=$(vg_libdir) \
+	-DVG_PLATFORM=\"$(TARGET_2ND_ARCH)-linux\"
+vg_second_arch := $(TARGET_2ND_ARCH)
+
+endif
 
 common_includes := \
 	external/valgrind/main \
@@ -38,7 +60,7 @@ common_includes := \
 
 vex_ldflags := -nodefaultlibs
 
-ifeq ($(TARGET_ARCH),arm)
+ifeq (,$(filter $(TARGET_ARCH),arm arm64))
 tool_ldflags := -static -Wl,--build-id=none,-Ttext=0x38000000 -nodefaultlibs -nostartfiles -u _start -e_start
 
 # ioctl/syscall wrappers are device dependent
@@ -63,19 +85,22 @@ ifeq ($(TARGET_ARCH),arm)
 endif
 
 # Build libvex-($TARGET_ARCH)-linux.a
-include $(CLEAR_VARS)
+vg_local_module=libvex
 
-LOCAL_MODULE := libvex-$(TARGET_ARCH)-linux
-LOCAL_MODULE_TAGS := optional
-LOCAL_ARM_MODE := arm
+vg_local_cflags := $(common_cflags) \
+    -Wbad-function-cast \
+    -Wcast-qual \
+    -Wcast-align \
+    -fstrict-aliasing
 
-LOCAL_SRC_FILES := \
+vg_local_src_files := \
 	VEX/priv/main_globals.c \
 	VEX/priv/main_main.c \
 	VEX/priv/main_util.c \
 	VEX/priv/ir_defs.c \
 	VEX/priv/ir_match.c \
 	VEX/priv/ir_opt.c \
+	VEX/priv/ir_inject.c \
 	VEX/priv/guest_generic_bb_to_IR.c \
 	VEX/priv/guest_generic_x87.c \
 	VEX/priv/guest_mips_helpers.c \
@@ -88,11 +113,15 @@ LOCAL_SRC_FILES := \
 	VEX/priv/guest_ppc_toIR.c \
 	VEX/priv/guest_arm_helpers.c \
 	VEX/priv/guest_arm_toIR.c \
+	VEX/priv/guest_arm64_helpers.c \
+	VEX/priv/guest_arm64_toIR.c \
 	VEX/priv/guest_s390_helpers.c \
 	VEX/priv/guest_s390_toIR.c \
+	VEX/priv/host_generic_maddf.c \
 	VEX/priv/host_generic_regs.c \
 	VEX/priv/host_generic_simd64.c \
 	VEX/priv/host_generic_simd128.c \
+	VEX/priv/host_generic_simd256.c \
 	VEX/priv/host_generic_reg_alloc2.c \
 	VEX/priv/host_x86_defs.c \
 	VEX/priv/host_x86_isel.c \
@@ -104,29 +133,22 @@ LOCAL_SRC_FILES := \
 	VEX/priv/host_ppc_isel.c \
 	VEX/priv/host_arm_defs.c \
 	VEX/priv/host_arm_isel.c \
+	VEX/priv/host_arm64_defs.c \
+	VEX/priv/host_arm64_isel.c \
 	VEX/priv/host_s390_defs.c \
-	VEX/priv/host_s390_disasm.c \
-	VEX/priv/host_s390_isel.c
+	VEX/priv/host_s390_isel.c \
+	VEX/priv/s390_disasm.c
 
-
-LOCAL_C_INCLUDES := $(common_includes)
-
-LOCAL_CFLAGS := $(common_cflags) \
-	-Wbad-function-cast \
-	-Wcast-qual \
-	-Wcast-align \
-	-fstrict-aliasing
-
-include $(BUILD_STATIC_LIBRARY)
+vg_local_target := STATIC_LIBRARY
+include $(LOCAL_PATH)/Android.build_all.mk
 
 # Build libcoregrind-$(TARGET_ARCH)-linux.a
-include $(CLEAR_VARS)
+vg_local_module := libcoregrind
+vg_local_target := STATIC_LIBRARY
 
-LOCAL_MODULE := libcoregrind-$(TARGET_ARCH)-linux
-LOCAL_MODULE_TAGS := optional
-LOCAL_ARM_MODE := arm
-
-LOCAL_SRC_FILES := \
+vg_local_src_files := \
+	coregrind/m_addrinfo.c \
+	coregrind/m_cache.c \
 	coregrind/m_commandline.c \
 	coregrind/m_clientstate.c \
 	coregrind/m_cpuid.S \
@@ -148,6 +170,7 @@ LOCAL_SRC_FILES := \
 	coregrind/m_options.c \
 	coregrind/m_oset.c \
 	coregrind/m_poolalloc.c \
+	coregrind/m_rangemap.c \
 	coregrind/m_redir.c \
 	coregrind/m_seqmatch.c \
 	coregrind/m_signals.c \
@@ -169,6 +192,7 @@ LOCAL_SRC_FILES := \
 	coregrind/m_aspacemgr/aspacemgr-linux.c \
 	coregrind/m_coredump/coredump-elf.c \
 	coregrind/m_coredump/coredump-macho.c \
+	coregrind/m_debuginfo/image.c \
 	coregrind/m_debuginfo/misc.c \
 	coregrind/m_debuginfo/d3basics.c \
 	coregrind/m_debuginfo/debuginfo.c \
@@ -189,6 +213,7 @@ LOCAL_SRC_FILES := \
 	coregrind/m_dispatch/dispatch-ppc32-linux.S \
 	coregrind/m_dispatch/dispatch-ppc64-linux.S \
 	coregrind/m_dispatch/dispatch-arm-linux.S \
+	coregrind/m_dispatch/dispatch-arm64-linux.S \
 	coregrind/m_dispatch/dispatch-x86-darwin.S \
 	coregrind/m_dispatch/dispatch-amd64-darwin.S \
 	coregrind/m_initimg/initimg-linux.c \
@@ -199,6 +224,7 @@ LOCAL_SRC_FILES := \
 	coregrind/m_mach/mach_traps-x86-darwin.S \
 	coregrind/m_mach/mach_traps-amd64-darwin.S \
 	coregrind/m_replacemalloc/replacemalloc_core.c \
+    coregrind/m_sbprofile.c \
 	coregrind/m_scheduler/sched-lock.c \
 	coregrind/m_scheduler/sched-lock-generic.c \
 	coregrind/m_scheduler/scheduler.c \
@@ -209,6 +235,7 @@ LOCAL_SRC_FILES := \
 	coregrind/m_sigframe/sigframe-ppc32-linux.c \
 	coregrind/m_sigframe/sigframe-ppc64-linux.c \
 	coregrind/m_sigframe/sigframe-arm-linux.c \
+	coregrind/m_sigframe/sigframe-arm64-linux.c \
 	coregrind/m_sigframe/sigframe-x86-darwin.c \
 	coregrind/m_sigframe/sigframe-amd64-darwin.c \
 	coregrind/m_sigframe/sigframe-s390x-linux.c \
@@ -217,6 +244,7 @@ LOCAL_SRC_FILES := \
 	coregrind/m_syswrap/syscall-ppc32-linux.S \
 	coregrind/m_syswrap/syscall-ppc64-linux.S \
 	coregrind/m_syswrap/syscall-arm-linux.S \
+	coregrind/m_syswrap/syscall-arm64-linux.S \
 	coregrind/m_syswrap/syscall-x86-darwin.S \
 	coregrind/m_syswrap/syscall-amd64-darwin.S \
 	coregrind/m_syswrap/syscall-s390x-linux.S \
@@ -230,9 +258,11 @@ LOCAL_SRC_FILES := \
 	coregrind/m_syswrap/syswrap-ppc32-linux.c \
 	coregrind/m_syswrap/syswrap-ppc64-linux.c \
 	coregrind/m_syswrap/syswrap-arm-linux.c \
+	coregrind/m_syswrap/syswrap-arm64-linux.c \
 	coregrind/m_syswrap/syswrap-x86-darwin.c \
 	coregrind/m_syswrap/syswrap-amd64-darwin.c \
 	coregrind/m_syswrap/syswrap-s390x-linux.c \
+	coregrind/m_syswrap/syswrap-xen.c \
 	coregrind/m_ume/elf.c \
 	coregrind/m_ume/macho.c \
 	coregrind/m_ume/main.c \
@@ -248,76 +278,55 @@ LOCAL_SRC_FILES := \
 	coregrind/m_gdbserver/utils.c \
 	coregrind/m_gdbserver/valgrind-low-amd64.c \
 	coregrind/m_gdbserver/valgrind-low-arm.c \
+	coregrind/m_gdbserver/valgrind-low-arm64.c \
 	coregrind/m_gdbserver/valgrind-low-ppc32.c \
 	coregrind/m_gdbserver/valgrind-low-ppc64.c \
 	coregrind/m_gdbserver/valgrind-low-s390x.c \
 	coregrind/m_gdbserver/valgrind-low-x86.c \
 	coregrind/m_gdbserver/version.c
 
-LOCAL_C_INCLUDES := $(common_includes)
+vg_local_ldflags := $(vex_ldflags)
+vg_local_cflags := $(common_cflags)
 
-LOCAL_LDFLAGS := $(vex_ldflags)
-
-# TODO: split asflags out from cflags.
-LOCAL_CFLAGS := $(common_cflags)
-LOCAL_ASFLAGS := $(common_cflags)
-
-include $(BUILD_STATIC_LIBRARY)
+include $(LOCAL_PATH)/Android.build_all.mk
 
 # Build libreplacemalloc_toolpreload-$(TARGET_ARCH)-linux.a
-include $(CLEAR_VARS)
+vg_local_module := libreplacemalloc_toolpreload
+vg_local_target := STATIC_LIBRARY
 
-LOCAL_MODULE := libreplacemalloc_toolpreload-$(TARGET_ARCH)-linux
-LOCAL_MODULE_TAGS := optional
-LOCAL_ARM_MODE := arm
-
-LOCAL_SRC_FILES := \
+vg_local_src_files := \
 	coregrind/m_replacemalloc/vg_replace_malloc.c
 
-LOCAL_C_INCLUDES := $(common_includes)
+vg_local_ldflags := $(preload_ldflags)
 
-LOCAL_LDFLAGS := $(preload_ldflags)
+vg_local_cflags := $(common_cflags)
 
-LOCAL_CFLAGS := $(common_cflags)
-
-include $(BUILD_STATIC_LIBRARY)
+include $(LOCAL_PATH)/Android.build_all.mk
 
 # Build vgpreload_core-$(TARGET_ARCH)-linux.so
-include $(CLEAR_VARS)
+vg_local_module := vgpreload_core
+vg_local_target := SHARED_LIBRARY
+vg_local_module_class := SHARED_LIBRARIES
 
-LOCAL_MODULE := vgpreload_core-$(TARGET_ARCH)-linux
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_CLASS := SHARED_LIBRARIES
-LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/valgrind
-LOCAL_ARM_MODE := arm
-LOCAL_STRIP_MODULE := false
-LOCAL_NO_CRT := true
-LOCAL_PRELINK_MODULE := false
-
-LOCAL_SRC_FILES := \
+vg_local_src_files := \
 	coregrind/vg_preloaded.c
 
-LOCAL_C_INCLUDES := $(common_includes)
+#LOCAL_STRIP_MODULE := false
+#vg_local_no_crt := true
+#LOCAL_PRELINK_MODULE := false
 
-LOCAL_LDFLAGS := $(preload_ldflags)
+vg_local_ldflags := $(preload_ldflags)
+vg_local_cflags := $(common_cflags)
 
-LOCAL_CFLAGS := $(common_cflags)
+vg_local_arch_cflags := $(target_arch_cflags)
 
-include $(BUILD_SHARED_LIBRARY)
+include $(LOCAL_PATH)/Android.build_all.mk
 
 # Build memcheck-$(TARGET_ARCH)-linux
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := memcheck-$(TARGET_ARCH)-linux
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_CLASS := SHARED_LIBRARIES
-LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/valgrind
-LOCAL_ARM_MODE := arm
-LOCAL_FORCE_STATIC_EXECUTABLE := true
-LOCAL_NO_CRT := true
-LOCAL_SYSTEM_SHARED_LIBRARIES :=
-
-LOCAL_SRC_FILES := \
+vg_local_module := memcheck
+vg_local_target := EXECUTABLE
+vg_local_module_class := SHARED_LIBRARIES
+vg_local_src_files := \
 	memcheck/mc_leakcheck.c \
 	memcheck/mc_malloc_wrappers.c \
 	memcheck/mc_main.c \
@@ -325,85 +334,64 @@ LOCAL_SRC_FILES := \
 	memcheck/mc_machine.c \
 	memcheck/mc_errors.c
 
-LOCAL_C_INCLUDES := $(common_includes)
+vg_local_cflags := $(common_cflags)
+vg_local_ldflags := $(tool_ldflags)
+vg_local_static_libraries := libcoregrind libvex
 
-LOCAL_LDFLAGS := $(tool_ldflags)
+vg_local_without_system_shared_libraries := true
+vg_local_no_crt := true
 
-LOCAL_CFLAGS := $(common_cflags)
-
-LOCAL_STATIC_LIBRARIES := libcoregrind-$(TARGET_ARCH)-linux libvex-$(TARGET_ARCH)-linux
-
-include $(BUILD_EXECUTABLE)
+include $(LOCAL_PATH)/Android.build_all.mk
 
 # Build vgpreload_memcheck-$(TARGET_ARCH)-linux.so
-include $(CLEAR_VARS)
+vg_local_module := vgpreload_memcheck
+vg_local_module_class := SHARED_LIBRARIES
+vg_local_target := SHARED_LIBRARY
 
-LOCAL_MODULE := vgpreload_memcheck-$(TARGET_ARCH)-linux
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_CLASS := SHARED_LIBRARIES
-LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/valgrind
-LOCAL_ARM_MODE := arm
-LOCAL_STRIP_MODULE := false
-LOCAL_NO_CRT := true
-LOCAL_PRELINK_MODULE := false
-
-LOCAL_SRC_FILES := \
+vg_local_src_files := \
 	memcheck/mc_replace_strmem.c
 
-LOCAL_C_INCLUDES := $(common_includes)
+vg_local_ldflags := $(preload_ldflags)
+vg_local_cflags := $(common_cflags)
 
-LOCAL_LDFLAGS := $(preload_ldflags)
+vg_local_whole_static_libraries := libreplacemalloc_toolpreload
 
-LOCAL_CFLAGS := $(common_cflags)
+include $(LOCAL_PATH)/Android.build_all.mk
 
-LOCAL_WHOLE_STATIC_LIBRARIES := libreplacemalloc_toolpreload-$(TARGET_ARCH)-linux
+#LOCAL_STRIP_MODULE := false
+#vg_local_no_crt := true
+#LOCAL_PRELINK_MODULE := false
 
-include $(BUILD_SHARED_LIBRARY)
 
 # Build cachegrind-$(TARGET_ARCH)-linux
-include $(CLEAR_VARS)
+vg_local_module := cachegrind
+vg_local_module_class := SHARED_LIBRARIES
+vg_local_target := EXECUTABLE
+vg_local_no_crt := true
+vg_local_without_system_shared_libraries := true
 
-LOCAL_MODULE := cachegrind-$(TARGET_ARCH)-linux
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_CLASS := SHARED_LIBRARIES
-LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/valgrind
-LOCAL_ARM_MODE := arm
-LOCAL_FORCE_STATIC_EXECUTABLE := true
-LOCAL_NO_CRT := true
-LOCAL_SYSTEM_SHARED_LIBRARIES :=
+vg_local_src_files := \
+	cachegrind/cg_arch.c \
+	cachegrind/cg_main.c
 
-LOCAL_SRC_FILES := \
-	cachegrind/cg-arch.c \
-	cachegrind/cg-arm.c \
-	cachegrind/cg_main.c \
-	cachegrind/cg-ppc32.c \
-	cachegrind/cg-ppc64.c \
-	cachegrind/cg-s390x.c \
-	cachegrind/cg-x86-amd64.c
+vg_local_ldflags := $(tool_ldflags)
+vg_local_cflags := $(common_cflags)
 
-LOCAL_C_INCLUDES := $(common_includes)
+vg_local_static_libraries := libcoregrind libvex
 
-LOCAL_LDFLAGS := $(tool_ldflags)
+include $(LOCAL_PATH)/Android.build_all.mk
 
-LOCAL_CFLAGS := $(common_cflags)
-
-LOCAL_STATIC_LIBRARIES := libcoregrind-$(TARGET_ARCH)-linux libvex-$(TARGET_ARCH)-linux
-
-include $(BUILD_EXECUTABLE)
+#LOCAL_FORCE_STATIC_EXECUTABLE := true
 
 # Build callgrind-$(TARGET_ARCH)-linux
-include $(CLEAR_VARS)
 
-LOCAL_MODULE := callgrind-$(TARGET_ARCH)-linux
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_CLASS := SHARED_LIBRARIES
-LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/valgrind
-LOCAL_ARM_MODE := arm
-LOCAL_FORCE_STATIC_EXECUTABLE := true
-LOCAL_NO_CRT := true
-LOCAL_SYSTEM_SHARED_LIBRARIES :=
+vg_local_module := callgrind
+vg_local_module_class := SHARED_LIBRARIES
+vg_local_target := EXECUTABLE
+vg_local_no_crt := true
+vg_local_without_system_shared_libraries := true
 
-LOCAL_SRC_FILES := \
+vg_local_src_files := \
 	callgrind/bb.c \
 	callgrind/bbcc.c \
 	callgrind/callstack.c \
@@ -417,93 +405,67 @@ LOCAL_SRC_FILES := \
 	callgrind/jumps.c \
 	callgrind/main.c \
 	callgrind/sim.c \
-	callgrind/threads.c \
-	cachegrind/cg-arch.c \
-	cachegrind/cg-arm.c \
-	cachegrind/cg-ppc32.c \
-	cachegrind/cg-ppc64.c \
-	cachegrind/cg-s390x.c \
-	cachegrind/cg-x86-amd64.c
+	callgrind/threads.c
 
-LOCAL_C_INCLUDES := $(common_includes) \
-	external/valgrind/main/cachegrind
+vg_local_c_includes := external/valgrind/main/cachegrind
+vg_local_ldflags := $(tool_ldflags)
+vg_local_cflags := $(common_cflags)
+vg_local_static_libraries := libcoregrind libvex
 
-LOCAL_LDFLAGS := $(tool_ldflags)
+include $(LOCAL_PATH)/Android.build_all.mk
 
-LOCAL_CFLAGS := $(common_cflags)
-
-LOCAL_STATIC_LIBRARIES := libcoregrind-$(TARGET_ARCH)-linux libvex-$(TARGET_ARCH)-linux
-
-include $(BUILD_EXECUTABLE)
+#LOCAL_FORCE_STATIC_EXECUTABLE := true
 
 # Build helgrind-$(TARGET_ARCH)-linux
-include $(CLEAR_VARS)
+vg_local_module := helgrind
+vg_local_module_class := SHARED_LIBRARIES
+vg_local_target := EXECUTABLE
+vg_local_no_crt := true
+vg_local_without_system_shared_libraries := true
+vg_local_src_files := \
+    helgrind/hg_addrdescr.c \
+    helgrind/hg_basics.c \
+    helgrind/hg_errors.c \
+    helgrind/hg_lock_n_thread.c \
+    helgrind/hg_main.c \
+    helgrind/hg_wordset.c \
+    helgrind/libhb_core.c
 
-LOCAL_MODULE := helgrind-$(TARGET_ARCH)-linux
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_CLASS := SHARED_LIBRARIES
-LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/valgrind
-LOCAL_ARM_MODE := arm
-LOCAL_FORCE_STATIC_EXECUTABLE := true
-LOCAL_NO_CRT := true
-LOCAL_SYSTEM_SHARED_LIBRARIES :=
+vg_local_ldflags := $(tool_ldflags)
+vg_local_cflags := $(common_cflags)
+vg_local_static_libraries := libcoregrind libvex
 
-LOCAL_SRC_FILES := \
-	helgrind/hg_basics.c \
-	helgrind/hg_errors.c \
-	helgrind/hg_lock_n_thread.c \
-	helgrind/hg_main.c \
-	helgrind/hg_wordset.c \
-	helgrind/libhb_core.c
+include $(LOCAL_PATH)/Android.build_all.mk
 
-LOCAL_C_INCLUDES := $(common_includes)
-
-LOCAL_LDFLAGS := $(tool_ldflags)
-
-LOCAL_CFLAGS := $(common_cflags)
-
-LOCAL_STATIC_LIBRARIES := libcoregrind-$(TARGET_ARCH)-linux libvex-$(TARGET_ARCH)-linux
-
-include $(BUILD_EXECUTABLE)
+#LOCAL_FORCE_STATIC_EXECUTABLE := true
 
 # Build vgpreload_helgrind-$(TARGET_ARCH)-linux.so
-include $(CLEAR_VARS)
+vg_local_module := vgpreload_helgrind
+vg_local_module_class := SHARED_LIBRARIES
+vg_local_target := SHARED_LIBRARY
+#LOCAL_STRIP_MODULE := false
+vg_local_no_crt := true
+#LOCAL_PRELINK_MODULE := false
 
-LOCAL_MODULE := vgpreload_helgrind-$(TARGET_ARCH)-linux
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_CLASS := SHARED_LIBRARIES
-LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/valgrind
-LOCAL_ARM_MODE := arm
-LOCAL_STRIP_MODULE := false
-LOCAL_NO_CRT := true
-LOCAL_PRELINK_MODULE := false
-
-LOCAL_SRC_FILES := \
+vg_local_src_files := \
 	helgrind/hg_intercepts.c
 
-LOCAL_C_INCLUDES := $(common_includes)
 
-LOCAL_LDFLAGS := $(preload_ldflags)
+vg_local_ldflags := $(preload_ldflags)
+vg_local_cflags := $(common_cflags)
+vg_local_whole_static_libraries := libreplacemalloc_toolpreload
 
-LOCAL_CFLAGS := $(common_cflags)
-
-LOCAL_WHOLE_STATIC_LIBRARIES := libreplacemalloc_toolpreload-$(TARGET_ARCH)-linux
-
-include $(BUILD_SHARED_LIBRARY)
+include $(LOCAL_PATH)/Android.build_all.mk
 
 # Build drd-$(TARGET_ARCH)-linux
-include $(CLEAR_VARS)
+vg_local_module := drd
+vg_local_module_class := SHARED_LIBRARIES
+vg_local_target := EXECUTABLE
+#LOCAL_FORCE_STATIC_EXECUTABLE := true
+vg_local_no_crt := true
+vg_local_without_system_shared_libraries := true
 
-LOCAL_MODULE := drd-$(TARGET_ARCH)-linux
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_CLASS := SHARED_LIBRARIES
-LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/valgrind
-LOCAL_ARM_MODE := arm
-LOCAL_FORCE_STATIC_EXECUTABLE := true
-LOCAL_NO_CRT := true
-LOCAL_SYSTEM_SHARED_LIBRARIES :=
-
-LOCAL_SRC_FILES := \
+vg_local_src_files := \
 	drd/drd_barrier.c \
 	drd/drd_clientobj.c \
 	drd/drd_clientreq.c \
@@ -519,143 +481,124 @@ LOCAL_SRC_FILES := \
 	drd/drd_semaphore.c \
 	drd/drd_suppression.c
 
-LOCAL_C_INCLUDES := $(common_includes)
+vg_local_ldflags := $(tool_ldflags)
+vg_local_cflags := $(common_cflags)
 
-LOCAL_LDFLAGS := $(tool_ldflags)
+vg_local_static_libraries := libcoregrind libvex
 
-LOCAL_CFLAGS := $(common_cflags)
-
-LOCAL_STATIC_LIBRARIES := libcoregrind-$(TARGET_ARCH)-linux libvex-$(TARGET_ARCH)-linux
-
-include $(BUILD_EXECUTABLE)
+include $(LOCAL_PATH)/Android.build_all.mk
 
 # Build vgpreload_drd-$(TARGET_ARCH)-linux.so
-include $(CLEAR_VARS)
+vg_local_module := vgpreload_drd
+vg_local_module_class := SHARED_LIBRARIES
+vg_local_target := SHARED_LIBRARY
+#LOCAL_STRIP_MODULE := false
+vg_local_no_crt := true
+#LOCAL_PRELINK_MODULE := false
 
-LOCAL_MODULE := vgpreload_drd-$(TARGET_ARCH)-linux
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_CLASS := SHARED_LIBRARIES
-LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/valgrind
-LOCAL_ARM_MODE := arm
-LOCAL_STRIP_MODULE := false
-LOCAL_NO_CRT := true
-LOCAL_PRELINK_MODULE := false
-
-LOCAL_SRC_FILES := \
+vg_local_src_files := \
 	drd/drd_pthread_intercepts.c \
 	drd/drd_qtcore_intercepts.c \
 	drd/drd_strmem_intercepts.c
 
-LOCAL_C_INCLUDES := $(common_includes)
+vg_local_ldflags := $(preload_ldflags)
+vg_local_cflags := $(common_cflags)
 
-LOCAL_LDFLAGS := $(preload_ldflags)
+vg_local_whole_static_libraries := libreplacemalloc_toolpreload
 
-LOCAL_CFLAGS := $(common_cflags)
-
-LOCAL_WHOLE_STATIC_LIBRARIES := libreplacemalloc_toolpreload-$(TARGET_ARCH)-linux
-
-include $(BUILD_SHARED_LIBRARY)
+include $(LOCAL_PATH)/Android.build_all.mk
 
 # Build massif-$(TARGET_ARCH)-linux
-include $(CLEAR_VARS)
+vg_local_module := massif
+vg_local_module_class := SHARED_LIBRARIES
+vg_local_target := EXECUTABLE
+#LOCAL_FORCE_STATIC_EXECUTABLE := true
+vg_local_no_crt := true
+vg_local_without_system_shared_libraries := true
 
-LOCAL_MODULE := massif-$(TARGET_ARCH)-linux
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_CLASS := SHARED_LIBRARIES
-LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/valgrind
-LOCAL_ARM_MODE := arm
-LOCAL_FORCE_STATIC_EXECUTABLE := true
-LOCAL_NO_CRT := true
-LOCAL_SYSTEM_SHARED_LIBRARIES :=
-
-LOCAL_SRC_FILES := \
+vg_local_src_files := \
 	massif/ms_main.c
 
-LOCAL_C_INCLUDES := $(common_includes)
+vg_local_ldflags := $(tool_ldflags)
+vg_local_cflags := $(common_cflags)
 
-LOCAL_LDFLAGS := $(tool_ldflags)
+vg_local_static_libraries := libcoregrind libvex
 
-LOCAL_CFLAGS := $(common_cflags)
-
-LOCAL_STATIC_LIBRARIES := libcoregrind-$(TARGET_ARCH)-linux libvex-$(TARGET_ARCH)-linux
-
-include $(BUILD_EXECUTABLE)
+include $(LOCAL_PATH)/Android.build_all.mk
 
 # Build vgpreload_massif-$(TARGET_ARCH)-linux.so
-include $(CLEAR_VARS)
+vg_local_module := vgpreload_massif
+vg_local_module_class := SHARED_LIBRARIES
+vg_local_target := SHARED_LIBRARY
+#LOCAL_STRIP_MODULE := false
+vg_local_no_crt := true
 
-LOCAL_MODULE := vgpreload_massif-$(TARGET_ARCH)-linux
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_CLASS := SHARED_LIBRARIES
-LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/valgrind
-LOCAL_ARM_MODE := arm
-LOCAL_STRIP_MODULE := false
-LOCAL_NO_CRT := true
-LOCAL_PRELINK_MODULE := false
+#LOCAL_PRELINK_MODULE := false
 
-LOCAL_SRC_FILES :=
+vg_local_src_files :=
 
-LOCAL_C_INCLUDES := $(common_includes)
+vg_local_ldflags := $(preload_ldflags)
+vg_local_cflags := $(common_cflags)
+vg_local_whole_static_libraries := libreplacemalloc_toolpreload
 
-LOCAL_LDFLAGS := $(preload_ldflags)
-
-LOCAL_CFLAGS := $(common_cflags)
-
-LOCAL_WHOLE_STATIC_LIBRARIES := libreplacemalloc_toolpreload-$(TARGET_ARCH)-linux
-
-include $(BUILD_SHARED_LIBRARY)
+include $(LOCAL_PATH)/Android.build_all.mk
 
 # Build none-$(TARGET_ARCH)-linux
-include $(CLEAR_VARS)
+vg_local_module := none
+vg_local_module_class := SHARED_LIBRARIES
+vg_local_target := EXECUTABLE
 
-LOCAL_MODULE := none-$(TARGET_ARCH)-linux
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_CLASS := SHARED_LIBRARIES
-LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/valgrind
-LOCAL_ARM_MODE := arm
-LOCAL_FORCE_STATIC_EXECUTABLE := true
-LOCAL_NO_CRT := true
-LOCAL_SYSTEM_SHARED_LIBRARIES :=
+#LOCAL_FORCE_STATIC_EXECUTABLE := true
+vg_local_no_crt := true
+vg_local_without_system_shared_libraries := true
 
-LOCAL_SRC_FILES := \
+vg_local_src_files := \
 	none/nl_main.c
 
-LOCAL_C_INCLUDES := $(common_includes)
+vg_local_ldflags := $(tool_ldflags)
+vg_local_cflags := $(common_cflags)
+vg_local_static_libraries := libcoregrind libvex
 
-LOCAL_LDFLAGS := $(tool_ldflags)
-
-LOCAL_CFLAGS := $(common_cflags)
-
-LOCAL_STATIC_LIBRARIES := libcoregrind-$(TARGET_ARCH)-linux libvex-$(TARGET_ARCH)-linux
-
-include $(BUILD_EXECUTABLE)
+include $(LOCAL_PATH)/Android.build_all.mk
 
 # Build valgrind
 include $(CLEAR_VARS)
-
 LOCAL_MODULE := valgrind
-LOCAL_MODULE_TAGS := optional
 LOCAL_ARM_MODE := arm
-
 LOCAL_SRC_FILES := \
 	coregrind/launcher-linux.c \
 	coregrind/m_debuglog.c
 
 LOCAL_C_INCLUDES := $(common_includes)
-
 LOCAL_CFLAGS := $(common_cflags)
+
+LOCAL_CFLAGS_$(TARGET_ARCH) = $(target_arch_cflags)
 
 include $(BUILD_EXECUTABLE)
 
+# Build tests (one of them)...
+# TODO: tests need separate build framework it terms of 2ND_ARCH
+ifeq ($(TARGET_ARCH),arm)
+test := v6intThumb
+include $(LOCAL_PATH)/Android.test.mk
+endif
+
+ifeq ($(TARGET_ARCH),arm64)
+test := integer
+include $(LOCAL_PATH)/Android.test.mk
+test := fp_and_simd
+include $(LOCAL_PATH)/Android.test.mk
+endif
+
 # Copy prebuilt suppressions
 include $(CLEAR_VARS)
-
 LOCAL_MODULE := default.supp
-LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_CLASS := SHARED_LIBRARIES
-LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/valgrind
+LOCAL_MODULE_PATH := $(PRODUCT_OUT)$(vg_module_path)
 LOCAL_SRC_FILES := bionic.supp
 
 include $(BUILD_PREBUILT)
+
+#include bionic/libc/Android.mk
 
 endif

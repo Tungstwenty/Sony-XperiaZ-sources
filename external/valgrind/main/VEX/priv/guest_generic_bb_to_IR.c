@@ -7,7 +7,7 @@
    This file is part of Valgrind, a dynamic binary instrumentation
    framework.
 
-   Copyright (C) 2004-2012 OpenWorks LLP
+   Copyright (C) 2004-2013 OpenWorks LLP
       info@open-works.net
 
    This program is free software; you can redistribute it and/or
@@ -131,8 +131,8 @@ static Bool const_False ( void* callback_opaque, Addr64 a ) {
    not to disassemble any instructions into it; this is indicated
    by the callback returning True.
 
-   offB_TIADDR and offB_TILEN are the offsets of guest_TIADDR and
-   guest_TILEN.  Since this routine has to work for any guest state,
+   offB_CMADDR and offB_CMLEN are the offsets of guest_CMADDR and
+   guest_CMLEN.  Since this routine has to work for any guest state,
    without knowing what it is, those offsets have to passed in.
 
    callback_opaque is a caller-supplied pointer to data which the
@@ -187,14 +187,15 @@ IRSB* bb_to_IR (
          /*IN*/ Addr64           guest_IP_bbstart,
          /*IN*/ Bool             (*chase_into_ok)(void*,Addr64),
          /*IN*/ Bool             host_bigendian,
+         /*IN*/ Bool             sigill_diag,
          /*IN*/ VexArch          arch_guest,
          /*IN*/ VexArchInfo*     archinfo_guest,
          /*IN*/ VexAbiInfo*      abiinfo_both,
          /*IN*/ IRType           guest_word_type,
          /*IN*/ UInt             (*needs_self_check)(void*,VexGuestExtents*),
          /*IN*/ Bool             (*preamble_function)(void*,IRSB*),
-         /*IN*/ Int              offB_GUEST_TISTART,
-         /*IN*/ Int              offB_GUEST_TILEN,
+         /*IN*/ Int              offB_GUEST_CMSTART,
+         /*IN*/ Int              offB_GUEST_CMLEN,
          /*IN*/ Int              offB_GUEST_IP,
          /*IN*/ Int              szB_GUEST_IP
       )
@@ -361,7 +362,8 @@ IRSB* bb_to_IR (
                             arch_guest,
                             archinfo_guest,
                             abiinfo_both,
-                            host_bigendian );
+                            host_bigendian,
+                            sigill_diag );
 
       /* stay sane ... */
       vassert(dres.whatNext == Dis_StopHere
@@ -518,8 +520,8 @@ IRSB* bb_to_IR (
       IRTemp   tistart_tmp, tilen_tmp;
       HWord    VEX_REGPARM(2) (*fn_generic)(HWord, HWord);
       HWord    VEX_REGPARM(1) (*fn_spec)(HWord);
-      HChar*   nm_generic;
-      HChar*   nm_spec;
+      const HChar* nm_generic;
+      const HChar* nm_spec;
       HWord    fn_generic_entry = 0;
       HWord    fn_spec_entry = 0;
       UInt     host_word_szB = sizeof(HWord);
@@ -586,7 +588,7 @@ IRSB* bb_to_IR (
          nm_spec = NULL;
 
          if (host_word_szB == 8) {
-            HChar* nm = NULL;
+            const HChar* nm = NULL;
             ULong  VEX_REGPARM(1) (*fn)(HWord)  = NULL;
             switch (hWs_to_check) {
                case 1:  fn =  genericg_compute_checksum_8al_1;
@@ -618,7 +620,7 @@ IRSB* bb_to_IR (
             fn_spec = (VEX_REGPARM(1) HWord(*)(HWord)) fn;
             nm_spec = nm;
          } else {
-            HChar* nm = NULL;
+            const HChar* nm = NULL;
             UInt   VEX_REGPARM(1) (*fn)(HWord) = NULL;
             switch (hWs_to_check) {
                case 1:  fn =  genericg_compute_checksum_4al_1;
@@ -661,7 +663,7 @@ IRSB* bb_to_IR (
             vassert(!nm_spec);
          }
 
-         /* Set TISTART and TILEN.  These will describe to the despatcher
+         /* Set CMSTART and CMLEN.  These will describe to the despatcher
             the area of guest code to invalidate should we exit with a
             self-check failure. */
 
@@ -682,10 +684,10 @@ IRSB* bb_to_IR (
             = IRStmt_WrTmp(tilen_tmp, IRExpr_Const(len2check_IRConst) );
 
          irsb->stmts[selfcheck_idx + i * 5 + 2]
-            = IRStmt_Put( offB_GUEST_TISTART, IRExpr_RdTmp(tistart_tmp) );
+            = IRStmt_Put( offB_GUEST_CMSTART, IRExpr_RdTmp(tistart_tmp) );
 
          irsb->stmts[selfcheck_idx + i * 5 + 3]
-            = IRStmt_Put( offB_GUEST_TILEN, IRExpr_RdTmp(tilen_tmp) );
+            = IRStmt_Put( offB_GUEST_CMLEN, IRExpr_RdTmp(tilen_tmp) );
 
          /* Generate the entry point descriptors */
          if (abiinfo_both->host_ppc_calls_use_fndescrs) {
@@ -735,7 +737,7 @@ IRSB* bb_to_IR (
                           ? IRExpr_Const(IRConst_U64(expectedhW))
                           : IRExpr_Const(IRConst_U32(expectedhW))
                  ),
-                 Ijk_TInval,
+                 Ijk_InvalICache,
                  /* Where we must restart if there's a failure: at the
                     first extent, regardless of which extent the
                     failure actually happened in. */

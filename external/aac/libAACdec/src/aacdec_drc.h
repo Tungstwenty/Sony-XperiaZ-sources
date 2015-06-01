@@ -1,13 +1,12 @@
 
 /* -----------------------------------------------------------------------------------------------------------
-Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android
+Software License for The Fraunhofer FDK AAC Codec Library for Android
 
 © Copyright  1995 - 2013 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
-  Copyright (C) 2012 Sony Mobile Communications AB.
 
  1.    INTRODUCTION
-The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
+The Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
 the MPEG Advanced Audio Coding ("AAC") encoding and decoding scheme for digital audio.
 This FDK AAC Codec software is intended to be used on a wide variety of Android devices.
 
@@ -99,7 +98,6 @@ amm-info@iis.fraunhofer.de
 #include "channel.h"
 #include "FDK_bitstream.h"
 
-#define AACDEC_DRC_DEFAULT_REF_LEVEL  ( 108 )   /* -27 dB below full scale (typical for movies) */
 #define AACDEC_DRC_DFLT_EXPIRY_FRAMES (  50 )   /* Default DRC data expiry time in AAC frames   */
 
 /**
@@ -112,6 +110,7 @@ typedef enum
   TARGET_REF_LEVEL,
   DRC_BS_DELAY,
   DRC_DATA_EXPIRY_FRAME,
+  APPLY_NORMALIZATION,
   APPLY_HEAVY_COMPRESSION
 
 } AACDEC_DRC_PARAM;
@@ -150,6 +149,8 @@ int aacDecoder_drcProlog (
  * \param pSbrDec pointer to SBR decoder instance
  * \param pAacDecoderChannelInfo AAC decoder channel instance to be processed
  * \param pDrcDat DRC channel data
+ * \param extGain Pointer to a FIXP_DBL where a externally applyable gain will be stored into (independently on whether it will be apply internally or not).
+ *                At function call the buffer must hold the scale (0 >= scale < DFRACT_BITS) to be applied on the gain value.
  * \param ch channel index
  * \param aacFrameSize AAC frame size
  * \param bSbrPresent flag indicating that SBR is present, in which case DRC is handed over to the SBR instance pSbrDec
@@ -159,6 +160,7 @@ void aacDecoder_drcApply (
         void                   *pSbrDec,
         CAacDecoderChannelInfo *pAacDecoderChannelInfo,
         CDrcChannelData        *pDrcDat,
+        FIXP_DBL               *extGain,
         int  ch,
         int  aacFrameSize,
         int  bSbrPresent );
@@ -170,6 +172,18 @@ int aacDecoder_drcEpilog (
         UCHAR  pceInstanceTag,
         UCHAR  channelMapping[],
         int    validChannels );
+
+/**
+ * \brief Get metadata information found in bitstream.
+ * \param self DRC module instance handle.
+ * \param pPresMode Pointer to field where the presentation mode will be written to.
+ * \param pProgRefLevel Pointer to field where the program reference level will be written to.
+ * \return Nothing.
+ */
+void aacDecoder_drcGetInfo (
+        HANDLE_AAC_DRC  self,
+        SCHAR  *pPresMode,
+        SCHAR  *pProgRefLevel );
 
 
 #endif  /* AACDEC_DRC_H */

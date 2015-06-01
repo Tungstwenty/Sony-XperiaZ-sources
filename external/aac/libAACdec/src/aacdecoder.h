@@ -1,13 +1,12 @@
 
 /* -----------------------------------------------------------------------------------------------------------
-Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android
+Software License for The Fraunhofer FDK AAC Codec Library for Android
 
 © Copyright  1995 - 2013 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
-  Copyright (C) 2012 Sony Mobile Communications AB.
 
  1.    INTRODUCTION
-The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
+The Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
 the MPEG Advanced Audio Coding ("AAC") encoding and decoding scheme for digital audio.
 This FDK AAC Codec software is intended to be used on a wide variety of Android devices.
 
@@ -80,9 +79,6 @@ Am Wolfsmantel 33
 
 www.iis.fraunhofer.de/amm
 amm-info@iis.fraunhofer.de
-
-Changes made in the code.
-2012-12-27 - Added CAacDecoder_ClearHistory function.
 ----------------------------------------------------------------------------------------------------------- */
 
 /*****************************  MPEG-4 AAC Decoder  **************************
@@ -115,6 +111,7 @@ Changes made in the code.
 #include "aacdec_drc.h"
 
  #include "pcmutils_lib.h"
+ #include "limiter.h"
 
 
 /* Capabilities flags */
@@ -180,27 +177,31 @@ struct AAC_DECODER_INSTANCE {
 
   UINT                  flags;                       /*!< Flags for internal decoder use. DO NOT USE self::streaminfo::flags ! */
 
-  MP4_ELEMENT_ID        elements[7]; /*!< Table where the element Id's are listed          */
-  UCHAR                 elTags[7];   /*!< Table where the elements id Tags are listed      */
-  UCHAR                 chMapping[(6)];   /*!< Table of MPEG canonical order to bitstream channel order mapping. */
+  MP4_ELEMENT_ID        elements[(8)]; /*!< Table where the element Id's are listed          */
+  UCHAR                 elTags[(8)];   /*!< Table where the elements id Tags are listed      */
+  UCHAR                 chMapping[(8)];   /*!< Table of MPEG canonical order to bitstream channel order mapping. */
 
-  AUDIO_CHANNEL_TYPE    channelType[(6)];    /*!< Audio channel type of each output audio channel (from 0 upto numChannels).           */
-  UCHAR                 channelIndices[(6)]; /*!< Audio channel index for each output audio channel (from 0 upto numChannels).         */
+  AUDIO_CHANNEL_TYPE    channelType[(8)];    /*!< Audio channel type of each output audio channel (from 0 upto numChannels).           */
+  UCHAR                 channelIndices[(8)]; /*!< Audio channel index for each output audio channel (from 0 upto numChannels).         */
                                                              /* See ISO/IEC 13818-7:2005(E), 8.5.3.2 Explicit channel mapping using a program_config_element() */
 
 
   const UCHAR         (*channelOutputMapping)[8];    /*!< Table for MPEG canonical order to output channel order mapping. */
-
+  UCHAR                 chMapIndex;                  /*!< Index to access one line of the channelOutputMapping table. This is required
+                                                          because not all 8 channel configurations have the same output mapping. */
 
   CProgramConfig                pce;
   CStreamInfo                   streamInfo;         /*!< pointer to StreamInfo data (read from the bitstream) */
-  CAacDecoderChannelInfo       *pAacDecoderChannelInfo[(6)];       /*!< Temporal channel memory */
-  CAacDecoderStaticChannelInfo *pAacDecoderStaticChannelInfo[(6)]; /*!< Persistent channel memory */
+  CAacDecoderChannelInfo       *pAacDecoderChannelInfo[(8)];       /*!< Temporal channel memory */
+  CAacDecoderStaticChannelInfo *pAacDecoderStaticChannelInfo[(8)]; /*!< Persistent channel memory */
 
   CAacDecoderCommonData         aacCommonData;             /*!< Temporal shared data for all channels hooked into pAacDecoderChannelInfo */
 
   CConcealParams                concealCommonData;
-  INT   concealChannels;
+
+  INT                   aacChannelsPrev;                          /*!< The amount of AAC core channels of the last successful decode call.         */
+  AUDIO_CHANNEL_TYPE    channelTypePrev[(8)];     /*!< Array holding the channelType values of the last successful decode call.    */
+  UCHAR                 channelIndicesPrev[(8)];  /*!< Array holding the channelIndices values of the last successful decode call. */
 
 
   HANDLE_SBRDECODER   hSbrDecoder;                   /*!< SBR decoder handle.                        */
@@ -218,6 +219,12 @@ struct AAC_DECODER_INSTANCE {
   CAncData      ancData;                             /*!< structure to handle ancillary data         */
 
   HANDLE_PCM_DOWNMIX  hPcmUtils;                     /*!< privat data for the PCM utils.             */
+  TDLimiterPtr hLimiter;                             /*!< Handle of time domain limiter.             */
+  UCHAR        limiterEnableUser;                    /*!< The limiter configuration requested by the library user */
+  UCHAR        limiterEnableCurr;                    /*!< The current limiter configuration.         */
+
+  FIXP_DBL     extGain[1];                           /*!< Gain that must be applied to the output signal. */
+  UINT         extGainDelay;                         /*!< Delay that must be accounted for extGain. */
 
 };
 
@@ -312,7 +319,5 @@ LINKSPEC_H void CAacDecoder_Close ( HANDLE_AACDECODER self );
 /* get streaminfo handle from decoder */
 LINKSPEC_H CStreamInfo* CAacDecoder_GetStreamInfo ( HANDLE_AACDECODER self );
 
-/* Clear all the concealment and overlap-add buffers */
-void CAacDecoder_ClearHistory(HANDLE_AACDECODER self);
 
 #endif /* #ifndef AACDECODER_H */

@@ -41,7 +41,7 @@
 #include <slirp.h>
 #include "ip_icmp.h"
 #define SLIRP_COMPILATION  1
-#include "sockets.h"
+#include "android/sockets.h"
 
 #ifdef LOG_ENABLED
 struct udpstat udpstat;
@@ -303,7 +303,7 @@ bad:
 }
 
 int udp_output2_(struct socket *so, struct mbuf *m,
-                 const SockAddress*  saddr, 
+                 const SockAddress*  saddr,
                  const SockAddress*  daddr,
                  int iptos)
 {

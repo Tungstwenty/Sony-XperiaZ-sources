@@ -18,13 +18,14 @@
 #include <process.h>
 #endif
 
-#include "sockets.h"
+#include "config.h"
+#include "android/sockets.h"
 
 #include "android/android.h"
 #include "qemu-common.h"
-#include "sysemu.h"
-#include "console.h"
-#include "user-events.h"
+#include "sysemu/sysemu.h"
+#include "ui/console.h"
+#include "android/user-events.h"
 
 #include <SDL.h>
 #include <SDL_syswm.h>
@@ -33,19 +34,22 @@
 
 #include "android/charmap.h"
 #include "android/utils/debug.h"
-#include "android/config.h"
+#include "android/config-file.h"
 #include "android/config/config.h"
+#include "android/cpu_accelerator.h"
 
+#include "android/kernel/kernel_utils.h"
 #include "android/user-config.h"
 #include "android/utils/bufprint.h"
 #include "android/utils/filelock.h"
 #include "android/utils/lineinput.h"
 #include "android/utils/path.h"
+#include "android/utils/property_file.h"
 #include "android/utils/tempfile.h"
 
 #include "android/main-common.h"
 #include "android/help.h"
-#include "hw/goldfish_nand.h"
+#include "hw/android/goldfish/nand.h"
 
 #include "android/globals.h"
 
@@ -55,7 +59,7 @@
 #include "android/snapshot.h"
 
 #include "android/framebuffer.h"
-#include "iolooper.h"
+#include "android/iolooper.h"
 
 AndroidRotation  android_framebuffer_rotation;
 
@@ -74,16 +78,11 @@ extern int  control_console_start( int  port );  /* in control.c */
 
 extern int qemu_milli_needed;
 
+extern bool android_op_wipe_data;
+
 /* the default device DPI if none is specified by the skin
  */
 #define  DEFAULT_DEVICE_DPI  165
-
-#ifdef CONFIG_TRACE
-extern void  start_tracing(void);
-extern void  stop_tracing(void);
-#endif
-
-unsigned long   android_verbose;
 
 int qemu_main(int argc, char **argv);
 
@@ -406,14 +405,11 @@ int main(int argc, char **argv)
     /* Update CPU architecture for HW configs created from build dir. */
     if (inAndroidBuild) {
 #if defined(TARGET_ARM)
-        free(android_hw->hw_cpu_arch);
-        android_hw->hw_cpu_arch = ASTRDUP("arm");
+        reassign_string(&android_hw->hw_cpu_arch, "arm");
 #elif defined(TARGET_I386)
-        free(android_hw->hw_cpu_arch);
-        android_hw->hw_cpu_arch = ASTRDUP("x86");
+        reassign_string(&android_hw->hw_cpu_arch, "x86");
 #elif defined(TARGET_MIPS)
-        free(android_hw->hw_cpu_arch);
-        android_hw->hw_cpu_arch = ASTRDUP("mips");
+        reassign_string(&android_hw->hw_cpu_arch, "mips");
 #endif
     }
 
@@ -455,6 +451,38 @@ int main(int argc, char **argv)
          if (kernelFileLen > 6 && !memcmp(kernelFile + kernelFileLen - 6, "-armv7", 6)) {
              forceArmv7 = 1;
          }
+    }
+
+    KernelType kernelType = KERNEL_TYPE_LEGACY;
+    if (!android_pathProbeKernelType(hw->kernel_path, &kernelType)) {
+        D("WARNING: Could not determine kernel device naming scheme. Assuming legacy\n"
+            "If this AVD doesn't boot, and uses a recent kernel (3.10 or above) try setting\n"
+            "'kernel.newDeviceNaming' to 'yes' in its configuration.\n");
+    }
+
+    // Auto-detect kernel device naming scheme if needed.
+    if (androidHwConfig_getKernelDeviceNaming(hw) < 0) {
+        const char* newDeviceNaming = "no";
+        if (kernelType == KERNEL_TYPE_3_10_OR_ABOVE) {
+            D("Auto-detect: Kernel image requires new device naming scheme.");
+            newDeviceNaming = "yes";
+        } else {
+            D("Auto-detect: Kernel image requires legacy device naming scheme.");
+        }
+        reassign_string(&hw->kernel_newDeviceNaming, newDeviceNaming);
+    }
+
+    // Auto-detect YAFFS2 partition support if needed.
+    if (androidHwConfig_getKernelYaffs2Support(hw) < 0) {
+        // Essentially, anything before API level 20 supports Yaffs2
+        const char* newYaffs2Support = "no";
+        if (avdInfo_getApiLevel(avd) < 20) {
+            newYaffs2Support = "yes";
+            D("Auto-detect: Kernel does support YAFFS2 partitions.");
+        } else {
+            D("Auto-detect: Kernel does not support YAFFS2 partitions.");
+        }
+        reassign_string(&hw->kernel_supportsYaffs2, newYaffs2Support);
     }
 
     if (boot_prop_ip[0]) {
@@ -508,8 +536,7 @@ int main(int argc, char **argv)
 
     /* opts->ramdisk is never NULL (see createAVD) here */
     if (opts->ramdisk) {
-        AFREE(hw->disk_ramdisk_path);
-        hw->disk_ramdisk_path = ASTRDUP(opts->ramdisk);
+        reassign_string(&hw->disk_ramdisk_path, opts->ramdisk);
     }
     else if (!hw->disk_ramdisk_path[0]) {
         hw->disk_ramdisk_path = avdInfo_getRamdiskPath(avd);
@@ -676,6 +703,7 @@ int main(int argc, char **argv)
         } else {
             hw->disk_dataPartition_initPath = NULL;
         }
+        android_op_wipe_data = opts->wipe_data;
 
         uint64_t     defaultBytes =
                 hw->disk_dataPartition_size == 0 ?
@@ -913,6 +941,14 @@ int main(int argc, char **argv)
         args[n++] = opts->gps;
     }
 
+    if (opts->selinux) {
+        if ((strcmp(opts->selinux, "permissive") != 0)
+                && (strcmp(opts->selinux, "disabled") != 0)) {
+            derror("-selinux must be \"disabled\" or \"permissive\"");
+            exit(1);
+        }
+    }
+
     if (opts->memory) {
         char*  end;
         long   ramSize = strtol(opts->memory, &end, 0);
@@ -985,7 +1021,22 @@ int main(int argc, char **argv)
         args[n++] = "off";
     }
 
-    /* Pass boot properties to the core. */
+    /* Pass boot properties to the core. First, those from boot.prop,
+     * then those from the command-line */
+    const FileData* bootProperties = avdInfo_getBootProperties(avd);
+    if (!fileData_isEmpty(bootProperties)) {
+        PropertyFileIterator iter[1];
+        propertyFileIterator_init(iter,
+                                  bootProperties->data,
+                                  bootProperties->size);
+        while (propertyFileIterator_next(iter)) {
+            char temp[MAX_PROPERTY_NAME_LEN + MAX_PROPERTY_VALUE_LEN + 2];
+            snprintf(temp, sizeof temp, "%s=%s", iter->name, iter->value);
+            args[n++] = "-boot-property";
+            args[n++] = ASTRDUP(temp);
+        }
+    }
+
     if (opts->prop != NULL) {
         ParamList*  pl = opts->prop;
         for ( ; pl != NULL; pl = pl->next ) {
@@ -1009,7 +1060,9 @@ int main(int argc, char **argv)
 #endif
 
         if (opts->shell || opts->logcat) {
-            p = bufprint(p, end, " androidboot.console=ttyS%d", shell_serial );
+            p = bufprint(p, end, " androidboot.console=%s%d",
+                         androidHwConfig_getKernelSerialPrefix(android_hw),
+                         shell_serial );
         }
 
         if (opts->trace) {
@@ -1042,6 +1095,10 @@ int main(int argc, char **argv)
 
         if (opts->bootchart) {
             p = bufprint(p, end, " androidboot.bootchart=%s", opts->bootchart);
+        }
+
+        if (opts->selinux) {
+            p = bufprint(p, end, " androidboot.selinux=%s", opts->selinux);
         }
 
         if (p >= end) {
@@ -1094,13 +1151,7 @@ int main(int argc, char **argv)
          */
         kcm_extract_charmap_name(opts->charmap, charmap_name,
                                  sizeof(charmap_name));
-        AFREE(hw->hw_keyboard_charmap);
-        hw->hw_keyboard_charmap = ASTRDUP(charmap_name);
-    }
-
-    if (opts->memcheck) {
-        args[n++] = "-android-memcheck";
-        args[n++] = opts->memcheck;
+        reassign_string(&hw->hw_keyboard_charmap, charmap_name);
     }
 
     if (opts->gpu) {
@@ -1180,6 +1231,114 @@ int main(int argc, char **argv)
         args[n++] = "socket,vlan=1,mcast=230.0.0.10:1234";
     }
 
+    /* Handle CPU acceleration options. */
+    if (opts->no_accel) {
+        if (opts->accel) {
+            if (strcmp(opts->accel, "off") != 0) {
+                derror("You cannot use -no-accel and '-accel %s' at the same time",
+                       opts->accel);
+                exit(1);
+            }
+        } else {
+            reassign_string(&opts->accel, "off");
+        }
+    }
+
+    enum {
+        ACCEL_OFF = 0,
+        ACCEL_ON = 1,
+        ACCEL_AUTO = 2,
+    } accel_mode = ACCEL_AUTO;
+
+    if (opts->accel) {
+        if (!strcmp(opts->accel, "off")) {
+            accel_mode = ACCEL_OFF;
+        } else if (!strcmp(opts->accel, "on")) {
+            accel_mode = ACCEL_ON;
+        } else if (!strcmp(opts->accel, "auto")) {
+            accel_mode = ACCEL_AUTO;
+        } else {
+            derror("Invalid '-accel %s' parameter, valid values are: on off auto\n",
+                   opts->accel);
+            exit(1);
+        }
+    }
+
+#if defined(TARGET_I386) || defined(TARGET_X86_64)
+    char* accel_status = NULL;
+    bool accel_ok = android_hasCpuAcceleration(&accel_status);
+
+#ifdef __linux__
+    static const char kAccelerator[] = "KVM";
+    static const char kEnableAccelerator[] = "-enable-kvm";
+    static const char kDisableAccelerator[] = "-disable-kvm";
+#else
+    static const char kAccelerator[] = "Intel HAXM";
+    static const char kEnableAccelerator[] = "-enable-hax";
+    static const char kDisableAccelerator[] = "-disable-hax";
+#endif
+
+    // Dump CPU acceleration status.
+    if (VERBOSE_CHECK(init)) {
+        const char* accel_str = "DISABLED";
+        if (accel_ok) {
+            if (accel_mode == ACCEL_OFF) {
+                accel_str = "working, but disabled by user";
+            } else {
+                accel_str = "working";
+            }
+        }
+        dprint("CPU Acceleration: %s", accel_str);
+        dprint("CPU Acceleration status: %s", accel_status);
+    }
+
+    // Special case: x86_64 emulation currently requires hardware
+    // acceleration, so refuse to start in 'auto' mode if it is not
+    // available.
+    {
+        char* abi = avdInfo_getTargetAbi(avd);
+        if (!strcmp(abi, "x86_64")) {
+            if (!accel_ok && accel_mode != ACCEL_OFF) {
+                derror("x86_64 emulation currently requires hardware acceleration!\n"
+                    "Please ensure %s is properly installed and usable.\n"
+                    "CPU acceleration status: %s",
+                    kAccelerator, accel_status);
+                exit(1);
+            }
+            else if (accel_mode == ACCEL_OFF) {
+                // '-no-accel' of '-accel off' was used explicitly. Warn about
+                // the issue but do not exit.
+                dwarning("x86_64 emulation may not work without hardware acceleration!");
+            }
+        }
+        AFREE(abi);
+    }
+
+    // CPU acceleration only works for x86 and x86_64 system images.
+    if (accel_mode == ACCEL_OFF && accel_ok) {
+        args[n++] = ASTRDUP(kDisableAccelerator);
+    } else if (accel_mode == ACCEL_ON) {
+        if (!accel_ok) {
+            derror("CPU acceleration not supported on this machine!");
+            derror("Reason: %s", accel_status);
+            exit(1);
+        }
+        args[n++] = ASTRDUP(kEnableAccelerator);
+    } else {
+        args[n++] = accel_ok ? ASTRDUP(kEnableAccelerator)
+                             : ASTRDUP(kDisableAccelerator);
+    }
+
+    AFREE(accel_status);
+#else
+    (void)accel_mode;
+
+    if (VERBOSE_CHECK(init)) {
+        dwarning("CPU acceleration only works with x86/x86_64 "
+            "system images.");
+    }
+#endif
+
     /* Setup screen emulation */
     if (opts->screen) {
         if (strcmp(opts->screen, "touch") &&
@@ -1215,9 +1374,23 @@ int main(int argc, char **argv)
     }
 
     if (forceArmv7 != 0) {
-        AFREE(hw->hw_cpu_model);
-        hw->hw_cpu_model = ASTRDUP("cortex-a8");
+        reassign_string(&hw->hw_cpu_model, "cortex-a8");
         D("Auto-config: -qemu -cpu %s", hw->hw_cpu_model);
+    }
+
+    /* If the target architecture is 'x86', ensure that the 'qemu32'
+     * CPU model is used. Otherwise, the default (which is now 'qemu64')
+     * will result in a failure to boot with some kernels under
+     * un-accelerated emulation.
+     */
+    if (hw->hw_cpu_model[0] == '\0') {
+        char* arch = avdInfo_getTargetCpuArch(avd);
+        D("Target arch = '%s'", arch ? arch : "NULL");
+        if (arch != NULL && !strcmp(arch, "x86")) {
+            reassign_string(&hw->hw_cpu_model, "qemu32");
+            D("Auto-config: -qemu -cpu %s", hw->hw_cpu_model);
+        }
+        AFREE(arch);
     }
 
     /* Generate a hardware-qemu.ini for this AVD. The real hardware

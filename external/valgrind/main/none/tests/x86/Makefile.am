@@ -53,6 +53,7 @@ EXTRA_DIST = \
 	looper.stderr.exp looper.stdout.exp looper.vgtest \
 	lzcnt32.stderr.exp lzcnt32.stdout.exp lzcnt32.vgtest \
 	movx.stderr.exp movx.stdout.exp movx.vgtest \
+	movbe.stderr.exp movbe.stdout.exp movbe.vgtest \
 	pushpopseg.stderr.exp pushpopseg.stdout.exp pushpopseg.vgtest \
 	sbbmisc.stderr.exp sbbmisc.stdout.exp sbbmisc.vgtest \
 	shift_ndep.stderr.exp shift_ndep.stdout.exp shift_ndep.vgtest \
@@ -60,6 +61,7 @@ EXTRA_DIST = \
 	ssse3_misaligned.stderr.exp ssse3_misaligned.stdout.exp \
 	ssse3_misaligned.vgtest ssse3_misaligned.c \
 	x86locked.vgtest x86locked.stdout.exp x86locked.stderr.exp \
+	x87trigOOR.vgtest x87trigOOR.stdout.exp x87trigOOR.stderr.exp \
 	yield.stderr.exp yield.stdout.exp yield.disabled \
 	xadd.stdout.exp xadd.stderr.exp xadd.vgtest
 
@@ -93,6 +95,7 @@ check_PROGRAMS = \
 	shift_ndep \
 	smc1 \
 	x86locked \
+	x87trigOOR \
 	yield \
 	xadd
 if BUILD_SSSE3_TESTS
@@ -103,6 +106,9 @@ if BUILD_LZCNT_TESTS
 endif
 if !VGCONF_OS_IS_DARWIN
  check_PROGRAMS += cse_fail faultstatus
+endif
+if BUILD_MOVBE_TESTS
+ check_PROGRAMS += movbe
 endif
 
 

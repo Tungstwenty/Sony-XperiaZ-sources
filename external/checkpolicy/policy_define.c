@@ -38,6 +38,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
+#include <limits.h>
 
 #include <sepol/policydb/expand.h>
 #include <sepol/policydb/policydb.h>
@@ -60,6 +61,7 @@ int mlspol = 0;
 extern unsigned long policydb_lineno;
 extern unsigned long source_lineno;
 extern unsigned int policydb_errors;
+extern char source_file[PATH_MAX];
 
 extern int yywarn(char *msg);
 extern int yyerror(char *msg);
@@ -409,6 +411,38 @@ int define_default_role(int which)
 			return -1;
 		}
 		cladatum->default_role = which;
+		free(id);
+	}
+
+	return 0;
+}
+
+int define_default_type(int which)
+{
+	char *id;
+	class_datum_t *cladatum;
+
+	if (pass == 1) {
+		while ((id = queue_remove(id_queue)))
+			free(id);
+		return 0;
+	}
+
+	while ((id = queue_remove(id_queue))) {
+		if (!is_id_in_scope(SYM_CLASSES, id)) {
+			yyerror2("class %s is not within scope", id);
+			return -1;
+		}
+		cladatum = hashtab_search(policydbp->p_classes.table, id);
+		if (!cladatum) {
+			yyerror2("unknown class %s", id);
+			return -1;
+		}
+		if (cladatum->default_type && cladatum->default_type != which) {
+			yyerror2("conflicting default type information for class %s", id);
+			return -1;
+		}
+		cladatum->default_type = which;
 		free(id);
 	}
 
@@ -1494,6 +1528,12 @@ int define_compute_type_helper(int which, avrule_t ** rule)
 	avrule_init(avrule);
 	avrule->specified = which;
 	avrule->line = policydb_lineno;
+	avrule->source_line = source_lineno;
+	avrule->source_filename = strdup(source_file);
+	if (!avrule->source_filename) {
+		yyerror("out of memory");
+		return -1;
+	}
 
 	while ((id = queue_remove(id_queue))) {
 		if (set_types(&avrule->stypes, id, &add, 0))
@@ -1707,6 +1747,13 @@ int define_te_avtab_helper(int which, avrule_t ** rule)
 	avrule_init(avrule);
 	avrule->specified = which;
 	avrule->line = policydb_lineno;
+	avrule->source_line = source_lineno;
+	avrule->source_filename = strdup(source_file);
+	if (!avrule->source_filename) {
+		yyerror("out of memory");
+		return -1;
+	}
+
 
 	while ((id = queue_remove(id_queue))) {
 		if (set_types
@@ -2772,6 +2819,7 @@ int define_constraint(constraint_expr_t * expr)
 		node = malloc(sizeof(struct constraint_node));
 		if (!node) {
 			yyerror("out of memory");
+			free(node);
 			return -1;
 		}
 		memset(node, 0, sizeof(constraint_node_t));
@@ -3075,13 +3123,11 @@ uintptr_t define_cexpr(uint32_t expr_type, uintptr_t arg1, uintptr_t arg2)
 		ebitmap_destroy(&negset);
 		return (uintptr_t) expr;
 	default:
-		yyerror("invalid constraint expression");
-		constraint_expr_destroy(expr);
-		return 0;
+		break;
 	}
 
 	yyerror("invalid constraint expression");
-	free(expr);
+	constraint_expr_destroy(expr);
 	return 0;
 }
 
@@ -4641,7 +4687,10 @@ int define_range_trans(int class_specified)
 			goto out;
 		}
 
-		ebitmap_set_bit(&rule->tclasses, cladatum->s.value - 1, TRUE);
+		if (ebitmap_set_bit(&rule->tclasses, cladatum->s.value - 1, TRUE)) {
+			yyerror("out of memory");
+			goto out;
+		}
 	}
 
 	id = (char *)queue_remove(id_queue);

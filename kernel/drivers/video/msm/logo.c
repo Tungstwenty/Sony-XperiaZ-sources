@@ -3,7 +3,7 @@
  * Show Logo in RLE 565 format
  *
  * Copyright (C) 2008 Google Incorporated
- * Copyright (C) 2013 Sony Mobile Communications AB.
+ * Copyright (C) 2014 Sony Mobile Communications Inc.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -14,7 +14,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * NOTE: This file has been modified by Sony Mobile Communications AB.
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
  * Modifications are licensed under the License.
  */
 #include <asm/cacheflush.h>
@@ -169,7 +169,7 @@ static void __init draw_logo(void)
 			printk(KERN_ERR"%s failed for kmalloc\n", __func__);
 		} else {
 			INIT_DELAYED_WORK(fb_work, close_fb_work);
-			schedule_delayed_work(fb_work, HZ*10);
+			schedule_delayed_work(fb_work, HZ*15);
 		}
 	}
 }

@@ -1,13 +1,12 @@
 
 /* -----------------------------------------------------------------------------------------------------------
-Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android
+Software License for The Fraunhofer FDK AAC Codec Library for Android
 
 © Copyright  1995 - 2013 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
-  Copyright (C) 2012 Sony Mobile Communications AB.
 
  1.    INTRODUCTION
-The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
+The Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
 the MPEG Advanced Audio Coding ("AAC") encoding and decoding scheme for digital audio.
 This FDK AAC Codec software is intended to be used on a wide variety of Android devices.
 
@@ -100,7 +99,7 @@ amm-info@iis.fraunhofer.de
 /* library info */
 #define SYS_LIB_VL0 1
 #define SYS_LIB_VL1 3
-#define SYS_LIB_VL2 4
+#define SYS_LIB_VL2 6
 #define SYS_LIB_TITLE "System Integration Library"
 #define SYS_LIB_BUILD_DATE __DATE__
 #define SYS_LIB_BUILD_TIME __TIME__

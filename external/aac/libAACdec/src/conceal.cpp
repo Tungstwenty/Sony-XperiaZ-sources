@@ -1,13 +1,12 @@
 
 /* -----------------------------------------------------------------------------------------------------------
-Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android
+Software License for The Fraunhofer FDK AAC Codec Library for Android
 
 © Copyright  1995 - 2013 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
-  Copyright (C) 2012 Sony Mobile Communications AB.
 
  1.    INTRODUCTION
-The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
+The Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
 the MPEG Advanced Audio Coding ("AAC") encoding and decoding scheme for digital audio.
 This FDK AAC Codec software is intended to be used on a wide variety of Android devices.
 
@@ -763,7 +762,6 @@ int
   CConcealment_UpdateState( hConcealmentInfo,
                             frameOk );
 
-  if ( !frameOk )
   {
     /* Create data for signal rendering according to the selected concealment method and decoder operating mode. */
 
@@ -776,11 +774,13 @@ int
       {
       default:
       case ConcealMethodMute:
-        /* Mute spectral data in case of errors */
-        FDKmemclear(pAacDecoderChannelInfo->pSpectralCoefficient, samplesPerFrame * sizeof(FIXP_DBL));
-        /* Set last window shape */
-        pAacDecoderChannelInfo->icsInfo.WindowShape = hConcealmentInfo->windowShape;
-        appliedProcessing = 1;
+        if (!frameOk) {
+          /* Mute spectral data in case of errors */
+          FDKmemclear(pAacDecoderChannelInfo->pSpectralCoefficient, samplesPerFrame * sizeof(FIXP_DBL));
+          /* Set last window shape */
+          pAacDecoderChannelInfo->icsInfo.WindowShape = hConcealmentInfo->windowShape;
+          appliedProcessing = 1;
+        }
         break;
 
       case ConcealMethodNoise:
@@ -802,7 +802,7 @@ int
                                    pSamplingRateInfo,
                                    samplesPerFrame,
                                    0,  /* don't use tonal improvement */
-                                   0);
+                                   frameOk);
         break;
 
       }

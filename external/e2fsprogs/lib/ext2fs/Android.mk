@@ -10,6 +10,9 @@ libext2fs_src_files := \
 	bb_inode.c \
 	bitmaps.c \
 	bitops.c \
+	blkmap64_ba.c \
+	blkmap64_rb.c \
+	blknum.c \
 	block.c \
 	bmap.c \
 	check_desc.c \
@@ -25,10 +28,12 @@ libext2fs_src_files := \
 	expanddir.c \
 	ext_attr.c \
 	extent.c \
+	fileio.c \
 	finddev.c \
 	flushb.c \
 	freefs.c \
 	gen_bitmap.c \
+	gen_bitmap64.c \
 	get_pathname.c \
 	getsize.c \
 	getsectsize.c \
@@ -43,11 +48,15 @@ libext2fs_src_files := \
 	link.c \
 	llseek.c \
 	lookup.c \
+	mmp.c \
 	mkdir.c \
 	mkjournal.c \
 	native.c \
 	newdir.c \
 	openfs.c \
+	progress.c \
+	punch.c \
+	rbtree.c \
 	read_bb.c \
 	read_bb_file.c \
 	res_gdt.c \
@@ -70,13 +79,6 @@ libext2fs_shared_libraries := \
 	libext2_e2p
 
 libext2fs_system_shared_libraries := libc
-
-libext2fs_static_libraries := \
-   libext2_com_err_static \
-   libext2_uuid_static \
-   libext2_blkid_static \
-   libext2_e2p_static \
-   libc
 
 libext2fs_c_includes := external/e2fsprogs/lib
 
@@ -111,10 +113,8 @@ libext2fs_cflags_linux := \
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := $(libext2fs_src_files)
-LOCAL_STATIC_LIBRARIES := $(libext2fs_static_libraries)
 LOCAL_C_INCLUDES := $(libext2fs_c_includes)
 LOCAL_CFLAGS := $(libext2fs_cflags) $(libext2fs_cflags_linux)
-LOCAL_PRELINK_MODULE := false
 LOCAL_MODULE := libext2fs_static
 LOCAL_MODULE_TAGS := optional
 

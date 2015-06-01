@@ -7,7 +7,7 @@
    This file is part of Valgrind, a dynamic binary instrumentation
    framework.
 
-   Copyright (C) 2000-2012 Julian Seward
+   Copyright (C) 2000-2013 Julian Seward
       jseward@acm.org
 
    This program is free software; you can redistribute it and/or
@@ -31,27 +31,41 @@
 #ifndef __PUB_TOOL_LIBCPRINT_H
 #define __PUB_TOOL_LIBCPRINT_H
 
+#include "pub_tool_basics.h"      // VG_ macro
+
 /* ---------------------------------------------------------------------
    Formatting functions
    ------------------------------------------------------------------ */
 
-extern UInt VG_(sprintf)  ( Char* buf, const HChar* format, ... )
+/* The formatting functions supports a subset (and 2 extensions) of
+   the 'printf' format.
+   The extensions are:
+     %pS : print a string (like %s) but escaping chars for XML safety.
+     %ps : with --xml=no, synonym for %s, with --xml=yes, synonym of %pS.
+
+   Note: these extensions do not cause the compiler to barf with PRINTF_CHECK
+   as for the classical printf, %p requires a pointer, which must also
+   be provided for the %ps and %pS extensions. The s/S following %p
+   are understood by PRINTF_CHECK as characters to output.
+*/
+
+extern UInt VG_(sprintf)  ( HChar* buf, const HChar* format, ... )
                           PRINTF_CHECK(2, 3);
 
-extern UInt VG_(vsprintf) ( Char* buf, const HChar* format, va_list vargs )
+extern UInt VG_(vsprintf) ( HChar* buf, const HChar* format, va_list vargs )
                           PRINTF_CHECK(2, 0);
 
-extern UInt VG_(snprintf) ( Char* buf, Int size, 
+extern UInt VG_(snprintf) ( HChar* buf, Int size, 
                                        const HChar *format, ... )
                           PRINTF_CHECK(3, 4);
 
-extern UInt VG_(vsnprintf)( Char* buf, Int size, 
+extern UInt VG_(vsnprintf)( HChar* buf, Int size, 
                                        const HChar *format, va_list vargs )
                           PRINTF_CHECK(3, 0);
 
 // Percentify n/m with d decimal places.  Includes the '%' symbol at the end.
 // Right justifies in 'buf'.
-extern void VG_(percentify)(ULong n, ULong m, UInt d, Int n_buf, char buf[]);
+extern void VG_(percentify)(ULong n, ULong m, UInt d, Int n_buf, HChar buf[]);
 
 
 /* ---------------------------------------------------------------------
@@ -92,6 +106,12 @@ extern UInt VG_(printf_xml)  ( const HChar *format, ... )
 extern UInt VG_(vprintf_xml) ( const HChar *format, va_list vargs )
                              PRINTF_CHECK(1, 0);
 
+/* Do a printf-style operation on either the XML 
+   or normal output channel
+   or gdb output channel, depending on the setting of VG_(clo_xml)
+   and the state of VG_(log_output_sink). */
+extern UInt VG_(emit) ( const HChar* format, ... ) PRINTF_CHECK(1, 2);
+
 /* Yet another, totally general, version of vprintf, which hands all
    output bytes to CHAR_SINK, passing it OPAQUE as the second arg. */
 extern void VG_(vcbprintf)( void(*char_sink)(HChar, void* opaque),
@@ -116,7 +136,7 @@ extern UInt VG_(fmsg)( const HChar* format, ... ) PRINTF_CHECK(1, 2);
 // an option was given an inappropriate argument.  This function prints an
 // error message, then shuts down the entire system.
 __attribute__((noreturn))
-extern void VG_(fmsg_bad_option) ( HChar* opt, const HChar* format, ... )
+extern void VG_(fmsg_bad_option) ( const HChar* opt, const HChar* format, ... )
    PRINTF_CHECK(2, 3);
 
 // This is used for messages that are interesting to the user:  info about

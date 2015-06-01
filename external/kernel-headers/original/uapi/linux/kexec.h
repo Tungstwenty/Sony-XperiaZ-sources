@@ -9,15 +9,16 @@
 #include <linux/types.h>
 
 /* kexec flags for different usage scenarios */
-#define KEXEC_ON_CRASH      0x00000001
-#define KEXEC_PRESERVE_CONTEXT  0x00000002
-#define KEXEC_ARCH_MASK     0xffff0000
+#define KEXEC_ON_CRASH		0x00000001
+#define KEXEC_PRESERVE_CONTEXT	0x00000002
+#define KEXEC_ARCH_MASK		0xffff0000
 
 /* These values match the ELF architecture values.
  * Unless there is a good reason that should continue to be the case.
  */
 #define KEXEC_ARCH_DEFAULT ( 0 << 16)
 #define KEXEC_ARCH_386     ( 3 << 16)
+#define KEXEC_ARCH_68K     ( 4 << 16)
 #define KEXEC_ARCH_X86_64  (62 << 16)
 #define KEXEC_ARCH_PPC     (20 << 16)
 #define KEXEC_ARCH_PPC64   (21 << 16)
@@ -37,10 +38,10 @@
  * loading  kernel binaries.
  */
 struct kexec_segment {
-    const void *buf;
-    size_t bufsz;
-    const void *mem;
-    size_t memsz;
+	const void *buf;
+	size_t bufsz;
+	const void *mem;
+	size_t memsz;
 };
 
 /* Load a new kernel image as described by the kexec_segment array
@@ -48,7 +49,7 @@ struct kexec_segment {
  * The flags allow different useage types.
  */
 extern int kexec_load(void *, size_t, struct kexec_segment *,
-        unsigned long int);
+		unsigned long int);
 #endif /* __KERNEL__ */
 
 #endif /* _UAPILINUX_KEXEC_H */

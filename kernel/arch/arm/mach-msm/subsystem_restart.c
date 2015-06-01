@@ -371,7 +371,13 @@ static void subsystem_powerup(struct subsys_device *dev, void *data)
 	pr_info("[%p]: Powering up %s\n", current, name);
 	if (dev->desc->powerup(dev->desc) < 0) {
 		report_subsystem_restart_to_rdtags(name);
-		panic("[%p]: Failed to powerup %s!", current, name);
+
+		/* If a system shutdown is underway, ignore errors. */
+		if (system_state == SYSTEM_POWER_OFF) {
+			pr_err("[%p]: Failed to powerup %s!", current, name);
+			return;
+		} else
+			panic("[%p]: Failed to powerup %s!", current, name);
 	}
 	subsys_set_state(dev, SUBSYS_ONLINE);
 }

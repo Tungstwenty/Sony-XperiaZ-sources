@@ -1,13 +1,12 @@
 
 /* -----------------------------------------------------------------------------------------------------------
-Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android
+Software License for The Fraunhofer FDK AAC Codec Library for Android
 
 © Copyright  1995 - 2013 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
-  Copyright (C) 2012 - 2013 Sony Mobile Communications AB.
 
  1.    INTRODUCTION
-The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
+The Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
 the MPEG Advanced Audio Coding ("AAC") encoding and decoding scheme for digital audio.
 This FDK AAC Codec software is intended to be used on a wide variety of Android devices.
 
@@ -80,9 +79,6 @@ Am Wolfsmantel 33
 
 www.iis.fraunhofer.de/amm
 amm-info@iis.fraunhofer.de
-
-Changes made in the code.
-2013-01-08 - Added additional element for initializing the sbr header.
 ----------------------------------------------------------------------------------------------------------- */
 
 /************************  Fraunhofer IIS SBR decoder library ******************
@@ -149,8 +145,9 @@ typedef enum
   SBR_SYSTEM_BITSTREAM_DELAY,          /*!< System: Switch to enable an additional SBR bitstream delay of one frame. */
   SBR_QMF_MODE,                        /*!< Set QMF mode, either complex or low power. */
   SBR_LD_QMF_TIME_ALIGN,               /*!< Set QMF type, either LD-MPS or CLDFB. Relevant for ELD streams only. */
-  SBR_BS_INTERRUPTION,                 /*!< Signal bit stream interruption. Value is ignored. */
-  SBR_SET_RESET_FLAG                   /*!< Set reset flag. */
+  SBR_FLUSH_DATA,                      /*!< Set internal state to flush the decoder with the next process call. */
+  SBR_CLEAR_HISTORY,                   /*!< Clear all internal states (delay lines, QMF states, ...). */
+  SBR_BS_INTERRUPTION                  /*!< Signal bit stream interruption. Value is ignored. */
 } SBRDEC_PARAM;
 
 typedef struct SBR_DECODER_INSTANCE *HANDLE_SBRDECODER;
@@ -313,7 +310,7 @@ SBR_ERROR sbrDecoder_Apply ( HANDLE_SBRDECODER    self,
                              INT_PCM             *timeData,
                              int                 *numChannels,
                              int                 *sampleRate,
-                             const UCHAR          channelMapping[(6)],
+                             const UCHAR          channelMapping[(8)],
                              const int            interleaved,
                              const int            coreDecodedOk,
                              UCHAR               *psDecoded );
@@ -333,6 +330,13 @@ SBR_ERROR sbrDecoder_Close ( HANDLE_SBRDECODER *self );
  * \return      0 on success, -1 if invalid handle or if no free element is available to write information to.
  */
 INT sbrDecoder_GetLibInfo( LIB_INFO *info );    
+
+/**
+ * \brief       Determine the modules output signal delay in samples.
+ * \param self  SBR decoder handle.
+ * \return      The number of samples signal delay added by the module.
+ */
+UINT sbrDecoder_GetDelay( const HANDLE_SBRDECODER self );
 
 
 #ifdef __cplusplus

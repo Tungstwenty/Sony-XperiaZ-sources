@@ -13,12 +13,12 @@
 #include "android/skin/image.h"
 #include "android/skin/scaler.h"
 #include "android/charmap.h"
+#include "android/hw-sensors.h"
 #include "android/utils/debug.h"
 #include "android/utils/system.h"
 #include "android/utils/duff.h"
-#include "android/protocol/core-commands-api.h"
 #include <SDL_syswm.h>
-#include "user-events.h"
+#include "android/user-events.h"
 #include <math.h>
 
 #include "android/framebuffer.h"
@@ -974,8 +974,8 @@ add_finger_event(unsigned x, unsigned y, unsigned state)
 {
     //fprintf(stderr, "::: finger %d,%d %d\n", x, y, state);
 
-    /* NOTE: the 0 is used in hw/goldfish_events.c to differentiate
-     * between a touch-screen and a trackball event
+    /* NOTE: the 0 is used in hw/android/goldfish/events_device.c to
+     * differentiate between a touch-screen and a trackball event
      */
     user_event_mouse(x, y, 0, state);
 }
@@ -1437,11 +1437,21 @@ skin_window_reset_internal ( SkinWindow*  window, SkinLayout*  slayout )
     window->layout = layout;
 
     disp = window->layout.displays;
-    if (disp != NULL && window->onion)
-        display_set_onion( disp,
-                           window->onion,
-                           window->onion_rotation,
-                           window->onion_alpha );
+    if (disp != NULL) {
+        if (slayout->onion_image) {
+            // Onion was specified in layout file.
+            display_set_onion( disp,
+                               slayout->onion_image,
+                               slayout->onion_rotation,
+                               slayout->onion_alpha );
+        } else if (window->onion) {
+            // Onion was specified via command line.
+            display_set_onion( disp,
+                               window->onion,
+                               window->onion_rotation,
+                               window->onion_alpha );
+        }
+    }
 
     skin_window_resize(window);
 
@@ -1455,9 +1465,9 @@ skin_window_reset_internal ( SkinWindow*  window, SkinLayout*  slayout )
         user_event_generic( slayout->event_type, slayout->event_code, slayout->event_value );
         /* XXX: hack, replace by better code here */
         if (slayout->event_value != 0)
-            corecmd_set_coarse_orientation( ANDROID_COARSE_PORTRAIT );
+            android_sensors_set_coarse_orientation(ANDROID_COARSE_PORTRAIT);
         else
-            corecmd_set_coarse_orientation( ANDROID_COARSE_LANDSCAPE );
+            android_sensors_set_coarse_orientation(ANDROID_COARSE_LANDSCAPE);
     }
 
     return 0;

@@ -1,13 +1,12 @@
 
 /* -----------------------------------------------------------------------------------------------------------
-Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android
+Software License for The Fraunhofer FDK AAC Codec Library for Android
 
 © Copyright  1995 - 2013 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
-  Copyright (C) 2012 - 2013 Sony Mobile Communications AB.
 
  1.    INTRODUCTION
-The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
+The Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
 the MPEG Advanced Audio Coding ("AAC") encoding and decoding scheme for digital audio.
 This FDK AAC Codec software is intended to be used on a wide variety of Android devices.
 
@@ -80,10 +79,6 @@ Am Wolfsmantel 33
 
 www.iis.fraunhofer.de/amm
 amm-info@iis.fraunhofer.de
-
-2013-01-08 - Added code to force Init of SBR elements.
-             The sbr header should be initialized when seek is performed
-             because using a sbr setting from different frame may cause noise.
 ----------------------------------------------------------------------------------------------------------- */
 
 /*!
@@ -142,7 +137,7 @@ amm-info@iis.fraunhofer.de
 /* Decoder library info */
 #define SBRDECODER_LIB_VL0 2
 #define SBRDECODER_LIB_VL1 2
-#define SBRDECODER_LIB_VL2 3
+#define SBRDECODER_LIB_VL2 6
 #define SBRDECODER_LIB_TITLE "SBR Decoder"
 #define SBRDECODER_LIB_BUILD_DATE __DATE__
 #define SBRDECODER_LIB_BUILD_TIME __TIME__
@@ -256,8 +251,10 @@ SBR_ERROR sbrDecoder_ResetElement (
 
   if ( sampleRateIn == sampleRateOut ) {
     synDownsampleFac = 2;
+    self->flags |=  SBRDEC_DOWNSAMPLE;
   } else {
     synDownsampleFac = 1;
+    self->flags &= ~SBRDEC_DOWNSAMPLE;
   }
 
   self->synDownsampleFac = synDownsampleFac;
@@ -368,8 +365,6 @@ SBR_ERROR sbrDecoder_Open ( HANDLE_SBRDECODER  * pSelf )
   self->codecFrameSize = 0;
   */
 
-  self->isResetNeeded = 0;
-
   self->numDelayFrames = (1);  /* set to the max value by default */
 
   *pSelf = self;
@@ -435,7 +430,7 @@ SBR_ERROR sbrDecoder_InitElement (
   int nSbrElementsStart = self->numSbrElements;
 
   /* Check core codec AOT */
-  if (! sbrDecoder_isCoreCodecValid(coreCodec) || elementIndex >= (4)) {
+  if (! sbrDecoder_isCoreCodecValid(coreCodec) || elementIndex >= (8)) {
     sbrError = SBRDEC_UNSUPPORTED_CONFIG;
     goto bail;
   }
@@ -451,7 +446,7 @@ SBR_ERROR sbrDecoder_InitElement (
      && self->coreCodec == coreCodec
      && self->pSbrElement[elementIndex] != NULL
      && self->pSbrElement[elementIndex]->elementID == elementID
-     && !self->isResetNeeded
+     && !(self->flags & SBRDEC_FORCE_RESET)
      )
   {
      /* Nothing to do */
@@ -551,8 +546,6 @@ SBR_ERROR sbrDecoder_InitElement (
           (coreCodec == AOT_ER_AAC_ELD) ? 0 : (6)
           );
 
-  self->isResetNeeded = 0;
-
 
 
 bail:
@@ -560,8 +553,9 @@ bail:
     if (nSbrElementsStart < self->numSbrElements) {
       /* Free the memory allocated for this element */
       sbrDecoder_DestroyElement( self, elementIndex );
-    } else if (self->pSbrElement[elementIndex] != NULL) {
-      /* Set error flag to trigger concealment */
+    } else if ( (self->pSbrElement[elementIndex] != NULL)
+             && (elementIndex < (8)))
+    { /* Set error flag to trigger concealment */
       self->pSbrElement[elementIndex]->frameErrorFlag[self->pSbrElement[elementIndex]->useFrameSlot] = 1;
     }
   }
@@ -625,7 +619,7 @@ INT sbrDecoder_Header (
   SBR_ERROR sbrError = SBRDEC_OK;
   int headerIndex;
 
-  if ( self == NULL || elementIndex > (4) )
+  if ( self == NULL || elementIndex > (8) )
   {
     return SBRDEC_UNSUPPORTED_CONFIG;
   }
@@ -738,6 +732,24 @@ SBR_ERROR sbrDecoder_SetParam (HANDLE_SBRDECODER   self,
       }
     }
     break;
+  case SBR_FLUSH_DATA:
+    if (value != 0) {
+      if (self == NULL) {
+        errorStatus = SBRDEC_NOT_INITIALIZED;
+      } else {
+        self->flags |= SBRDEC_FLUSH;
+      }
+    }
+    break;
+  case SBR_CLEAR_HISTORY:
+    if (value != 0) {
+      if (self == NULL) {
+        errorStatus = SBRDEC_NOT_INITIALIZED;
+      } else {
+        self->flags |= SBRDEC_FORCE_RESET;
+      }
+    }
+    break;
   case SBR_BS_INTERRUPTION:
     {
       int elementIndex;
@@ -748,7 +760,8 @@ SBR_ERROR sbrDecoder_SetParam (HANDLE_SBRDECODER   self,
       }
 
       /* Loop over SBR elements */
-      for (elementIndex = 0; elementIndex < self->numSbrElements; elementIndex++)
+      for (elementIndex = 0; elementIndex < self->numSbrElements; elementIndex++) {
+      if (self->pSbrElement[elementIndex] != NULL)
       {
         HANDLE_SBR_HEADER_DATA hSbrHeader;
         int headerIndex = getHeaderSlot(self->pSbrElement[elementIndex]->useFrameSlot,
@@ -760,14 +773,7 @@ SBR_ERROR sbrDecoder_SetParam (HANDLE_SBRDECODER   self,
            This switches off bitstream parsing until a new header arrives. */
         hSbrHeader->syncState = UPSAMPLING;
         hSbrHeader->status   |= SBRDEC_HDR_STAT_UPDATE;
-      }
-    }
-    break;
-  case SBR_SET_RESET_FLAG:
-    if (self == NULL) {
-      errorStatus = SBRDEC_NOT_INITIALIZED;
-    } else {
-      self->isResetNeeded = 1;
+      } }
     }
     break;
   default:
@@ -784,7 +790,7 @@ SBRDEC_DRC_CHANNEL * sbrDecoder_drcGetChannel( const HANDLE_SBRDECODER self, con
   SBRDEC_DRC_CHANNEL *pSbrDrcChannelData = NULL;
   int elementIndex, elChanIdx=0, numCh=0;
 
-  for (elementIndex = 0; (elementIndex < (4)) && (numCh <= channel); elementIndex++)
+  for (elementIndex = 0; (elementIndex < (8)) && (numCh <= channel); elementIndex++)
   {
     SBR_DECODER_ELEMENT *pSbrElement = self->pSbrElement[elementIndex];
     int c, elChannels;
@@ -846,7 +852,7 @@ SBR_ERROR sbrDecoder_drcFeedChannel ( HANDLE_SBRDECODER  self,
   if (self == NULL) {
     return SBRDEC_NOT_INITIALIZED;
   }
-  if (ch > (6) || pNextFact_mag == NULL) {
+  if (ch > (8) || pNextFact_mag == NULL) {
     return SBRDEC_SET_PARAM_FAIL;
   }
 
@@ -891,7 +897,7 @@ void sbrDecoder_drcDisable ( HANDLE_SBRDECODER  self,
   SBRDEC_DRC_CHANNEL *pSbrDrcChannelData = NULL;
 
   if ( (self == NULL)
-    || (ch > (6))
+    || (ch > (8))
     || (self->numSbrElements == 0)
     || (self->numSbrChannels == 0) ) {
     return;
@@ -1136,6 +1142,10 @@ SBR_ERROR sbrDecoder_Parse(
         }
       }
     }
+  } else {
+    /* The returned bit count will not be the actual payload size since we did not
+       parse the frame data. Return an error so that the caller can react respectively. */
+    errorStatus = SBRDEC_PARSE_ERROR;
   }
 
   if (!fDoDecodeSbrData) {
@@ -1214,6 +1224,15 @@ sbrDecoder_DecodeElement (
 
   int  stereo = (hSbrElement->elementID == ID_CPE) ? 1 : 0;
   int  numElementChannels = hSbrElement->nChannels; /* Number of channels of the current SBR element */
+
+  if (self->flags & SBRDEC_FLUSH) {
+    /* Move frame pointer to the next slot which is up to be decoded/applied next */
+    hSbrElement->useFrameSlot = (hSbrElement->useFrameSlot+1) % (self->numDelayFrames+1);
+    /* Update header and frame data pointer because they have already been set */
+    hSbrHeader = &self->sbrHeader[elementIndex][hSbrElement->useHeaderSlot[hSbrElement->useFrameSlot]];
+    hFrameDataLeft  = &hSbrElement->pSbrChannel[0]->frameData[hSbrElement->useFrameSlot];
+    hFrameDataRight = &hSbrElement->pSbrChannel[1]->frameData[hSbrElement->useFrameSlot];
+  }
 
   /* Update the header error flag */
   hSbrHeader->frameErrorFlag = hSbrElement->frameErrorFlag[hSbrElement->useFrameSlot];
@@ -1392,7 +1411,7 @@ SBR_ERROR sbrDecoder_Apply ( HANDLE_SBRDECODER   self,
                              INT_PCM            *timeData,
                              int                *numChannels,
                              int                *sampleRate,
-                             const UCHAR         channelMapping[(6)],
+                             const UCHAR         channelMapping[(8)],
                              const int           interleaved,
                              const int           coreDecodedOk,
                              UCHAR              *psDecoded )
@@ -1489,6 +1508,10 @@ SBR_ERROR sbrDecoder_Apply ( HANDLE_SBRDECODER   self,
 
 
 
+  /* Clear reset and flush flag because everything seems to be done successfully. */
+  self->flags &= ~SBRDEC_FORCE_RESET;
+  self->flags &= ~SBRDEC_FLUSH;
+
 bail:
 
   return errorStatus;
@@ -1513,7 +1536,7 @@ SBR_ERROR sbrDecoder_Close ( HANDLE_SBRDECODER *pSelf )
       FreeRam_SbrDecWorkBuffer2(&self->workBuffer2);
     }
 
-    for (i = 0; i < (4); i++) {
+    for (i = 0; i < (8); i++) {
       sbrDecoder_DestroyElement( self, i );
     }
 
@@ -1561,3 +1584,34 @@ INT sbrDecoder_GetLibInfo( LIB_INFO *info )
   return 0;
 }
 
+
+UINT sbrDecoder_GetDelay( const HANDLE_SBRDECODER self )
+{
+  UINT outputDelay = 0;
+
+  if ( self != NULL) {
+    UINT flags = self->flags;
+
+    /* See chapter 1.6.7.2 of ISO/IEC 14496-3 for the GA-SBR figures below. */
+
+    /* Are we initialized? */
+    if ( (self->numSbrChannels > 0)
+      && (self->numSbrElements > 0) )
+    {
+      /* Add QMF synthesis delay */
+      if ( (flags & SBRDEC_ELD_GRID)
+        && IS_LOWDELAY(self->coreCodec) ) {
+        /* Low delay SBR: */
+        {
+          outputDelay += (flags & SBRDEC_DOWNSAMPLE) ? 32 : 64;   /* QMF synthesis */
+        }
+      }
+      else if (!IS_USAC(self->coreCodec)) {
+        /* By the method of elimination this is the GA (AAC-LC, HE-AAC, ...) branch: */
+        outputDelay += (flags & SBRDEC_DOWNSAMPLE) ? 481 : 962;
+      }
+    }
+  }
+
+  return (outputDelay);
+}

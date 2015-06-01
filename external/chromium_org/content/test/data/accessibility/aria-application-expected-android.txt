@@ -1,2 +1,0 @@
-android.view.View focusable focused scrollable
-    android.view.View

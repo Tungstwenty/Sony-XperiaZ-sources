@@ -8,7 +8,7 @@
    This file is part of Valgrind, a dynamic binary instrumentation
    framework.
 
-   Copyright (C) 2000-2012 Nicholas Nethercote
+   Copyright (C) 2000-2013 Nicholas Nethercote
       njn@valgrind.org
 
    This program is free software; you can redistribute it and/or
@@ -452,7 +452,7 @@ static Addr build_rt_sigframe(ThreadState *tst,
    UWord err;
 
    rsp -= sizeof(*frame);
-   rsp = VG_ROUNDDN(rsp, 16);
+   rsp = VG_ROUNDDN(rsp, 16) - 8;
    frame = (struct rt_sigframe *)rsp;
 
    if (!extend(tst, rsp, sizeof(*frame)))
@@ -521,6 +521,16 @@ void VG_(sigframe_create)( ThreadId tid,
    tst->arch.vex.guest_RDI = (ULong) siginfo->si_signo;
    tst->arch.vex.guest_RSI = (Addr) &frame->sigInfo;
    tst->arch.vex.guest_RDX = (Addr) &frame->uContext;
+   /* And tell the tool that these registers have been written. */
+   VG_TRACK( post_reg_write, Vg_CoreSignal, tst->tid,
+             offsetof(VexGuestAMD64State,guest_RIP), sizeof(UWord) );
+   VG_TRACK( post_reg_write, Vg_CoreSignal, tst->tid,
+             offsetof(VexGuestAMD64State,guest_RDI), sizeof(UWord) );
+   VG_TRACK( post_reg_write, Vg_CoreSignal, tst->tid,
+             offsetof(VexGuestAMD64State,guest_RSI), sizeof(UWord) );
+   VG_TRACK( post_reg_write, Vg_CoreSignal, tst->tid,
+             offsetof(VexGuestAMD64State,guest_RDX), sizeof(UWord) );
+
    /* This thread needs to be marked runnable, but we leave that the
       caller to do. */
 

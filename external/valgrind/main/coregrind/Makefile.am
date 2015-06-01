@@ -24,7 +24,8 @@ endif
 EXTRA_DIST = \
 	m_debuginfo/UNUSED_STABS.txt \
 	m_debuginfo/README.txt \
-	m_gdbserver/README_DEVELOPERS
+	m_gdbserver/README_DEVELOPERS \
+	docs/vgdb-manpage.xml
 
 #----------------------------------------------------------------------------
 # The launcher.  Built for the primary target only.
@@ -58,7 +59,22 @@ valgrind_CFLAGS += -static
 valgrind_LDFLAGS   += -Wl,-z,noexecstack
 endif
 
+
 vgdb_SOURCES = vgdb.c
+if VGCONF_OS_IS_LINUX
+if VGCONF_PLATVARIANT_IS_ANDROID
+vgdb_SOURCES += vgdb-invoker-none.c
+else
+vgdb_SOURCES += vgdb-invoker-ptrace.c
+endif
+endif
+if VGCONF_OS_IS_DARWIN
+# Some darwin specific stuff is needed as ptrace is not
+# fully supported on MacOS. Till we find someone courageous
+# having access to Darwin, 'none' implementation is used.
+vgdb_SOURCES += vgdb-invoker-none.c
+endif
+
 vgdb_CPPFLAGS  = $(AM_CPPFLAGS_PRI)
 vgdb_CFLAGS    = $(AM_CFLAGS_PRI)
 vgdb_CCASFLAGS = $(AM_CCASFLAGS_PRI)
@@ -135,6 +151,7 @@ $(mach_hdrs): $(mach_defs) $(mach_user_srcs) $(abs_builddir)/m_mach
 #----------------------------------------------------------------------------
 
 noinst_HEADERS = \
+	pub_core_addrinfo.h	\
 	pub_core_aspacehl.h	\
 	pub_core_aspacemgr.h	\
 	pub_core_basics.h	\
@@ -155,6 +172,7 @@ noinst_HEADERS = \
 	pub_core_gdbserver.h	\
 	pub_core_hashtable.h	\
 	pub_core_initimg.h	\
+	pub_core_inner.h	\
 	pub_core_libcbase.h	\
 	pub_core_libcassert.h	\
 	pub_core_libcfile.h	\
@@ -167,8 +185,11 @@ noinst_HEADERS = \
 	pub_core_mallocfree.h	\
 	pub_core_options.h	\
 	pub_core_oset.h		\
+	pub_core_rangemap.h	\
 	pub_core_redir.h	\
+	pub_core_poolalloc.h	\
 	pub_core_replacemalloc.h\
+	pub_core_sbprofile.h	\
 	pub_core_scheduler.h	\
 	pub_core_seqmatch.h	\
 	pub_core_sigframe.h	\
@@ -201,6 +222,10 @@ noinst_HEADERS = \
 	m_debuginfo/priv_readdwarf3.h	\
 	m_debuginfo/priv_readelf.h	\
 	m_debuginfo/priv_readmacho.h	\
+	m_debuginfo/priv_image.h	\
+	m_debuginfo/lzoconf.h		\
+	m_debuginfo/lzodefs.h		\
+	m_debuginfo/minilzo.h		\
 	m_demangle/ansidecl.h	\
 	m_demangle/cp-demangle.h \
 	m_demangle/dyn-string.h	\
@@ -214,7 +239,6 @@ noinst_HEADERS = \
 	m_gdbserver/valgrind_low.h \
 	m_gdbserver/gdb/signals.h \
 	m_initimg/priv_initimg_pathscan.h \
-	m_initimg/simple_huffman.c \
 	m_scheduler/priv_sema.h \
 	m_scheduler/priv_sched-lock.h \
 	m_scheduler/priv_sched-lock-impl.h \
@@ -224,7 +248,9 @@ noinst_HEADERS = \
 	m_syswrap/priv_syswrap-linux-variants.h \
 	m_syswrap/priv_syswrap-darwin.h \
 	m_syswrap/priv_syswrap-main.h \
-	m_ume/priv_ume.h
+	m_syswrap/priv_syswrap-xen.h \
+	m_ume/priv_ume.h \
+	vgdb.h
 
 #----------------------------------------------------------------------------
 # libcoregrind-<platform>.a
@@ -239,6 +265,8 @@ pkglib_LIBRARIES += libcoregrind-@VGCONF_ARCH_SEC@-@VGCONF_OS@.a
 endif
 
 COREGRIND_SOURCES_COMMON = \
+	m_addrinfo.c \
+	m_cache.c \
 	m_commandline.c \
 	m_clientstate.c \
 	m_cpuid.S \
@@ -260,7 +288,9 @@ COREGRIND_SOURCES_COMMON = \
 	m_mallocfree.c \
 	m_options.c \
 	m_oset.c \
+	m_rangemap.c \
 	m_redir.c \
+	m_sbprofile.c \
 	m_seqmatch.c \
 	m_signals.c \
 	m_sparsewa.c \
@@ -292,6 +322,8 @@ COREGRIND_SOURCES_COMMON = \
 	m_debuginfo/readstabs.c \
 	m_debuginfo/storage.c \
 	m_debuginfo/tytypes.c \
+	m_debuginfo/image.c \
+	m_debuginfo/minilzo-inl.c \
 	m_demangle/cp-demangle.c \
 	m_demangle/cplus-dem.c \
 	m_demangle/demangle.c \
@@ -302,8 +334,10 @@ COREGRIND_SOURCES_COMMON = \
 	m_dispatch/dispatch-ppc32-linux.S \
 	m_dispatch/dispatch-ppc64-linux.S \
 	m_dispatch/dispatch-arm-linux.S \
+	m_dispatch/dispatch-arm64-linux.S \
 	m_dispatch/dispatch-s390x-linux.S \
 	m_dispatch/dispatch-mips32-linux.S \
+	m_dispatch/dispatch-mips64-linux.S \
 	m_dispatch/dispatch-x86-darwin.S \
 	m_dispatch/dispatch-amd64-darwin.S \
 	m_gdbserver/inferiors.c \
@@ -317,10 +351,12 @@ COREGRIND_SOURCES_COMMON = \
 	m_gdbserver/valgrind-low-x86.c \
 	m_gdbserver/valgrind-low-amd64.c \
 	m_gdbserver/valgrind-low-arm.c \
+	m_gdbserver/valgrind-low-arm64.c \
 	m_gdbserver/valgrind-low-ppc32.c \
 	m_gdbserver/valgrind-low-ppc64.c \
 	m_gdbserver/valgrind-low-s390x.c \
 	m_gdbserver/valgrind-low-mips32.c \
+	m_gdbserver/valgrind-low-mips64.c \
 	m_gdbserver/version.c \
 	m_initimg/initimg-linux.c \
 	m_initimg/initimg-darwin.c \
@@ -339,8 +375,10 @@ COREGRIND_SOURCES_COMMON = \
 	m_sigframe/sigframe-ppc32-linux.c \
 	m_sigframe/sigframe-ppc64-linux.c \
 	m_sigframe/sigframe-arm-linux.c \
+	m_sigframe/sigframe-arm64-linux.c \
 	m_sigframe/sigframe-s390x-linux.c \
 	m_sigframe/sigframe-mips32-linux.c \
+	m_sigframe/sigframe-mips64-linux.c \
 	m_sigframe/sigframe-x86-darwin.c \
 	m_sigframe/sigframe-amd64-darwin.c \
 	m_syswrap/syscall-x86-linux.S \
@@ -348,8 +386,10 @@ COREGRIND_SOURCES_COMMON = \
 	m_syswrap/syscall-ppc32-linux.S \
 	m_syswrap/syscall-ppc64-linux.S \
 	m_syswrap/syscall-arm-linux.S \
+	m_syswrap/syscall-arm64-linux.S \
 	m_syswrap/syscall-s390x-linux.S \
 	m_syswrap/syscall-mips32-linux.S \
+	m_syswrap/syscall-mips64-linux.S \
 	m_syswrap/syscall-x86-darwin.S \
 	m_syswrap/syscall-amd64-darwin.S \
 	m_syswrap/syswrap-main.c \
@@ -362,10 +402,13 @@ COREGRIND_SOURCES_COMMON = \
 	m_syswrap/syswrap-ppc32-linux.c \
 	m_syswrap/syswrap-ppc64-linux.c \
 	m_syswrap/syswrap-arm-linux.c \
+	m_syswrap/syswrap-arm64-linux.c \
 	m_syswrap/syswrap-s390x-linux.c \
 	m_syswrap/syswrap-mips32-linux.c \
+	m_syswrap/syswrap-mips64-linux.c \
 	m_syswrap/syswrap-x86-darwin.c \
 	m_syswrap/syswrap-amd64-darwin.c \
+	m_syswrap/syswrap-xen.c \
 	m_ume/elf.c \
 	m_ume/macho.c \
 	m_ume/main.c \
@@ -549,7 +592,18 @@ GDBSERVER_XML_FILES = \
 	m_gdbserver/mips-linux-valgrind.xml \
 	m_gdbserver/mips-fpu-valgrind-s1.xml \
 	m_gdbserver/mips-fpu-valgrind-s2.xml \
-	m_gdbserver/mips-fpu.xml
+	m_gdbserver/mips-fpu.xml \
+	m_gdbserver/mips64-cp0-valgrind-s1.xml \
+	m_gdbserver/mips64-cp0-valgrind-s2.xml \
+	m_gdbserver/mips64-cp0.xml \
+	m_gdbserver/mips64-cpu-valgrind-s1.xml \
+	m_gdbserver/mips64-cpu-valgrind-s2.xml \
+	m_gdbserver/mips64-cpu.xml \
+	m_gdbserver/mips64-linux.xml \
+	m_gdbserver/mips64-linux-valgrind.xml \
+	m_gdbserver/mips64-fpu-valgrind-s1.xml \
+	m_gdbserver/mips64-fpu-valgrind-s2.xml \
+	m_gdbserver/mips64-fpu.xml
 
 # so as to make sure these get copied into the install tree
 vglibdir = $(pkglibdir)
@@ -573,6 +627,8 @@ clean-local: clean-noinst_DSYMS
 
 install-exec-local: install-noinst_PROGRAMS install-noinst_DSYMS
 
+uninstall-local: uninstall-noinst_PROGRAMS uninstall-noinst_DSYMS
+
 #----------------------------------------------------------------------------
 # Darwin linker kludges
 #----------------------------------------------------------------------------
@@ -581,7 +637,7 @@ if VGCONF_OS_IS_DARWIN
 
 BUILT_SOURCES += fixup_macho_loadcmds
 fixup_macho_loadcmds: fixup_macho_loadcmds.c
-	$(CC) -g -Wall -o fixup_macho_loadcmds fixup_macho_loadcmds.c
+	$(CC) -g -Wall -o $@ $<
 
 CLEANFILES += fixup_macho_loadcmds
 

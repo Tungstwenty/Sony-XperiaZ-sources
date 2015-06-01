@@ -57,8 +57,6 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES := $(libext2_e2p_src_files)
 LOCAL_C_INCLUDES := $(libext2_e2p_c_includes)
 LOCAL_CFLAGS := $(libext2_e2p_cflags)
-LOCAL_STATIC_LIBRARIES := libc
-LOCAL_PRELINK_MODULE := false
 LOCAL_MODULE := libext2_e2p_static
 LOCAL_MODULE_TAGS := optional
 

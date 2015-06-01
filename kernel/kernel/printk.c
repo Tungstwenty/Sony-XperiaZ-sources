@@ -2,7 +2,7 @@
  *  linux/kernel/printk.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
- *  Copyright (C) 2012 Sony Mobile Communications AB.
+ *  Copyright (c) 2015 Sony Mobile Communications Inc.
  *
  * Modified to make sys_syslog() more flexible: added commands to
  * return the last 4k of kernel messages, regardless of whether
@@ -318,9 +318,10 @@ int log_buf_copy(char *dest, int idx, int len)
 {
 	int ret, max;
 	bool took_lock = false;
+	unsigned long flags;
 
 	if (!oops_in_progress) {
-		raw_spin_lock_irq(&logbuf_lock);
+		raw_spin_lock_irqsave(&logbuf_lock, flags);
 		took_lock = true;
 	}
 
@@ -337,7 +338,7 @@ int log_buf_copy(char *dest, int idx, int len)
 	}
 
 	if (took_lock)
-		raw_spin_unlock_irq(&logbuf_lock);
+		raw_spin_unlock_irqrestore(&logbuf_lock, flags);
 
 	return ret;
 }

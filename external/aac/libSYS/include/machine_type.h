@@ -1,13 +1,12 @@
 
 /* -----------------------------------------------------------------------------------------------------------
-Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android
+Software License for The Fraunhofer FDK AAC Codec Library for Android
 
 © Copyright  1995 - 2013 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
-  Copyright (C) 2012 Sony Mobile Communications AB.
 
  1.    INTRODUCTION
-The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
+The Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
 the MPEG Advanced Audio Coding ("AAC") encoding and decoding scheme for digital audio.
 This FDK AAC Codec software is intended to be used on a wide variety of Android devices.
 
@@ -155,15 +154,15 @@ amm-info@iis.fraunhofer.de
 
   typedef signed int INT;
   typedef unsigned int UINT;
-#ifdef __x86_64__
+#ifdef __LP64__
   /* force FDK long-datatypes to 4 byte  */
   /* jdr: Use defines to avoid type alias problems on 64 bit machines. */
   #define LONG INT
   #define ULONG UINT
-#else /* __x86_64__ */
+#else /* __LP64__ */
   typedef signed long LONG;
   typedef unsigned long ULONG;
-#endif	/* __x86_64__ */
+#endif	/* __LP64__ */
   typedef signed short SHORT;
   typedef unsigned short USHORT;
   typedef signed char SCHAR;

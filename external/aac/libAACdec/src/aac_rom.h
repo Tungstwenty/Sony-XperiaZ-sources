@@ -1,13 +1,12 @@
 
 /* -----------------------------------------------------------------------------------------------------------
-Software License for The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android
+Software License for The Fraunhofer FDK AAC Codec Library for Android
 
 © Copyright  1995 - 2013 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
   All rights reserved.
-  Copyright (C) 2012 Sony Mobile Communications AB.
 
  1.    INTRODUCTION
-The Third-Party Modified Version of the Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
+The Fraunhofer FDK AAC Codec Library for Android ("FDK AAC Codec") is software that implements
 the MPEG Advanced Audio Coding ("AAC") encoding and decoding scheme for digital audio.
 This FDK AAC Codec software is intended to be used on a wide variety of Android devices.
 
@@ -178,11 +177,12 @@ extern const USHORT randomSign[AAC_NF_NO_RANDOM_VAL/16];
 extern const FIXP_DBL pow2_div24minus1[47];
 extern const int offsetTab[2][16];
 
-/* Channel mapping indices for time domain I/O. First dimension is channel count-1. */
-extern const UCHAR channelMappingTablePassthrough[8][8];
-extern const UCHAR channelMappingTableWAV[8][8];
+/* Channel mapping indices for time domain I/O.
+   The first dimension is the channel configuration index. */
+extern const UCHAR channelMappingTablePassthrough[15][8];
+extern const UCHAR channelMappingTableWAV[15][8];
 
 /* Lookup tables for elements in ER bitstream */
-extern const MP4_ELEMENT_ID elementsTab[8][7];
+extern const MP4_ELEMENT_ID elementsTab[15][7];
 
 #endif /* #ifndef AAC_ROM_H */
